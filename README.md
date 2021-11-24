@@ -1,5 +1,5 @@
 # Kyty
-ps4 & ps5 emulator
+PS4 & PS5 emulator
 -----
 The project is in its early stage.
 
