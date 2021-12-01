@@ -1,0 +1,1 @@
+fc_script.exe filter=lfs diff=lfs merge=lfs -text

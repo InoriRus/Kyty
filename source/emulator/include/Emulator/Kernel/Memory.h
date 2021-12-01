@@ -1,0 +1,28 @@
+#ifndef EMULATOR_INCLUDE_EMULATOR_KERNEL_MEMORY_H_
+#define EMULATOR_INCLUDE_EMULATOR_KERNEL_MEMORY_H_
+
+#include "Kyty/Core/Common.h"
+#include "Kyty/Core/Subsystems.h"
+
+#include "Emulator/Common.h"
+
+#ifdef KYTY_EMU_ENABLED
+
+namespace Kyty::Libs::LibKernel::Memory {
+
+KYTY_SUBSYSTEM_DEFINE(Memory);
+
+int KYTY_SYSV_ABI    KernelMapNamedFlexibleMemory(void** addr_in_out, size_t len, int prot, int flags, const char* name);
+int KYTY_SYSV_ABI    KernelMunmap(uint64_t vaddr, size_t len);
+size_t KYTY_SYSV_ABI KernelGetDirectMemorySize();
+int KYTY_SYSV_ABI    KernelAllocateDirectMemory(int64_t search_start, int64_t search_end, size_t len, size_t alignment, int memory_type,
+                                                int64_t* phys_addr_out);
+int KYTY_SYSV_ABI    KernelReleaseDirectMemory(int64_t start, size_t len);
+int KYTY_SYSV_ABI    KernelMapDirectMemory(void** addr, size_t len, int prot, int flags, int64_t direct_memory_start, size_t alignment);
+int KYTY_SYSV_ABI    KernelQueryMemoryProtection(void* addr, void** start, void** end, int* prot);
+
+} // namespace Kyty::Libs::LibKernel::Memory
+
+#endif // KYTY_EMU_ENABLED
+
+#endif /* EMULATOR_INCLUDE_EMULATOR_KERNEL_MEMORY_H_ */

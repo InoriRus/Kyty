@@ -1,0 +1,49 @@
+#ifndef INCLUDE_KYTY_CONFIG_H_
+#define INCLUDE_KYTY_CONFIG_H_
+
+#define KYTY_PLATFORM_WINDOWS 1
+#define KYTY_PLATFORM_ANDROID 2
+#define KYTY_PLATFORM_OSX     3
+#define KYTY_PLATFORM_IOS     4
+#define KYTY_PLATFORM_LINUX   5
+
+#define KYTY_COMPILER_MINGW 1
+#define KYTY_COMPILER_MSVC  2
+#define KYTY_COMPILER_GCC   3
+#define KYTY_COMPILER_CLANG 4
+
+#define KYTY_LINKER_LINK     1
+#define KYTY_LINKER_LD       2
+#define KYTY_LINKER_LLD      3
+#define KYTY_LINKER_LLD_LINK 4
+
+#define KYTY_BUILD_DEBUG   1
+#define KYTY_BUILD_RELEASE 2
+
+#define KYTY_ENDIAN_BIG    1
+#define KYTY_ENDIAN_LITTLE 2
+
+#define KYTY_ABI_ARMEABI     1
+#define KYTY_ABI_ARMEABI_V7A 2
+#define KYTY_ABI_ARM64_V8A   3
+#define KYTY_ABI_X86         4
+#define KYTY_ABI_X86_64      5
+#define KYTY_ABI_MIPS        6
+#define KYTY_ABI_MIPS64      7
+
+#define KYTY_ARM_FLOAT_SOFT 1
+#define KYTY_ARM_FLOAT_HARD 2
+
+#define KYTY_PROJECT_EMPTY       0
+#define KYTY_PROJECT_EMULATOR    1
+#define KYTY_PROJECT_BUILD_TOOLS 2
+
+#include "cmake_config.h"
+
+#if KYTY_BITNESS == 32
+#define KYTY_ABI KYTY_ABI_X86
+#else
+#define KYTY_ABI KYTY_ABI_X86_64
+#endif
+
+#endif /* INCLUDE_KYTY_CONFIG_H_ */

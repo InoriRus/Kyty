@@ -1,0 +1,262 @@
+#include "Kyty/Core/Common.h"
+#include "Kyty/Core/Core.h"
+#include "Kyty/Core/DbgAssert.h"
+#include "Kyty/Core/MagicEnum.h"
+#include "Kyty/Core/Singleton.h"
+#include "Kyty/Core/String.h"
+#include "Kyty/Core/Subsystems.h"
+#include "Kyty/Core/Threads.h"
+#include "Kyty/Scripts/Scripts.h"
+
+#include "Emulator/Common.h"
+#include "Emulator/Config.h"
+#include "Emulator/Controller.h"
+#include "Emulator/Graphics/Graphics.h"
+#include "Emulator/Graphics/Shader.h"
+#include "Emulator/Graphics/Window.h"
+#include "Emulator/Kernel/FileSystem.h"
+#include "Emulator/Kernel/Memory.h"
+#include "Emulator/Kernel/Pthread.h"
+#include "Emulator/Libs/Libs.h"
+#include "Emulator/Profiler.h"
+#include "Emulator/RuntimeLinker.h"
+#include "Emulator/Timer.h"
+#include "Emulator/VirtualMemory.h"
+
+#include <cstdlib>
+
+namespace Kyty::Emulator {
+
+#ifdef KYTY_EMU_ENABLED
+
+namespace LuaFunc {
+
+static void load_symbols(const String& id, Loader::RuntimeLinker* rt)
+{
+	EXIT_IF(rt == nullptr);
+	if (!Libs::Init(id, rt->Symbols()))
+	{
+		EXIT("Unknown library: %s\n", id.C_Str());
+	}
+}
+
+static void print_system_info()
+{
+	Loader::SystemInfo info = Loader::GetSystemInfo();
+
+	printf("PageSize                  = %" PRIu32 "\n", info.PageSize);
+	printf("MinimumApplicationAddress = 0x%016" PRIx64 "\n", info.MinimumApplicationAddress);
+	printf("MaximumApplicationAddress = 0x%016" PRIx64 "\n", info.MaximumApplicationAddress);
+	printf("ActiveProcessorMask       = 0x%08" PRIx32 "\n", info.ActiveProcessorMask);
+	printf("NumberOfProcessors        = %" PRIu32 "\n", info.NumberOfProcessors);
+	printf("ProcessorArchitecture     = %s\n", Core::EnumName(info.ProcessorArchitecture).C_Str());
+	printf("AllocationGranularity     = %" PRIu32 "\n", info.AllocationGranularity);
+	printf("ProcessorLevel            = %" PRIu16 "\n", info.ProcessorLevel);
+	printf("ProcessorRevision         = 0x%04" PRIx16 "\n", info.ProcessorRevision);
+}
+
+static void kyty_close()
+{
+	auto* rt = Core::Singleton<Loader::RuntimeLinker>::Instance();
+
+	rt->Clear();
+
+	printf("done!\n");
+
+	Core::SubsystemsListSingleton::Instance()->ShutdownAll();
+}
+
+static void Init(const Scripts::ScriptVar& cfg)
+{
+	EXIT_IF(!Core::Thread::IsMainThread());
+
+	auto* slist = Core::SubsystemsList::Instance();
+
+	auto* log         = Log::LogSubsystem::Instance();
+	auto* core        = Core::CoreSubsystem::Instance();
+	auto* scripts     = Scripts::ScriptsSubsystem::Instance();
+	auto* config      = Config::ConfigSubsystem::Instance();
+	auto* pthread     = Libs::LibKernel::PthreadSubsystem::Instance();
+	auto* timer       = Loader::Timer::TimerSubsystem::Instance();
+	auto* file_system = Libs::LibKernel::FileSystem::FileSystemSubsystem::Instance();
+	auto* memory      = Libs::LibKernel::Memory::MemorySubsystem::Instance();
+	auto* graphics    = Libs::Graphics::GraphicsSubsystem::Instance();
+	auto* profiler    = Profiler::ProfilerSubsystem::Instance();
+	auto* controller  = Libs::Controller::ControllerSubsystem::Instance();
+
+	slist->Add(config, {core, scripts});
+	slist->InitAll(true);
+
+	Config::Load(cfg);
+
+	slist->Add(log, {core, config});
+	slist->Add(pthread, {core, log, timer});
+	slist->Add(timer, {core, log});
+	slist->Add(memory, {core, log});
+	slist->Add(controller, {core, log, config});
+	slist->Add(file_system, {core, log, pthread});
+	slist->Add(graphics, {core, log, pthread, memory, config, profiler, controller});
+	slist->Add(profiler, {core, config});
+
+	slist->InitAll(true);
+}
+
+KYTY_SCRIPT_FUNC(kyty_init_func)
+{
+	if (Scripts::ArgGetVarCount() != 1)
+	{
+		EXIT("invalid args\n");
+	}
+
+	Scripts::ScriptVar cfg = Scripts::ArgGetVar(0);
+
+	Init(cfg);
+
+	print_system_info();
+
+	atexit(kyty_close);
+
+	return 0;
+}
+
+KYTY_SCRIPT_FUNC(kyty_load_elf_func)
+{
+	if (Scripts::ArgGetVarCount() != 1 && Scripts::ArgGetVarCount() != 2)
+	{
+		EXIT("invalid args\n");
+	}
+
+	Scripts::ScriptVar elf = Scripts::ArgGetVar(0);
+
+	auto* rt = Core::Singleton<Loader::RuntimeLinker>::Instance();
+
+	auto* program = rt->LoadProgram(Libs::LibKernel::FileSystem::GetRealFilename(elf.ToString()));
+
+	if (Scripts::ArgGetVarCount() == 2)
+	{
+		if (Scripts::ArgGetVar(1).ToInteger() == 1)
+		{
+			program->dbg_print_reloc = true;
+		}
+	}
+
+	return 0;
+}
+
+KYTY_SCRIPT_FUNC(kyty_load_symbols_func)
+{
+	auto count = Scripts::ArgGetVarCount();
+
+	if (count < 1)
+	{
+		EXIT("invalid args\n");
+	}
+
+	auto* rt = Core::Singleton<Loader::RuntimeLinker>::Instance();
+
+	for (int i = 0; i < count; i++)
+	{
+		Scripts::ScriptVar id = Scripts::ArgGetVar(i);
+		load_symbols(id.ToString(), rt);
+	}
+
+	return 0;
+}
+
+KYTY_SCRIPT_FUNC(kyty_dbg_dump_func)
+{
+	if (Scripts::ArgGetVarCount() != 1)
+	{
+		EXIT("invalid args\n");
+	}
+
+	Scripts::ScriptVar dbg_dir = Scripts::ArgGetVar(0);
+
+	auto* rt = Core::Singleton<Loader::RuntimeLinker>::Instance();
+
+	rt->DbgDump(dbg_dir.ToString());
+
+	return 0;
+}
+
+KYTY_SCRIPT_FUNC(kyty_execute_func)
+{
+	if (Scripts::ArgGetVarCount() != 0)
+	{
+		EXIT("invalid args\n");
+	}
+
+	int thread_model = 1;
+
+	if (thread_model == 0)
+	{
+		Core::Thread t([](void* /*unused*/) { Libs::Graphics::WindowRun(); }, nullptr);
+		t.Detach();
+		auto* rt = Core::Singleton<Loader::RuntimeLinker>::Instance();
+		rt->Execute();
+	} else
+	{
+		Core::Thread t(
+		    [](void* /*unused*/)
+		    {
+			    auto* rt = Core::Singleton<Loader::RuntimeLinker>::Instance();
+			    rt->Execute();
+		    },
+		    nullptr);
+		t.Detach();
+		Libs::Graphics::WindowRun();
+		t.Join();
+	}
+
+	return 0;
+}
+
+KYTY_SCRIPT_FUNC(kyty_mount_func)
+{
+	if (Scripts::ArgGetVarCount() != 2)
+	{
+		EXIT("invalid args\n");
+	}
+
+	Scripts::ScriptVar folder = Scripts::ArgGetVar(0);
+	Scripts::ScriptVar point  = Scripts::ArgGetVar(1);
+
+	Libs::LibKernel::FileSystem::Mount(folder.ToString(), point.ToString());
+
+	return 0;
+}
+
+KYTY_SCRIPT_FUNC(kyty_shader_disable)
+{
+	if (Scripts::ArgGetVarCount() != 1)
+	{
+		EXIT("invalid args\n");
+	}
+
+	auto id = Scripts::ArgGetVar(0).ToString().ToUint64(16);
+
+	Libs::Graphics::ShaderDisable(id);
+
+	return 0;
+}
+
+void kyty_help() {}
+
+} // namespace LuaFunc
+
+void kyty_reg()
+{
+	Scripts::RegisterFunc("kyty_init", LuaFunc::kyty_init_func, LuaFunc::kyty_help);
+	Scripts::RegisterFunc("kyty_load_elf", LuaFunc::kyty_load_elf_func, LuaFunc::kyty_help);
+	Scripts::RegisterFunc("kyty_load_symbols", LuaFunc::kyty_load_symbols_func, LuaFunc::kyty_help);
+	Scripts::RegisterFunc("kyty_dbg_dump", LuaFunc::kyty_dbg_dump_func, LuaFunc::kyty_help);
+	Scripts::RegisterFunc("kyty_execute", LuaFunc::kyty_execute_func, LuaFunc::kyty_help);
+	Scripts::RegisterFunc("kyty_mount", LuaFunc::kyty_mount_func, LuaFunc::kyty_help);
+	Scripts::RegisterFunc("kyty_shader_disable", LuaFunc::kyty_shader_disable, LuaFunc::kyty_help);
+}
+
+#else
+void kyty_reg() {}
+#endif // KYTY_EMU_ENABLED
+
+} // namespace Kyty::Emulator

@@ -1,0 +1,50 @@
+#ifndef EMULATOR_INCLUDE_EMULATOR_GRAPHICS_UTILS_H_
+#define EMULATOR_INCLUDE_EMULATOR_GRAPHICS_UTILS_H_
+
+#include "Kyty/Core/Common.h"
+
+#include "Emulator/Common.h"
+
+#ifdef KYTY_EMU_ENABLED
+
+namespace Kyty {
+template <typename T>
+class Vector;
+} // namespace Kyty
+
+namespace Kyty::Libs::Graphics {
+
+class CommandBuffer;
+struct GraphicContext;
+struct VulkanBuffer;
+struct VideoOutVulkanImage;
+struct TextureVulkanImage;
+struct DepthStencilVulkanImage;
+struct VulkanSwapchain;
+
+struct BufferImageCopy
+{
+	uint32_t offset;
+	uint32_t width;
+	uint32_t height;
+};
+
+void UtilBufferToImage(CommandBuffer* buffer, VulkanBuffer* src_buffer, VideoOutVulkanImage* dst_image);
+void UtilBufferToImage(CommandBuffer* buffer, VulkanBuffer* src_buffer, TextureVulkanImage* dst_image,
+                       const Vector<BufferImageCopy>& regions);
+void UtilBlitImage(CommandBuffer* buffer, VideoOutVulkanImage* src_image, VulkanSwapchain* dst_swapchain);
+void UtilFillImage(GraphicContext* ctx, VideoOutVulkanImage* dst_image, const void* src_data, uint64_t size);
+void UtilFillImage(GraphicContext* ctx, TextureVulkanImage* dst_image, const void* src_data, uint64_t size,
+                   const Vector<BufferImageCopy>& regions);
+void UtilCopyBuffer(VulkanBuffer* src_buffer, VulkanBuffer* dst_buffer, uint64_t size);
+void UtilSetImageLayoutOptimal(DepthStencilVulkanImage* image);
+void UtilSetImageLayoutOptimal(VideoOutVulkanImage* image);
+
+void VulkanCreateBuffer(GraphicContext* gctx, uint64_t size, VulkanBuffer* buffer);
+void VulkanDeleteBuffer(GraphicContext* gctx, VulkanBuffer* buffer);
+
+} // namespace Kyty::Libs::Graphics
+
+#endif // KYTY_EMU_ENABLED
+
+#endif /* EMULATOR_INCLUDE_EMULATOR_GRAPHICS_UTILS_H_ */

@@ -1,0 +1,40 @@
+﻿{
+  "configurations": [
+    {
+      "name": "Emulator-x64-ReleaseFinal-Clang",
+      "generator": "Ninja",
+      "configurationType": "Release",
+      "inheritEnvironments": [ "clang_cl_x64_x64" ],
+      "buildRoot": "${projectDir}\\..\\_Build\\_ReleaseFinalVC2017_Clang_64_build",
+      "installRoot": "${projectDir}\\..\\_Build\\_ReleaseFinalVC2017_Clang_64_install",
+      "cmakeCommandArgs": "-D KYTY_FINAL=1 -D KYTY_PROJECT_NAME:STRING=Emulator",
+      "intelliSenseMode": "windows-clang-x64",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": ""
+    },	
+    {
+      "name": "Emulator-x64-Debug-Clang",
+      "generator": "Ninja",
+      "configurationType": "Debug",
+      "inheritEnvironments": [ "clang_cl_x64_x64" ],
+      "buildRoot": "${projectDir}\\..\\_Build\\_DebugVC2017_Clang_64_build",
+      "installRoot": "${projectDir}\\..\\_Build\\_DebugVC2017_Clang_64_install",
+      "cmakeCommandArgs": "-D KYTY_PROJECT_NAME:STRING=Emulator",
+      "intelliSenseMode": "windows-clang-x64",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": ""
+    },
+	{
+      "name": "BuildTools-x64-ReleaseFinal-Clang",
+      "generator": "Ninja",
+      "configurationType": "Release",
+      "inheritEnvironments": [ "clang_cl_x64_x64" ],
+      "buildRoot": "${projectDir}\\..\\_Build\\_BuildTools_ReleaseFinalVC2017_Clang_64_build",
+      "installRoot": "${projectDir}\\..\\_Build\\_BuildTools_ReleaseFinalVC2017_Clang_64_install",
+      "cmakeCommandArgs": "-D KYTY_FINAL=1 -D KYTY_PROJECT_NAME:STRING=Build_Tools",
+      "intelliSenseMode": "windows-clang-x64",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": ""
+    }
+  ]
+}

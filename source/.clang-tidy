@@ -1,0 +1,52 @@
+Checks: '-*,bugprone-*,cert-*,clang-analyzer-*,google-*,llvm-*,-llvm-header-guard,misc-*,modernize-*,-modernize-use-trailing-return-type,-modernize-avoid-c-arrays,performance-*,portability-*,readability-*,-readability-magic-numbers,-readability-uppercase-literal-suffix,cppcoreguidelines-*,-cppcoreguidelines-pro-type-vararg,-cppcoreguidelines-avoid-magic-numbers,-cppcoreguidelines-pro-bounds-pointer-arithmetic,-cppcoreguidelines-owning-memory,-cppcoreguidelines-pro-bounds-array-to-pointer-decay,-cppcoreguidelines-pro-type-reinterpret-cast,-cppcoreguidelines-avoid-c-arrays,hicpp-*,-hicpp-vararg,-hicpp-no-array-decay,-hicpp-avoid-c-arrays,-hicpp-uppercase-literal-suffix,-cppcoreguidelines-pro-bounds-constant-array-index,-cppcoreguidelines-pro-type-union-access,-cppcoreguidelines-pro-type-static-cast-downcast,-modernize-pass-by-value,-cert-dcl50-cpp,-misc-no-recursion,-cppcoreguidelines-avoid-non-const-global-variables,-performance-no-int-to-ptr'
+CheckOptions:
+  - key: readability-function-cognitive-complexity.Threshold
+    value: 50
+  - key: readability-redundant-access-specifiers.CheckFirstDeclaration
+    value: 1
+  - key: misc-non-private-member-variables-in-classes.IgnorePublicMemberVariables
+    value: 1
+  - key: cppcoreguidelines-pro-type-member-init.IgnoreArrays
+    value: 1
+  - key: cppcoreguidelines-macro-usage.AllowedRegexp
+    value: (KYTY_*)|(EXIT*)|(ASSERT*)
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.MemberCase
+    value: lower_case
+  - key: readability-identifier-naming.PrivateMemberPrefix
+    value: 'm_'
+  - key: readability-identifier-naming.ProtectedMemberPrefix
+    value: 'm_'
+  - key: readability-identifier-naming.PublicMethodCase
+    value: CamelCase
+  - key: readability-identifier-naming.PublicMemberCase
+    value: aNy_CasE	
+  - key: readability-identifier-naming.StructCase
+    value: CamelCase
+  - key: readability-identifier-naming.ConstantCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.EnumConstantCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumCase
+    value: CamelCase
+  - key: readability-identifier-naming.TemplateParameterCase
+    value: CamelCase
+  - key: readability-identifier-naming.ValueTemplateParameterCase
+    value: CamelCase
+  - key: readability-identifier-naming.LocalConstantCase
+    value: lower_case
+  - key: readability-identifier-naming.GlobalConstantCase
+    value: lower_case
+  - key: readability-identifier-naming.GlobalConstantPrefix
+    value: 'g_'
+  - key: readability-identifier-naming.GlobalVariableCase
+    value: lower_case
+  - key: readability-identifier-naming.GlobalVariablePrefix
+    value: 'g_'
+  - key: readability-identifier-naming.VariableCase
+    value: lower_case
+  - key: readability-identifier-naming.ParameterCase
+    value: lower_case
+  - key: readability-identifier-naming.ConstexprVariableCase
+    value: UPPER_CASE
