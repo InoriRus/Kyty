@@ -431,7 +431,7 @@ void TileConvertTiledToLinear(void* dst, const void* src, TileMode mode, uint32_
 	auto*       dstptr = static_cast<uint8_t*>(dst);
 	const auto* srcptr = static_cast<const uint8_t*>(src);
 
-	for (int l = 0; l < levels; l++)
+	for (uint32_t l = 0; l < levels; l++)
 	{
 		Tiler1d t;
 		t.Init(dfmt, nfmt, mip_width, mip_height, padded_width[l], padded_height[l], neo);

@@ -492,7 +492,7 @@ KYTY_SHADER_PARSER(shader_parse_sopp)
 
 	if (inst.type == ShaderInstructionType::SCbranchScc0 || inst.type == ShaderInstructionType::SCbranchExecz)
 	{
-		dst->GetLabels().Add({inst.pc + 4 + inst.src[0].constant.i, inst.pc});
+		dst->GetLabels().Add(ShaderLabel({inst.pc + 4 + inst.src[0].constant.i, inst.pc}));
 	}
 
 	return 1;

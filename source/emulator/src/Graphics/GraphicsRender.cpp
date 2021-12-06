@@ -2407,7 +2407,7 @@ VulkanDescriptorSet* DescriptorCache::GetDescriptor(Stage stage, int storage_buf
 
 	if (storage_buffers_num > 0)
 	{
-		EXIT_IF(binding_num >= sizeof(descriptor_write) / sizeof(descriptor_write[0]));
+		EXIT_IF(binding_num >= static_cast<int>(sizeof(descriptor_write) / sizeof(descriptor_write[0])));
 		descriptor_write[binding_num].sType            = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		descriptor_write[binding_num].pNext            = nullptr;
 		descriptor_write[binding_num].dstSet           = new_set->set;
@@ -2423,7 +2423,7 @@ VulkanDescriptorSet* DescriptorCache::GetDescriptor(Stage stage, int storage_buf
 
 	if (textures2d_num > 0)
 	{
-		EXIT_IF(binding_num >= sizeof(descriptor_write) / sizeof(descriptor_write[0]));
+		EXIT_IF(binding_num >= static_cast<int>(sizeof(descriptor_write) / sizeof(descriptor_write[0])));
 		descriptor_write[binding_num].sType            = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		descriptor_write[binding_num].pNext            = nullptr;
 		descriptor_write[binding_num].dstSet           = new_set->set;
@@ -2439,7 +2439,7 @@ VulkanDescriptorSet* DescriptorCache::GetDescriptor(Stage stage, int storage_buf
 
 	if (samplers_num > 0)
 	{
-		EXIT_IF(binding_num >= sizeof(descriptor_write) / sizeof(descriptor_write[0]));
+		EXIT_IF(binding_num >= static_cast<int>(sizeof(descriptor_write) / sizeof(descriptor_write[0])));
 		descriptor_write[binding_num].sType            = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		descriptor_write[binding_num].pNext            = nullptr;
 		descriptor_write[binding_num].dstSet           = new_set->set;
@@ -2455,7 +2455,7 @@ VulkanDescriptorSet* DescriptorCache::GetDescriptor(Stage stage, int storage_buf
 
 	if (gds_buffers_num > 0)
 	{
-		EXIT_IF(binding_num >= sizeof(descriptor_write) / sizeof(descriptor_write[0]));
+		EXIT_IF(binding_num >= static_cast<int>(sizeof(descriptor_write) / sizeof(descriptor_write[0])));
 		descriptor_write[binding_num].sType            = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		descriptor_write[binding_num].pNext            = nullptr;
 		descriptor_write[binding_num].dstSet           = new_set->set;

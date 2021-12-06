@@ -14,7 +14,7 @@ endif()
 add_library(emulator_obj OBJECT ${emulator_src})
 add_library(emulator STATIC $<TARGET_OBJECTS:emulator_obj>)
 
-target_link_libraries(emulator core math scripts lua vulkan-1 spirv-tools spirv-tools-opt easy_profiler)
+target_link_libraries(emulator core math scripts lua vulkan-1 spirv-tools-opt spirv-tools easy_profiler)
 
 target_include_directories(emulator PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 

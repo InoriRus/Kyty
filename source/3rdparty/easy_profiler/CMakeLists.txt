@@ -16,9 +16,9 @@ file(GLOB easy_profiler_src
 
 if (MINGW)
 	if (CLANG)
-		set_source_files_properties(${easy_profiler_src} PROPERTIES COMPILE_FLAGS "-DBUILD_WITH_EASY_PROFILER -DEASY_PROFILER_STATIC -DEASY_DEFAULT_PORT=28077 -DEASY_PROFILER_VERSION_MAJOR=2 -DEASY_PROFILER_VERSION_MINOR=1 -DEASY_PROFILER_VERSION_PATCH=0 -DSTRSAFE_NO_DEPRECATE -Wno-unused-variable -Wno-writable-strings -Wno-braced-scalar-init -Wno-defaulted-function-deleted -Wno-unknown-pragmas -Wno-reorder-ctor -femulated-tls")
+		set_source_files_properties(${easy_profiler_src} PROPERTIES COMPILE_FLAGS "-DWINVER=0x0601 -D_WIN32_WINNT=0x0601 -DBUILD_WITH_EASY_PROFILER -DEASY_PROFILER_STATIC -DEASY_DEFAULT_PORT=28077 -DEASY_PROFILER_VERSION_MAJOR=2 -DEASY_PROFILER_VERSION_MINOR=1 -DEASY_PROFILER_VERSION_PATCH=0 -DSTRSAFE_NO_DEPRECATE -Wno-unused-variable -Wno-writable-strings -Wno-braced-scalar-init -Wno-defaulted-function-deleted -Wno-unknown-pragmas -Wno-reorder-ctor -femulated-tls")
 	else()
-		set_source_files_properties(${easy_profiler_src} PROPERTIES COMPILE_FLAGS "-DBUILD_WITH_EASY_PROFILER -DEASY_PROFILER_STATIC -DEASY_DEFAULT_PORT=28077 -DEASY_PROFILER_VERSION_MAJOR=2 -DEASY_PROFILER_VERSION_MINOR=1 -DEASY_PROFILER_VERSION_PATCH=0 -DSTRSAFE_NO_DEPRECATE -Wno-reorder-ctor -Wno-reorder -Wno-unknown-pragmas -Wno-format -Wno-class-memaccess")
+		set_source_files_properties(${easy_profiler_src} PROPERTIES COMPILE_FLAGS "-DWINVER=0x0601 -D_WIN32_WINNT=0x0601 -DBUILD_WITH_EASY_PROFILER -DEASY_PROFILER_STATIC -DEASY_DEFAULT_PORT=28077 -DEASY_PROFILER_VERSION_MAJOR=2 -DEASY_PROFILER_VERSION_MINOR=1 -DEASY_PROFILER_VERSION_PATCH=0 -DSTRSAFE_NO_DEPRECATE -Wno-reorder-ctor -Wno-reorder -Wno-unknown-pragmas -Wno-format -Wno-class-memaccess")
 	endif()
 endif()
 
