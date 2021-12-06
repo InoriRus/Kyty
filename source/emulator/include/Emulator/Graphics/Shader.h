@@ -7,6 +7,8 @@
 
 #include "Emulator/Common.h"
 
+#include <algorithm>
+
 #ifdef KYTY_EMU_ENABLED
 
 namespace Kyty::Libs::Graphics {
@@ -27,9 +29,6 @@ enum class ShaderType
 enum class ShaderInstructionType
 {
 	Unknown,
-	DsAppend,
-	DsConsume,
-	Exp,
 	BufferLoadDword,
 	BufferLoadFormatX,
 	BufferLoadFormatXy,
@@ -37,50 +36,78 @@ enum class ShaderInstructionType
 	BufferLoadFormatXyzw,
 	BufferStoreDword,
 	BufferStoreFormatX,
+	DsAppend,
+	DsConsume,
+	Exp,
 	ImageSample,
-	TBufferLoadFormatXyzw,
+	SAddI32,
+	SAndB32,
 	SAndn2B64,
 	SAndSaveexecB64,
-	SEndpgm,
-	SCbranchExecz,
-	SLshlB32,
-	SLoadDwordx4,
-	SLoadDwordx8,
 	SBufferLoadDword,
+	SBufferLoadDwordx16,
+	SBufferLoadDwordx2,
 	SBufferLoadDwordx4,
 	SBufferLoadDwordx8,
-	SBufferLoadDwordx16,
+	SCbranchExecz,
+	SCbranchScc0,
+	SCmpEqU32,
+	SEndpgm,
+	SLoadDwordx4,
+	SLoadDwordx8,
+	SLshlB32,
+	SLshrB32,
 	SMovB32,
 	SMovB64,
+	SMulI32,
+	SNorB64,
+	SOrB64,
+	SCselectB32,
 	SSetpcB64,
 	SSwappcB64,
 	SWaitcnt,
 	SWqmB64,
+	TBufferLoadFormatXyzw,
 	VAddI32,
 	VAndB32,
+	VAshrrevI32,
+	VBfeU32,
 	VCmpEqF32,
 	VCmpEqU32,
+	VCmpGtI32,
 	VCmpLeF32,
 	VCmpLeU32,
-	VCmpNeU32,
 	VCmpNeqF32,
+	VCmpNeU32,
 	VCmpxEqU32,
 	VCmpxGtU32,
+	VCmpxNeU32,
 	VCndmaskB32,
 	VCvtF32U32,
+	VCvtF32Ubyte0,
+	VCvtF32Ubyte1,
+	VCvtF32Ubyte2,
+	VCvtF32Ubyte3,
 	VCvtPkrtzF16F32,
 	VCvtU32F32,
+	VInterpP1F32,
+	VInterpP2F32,
+	VLshlrevB32,
+	VLshrB32,
+	VLshrrevB32,
 	VMacF32,
 	VMadakF32,
 	VMadF32,
+	VMadU32U24,
 	VMaxF32,
 	VMbcntHiU32B32,
 	VMbcntLoU32B32,
 	VMinF32,
 	VMovB32,
 	VMulF32,
-	VInterpP1F32,
-	VInterpP2F32,
+	VMulLoI32,
+	VMulU32U24,
+	VNotB32,
 	VRcpF32,
 	VRsqF32,
 	VSadU32,
@@ -123,6 +150,7 @@ enum FormatByte : uint64_t
 	S2A4,   // operand_array_to_str(inst.src[2], 4)
 	Attr,   // attr%u.%u <- inst.src[1].constant.u, inst.src[2].constant.u
 	Idxen,  // idxen
+	Offen,  // offen
 	Float4, // format:float4
 	Pos0,   // pos0
 	Done,   // done
@@ -131,6 +159,7 @@ enum FormatByte : uint64_t
 	Param2, // param2
 	Param3, // param3
 	Mrt0,   // mrt_color0
+	Off,    // off
 	Compr,  // compr
 	Vm,     // vm
 	L,      // label_%u
@@ -151,41 +180,46 @@ constexpr uint64_t FormatDefine(std::initializer_list<uint64_t> f)
 
 enum Format : uint64_t
 {
-	Unknown                        = FormatDefine({U}),
-	Empty                          = FormatDefine({N}),
-	Imm                            = FormatDefine({S0}),
-	Label                          = FormatDefine({L}),
-	Mrt0Vsrc0Vsrc1ComprVmDone      = FormatDefine({Mrt0, S0, S1, Compr, Vm, Done}),
-	Mrt0Vsrc0Vsrc1Vsrc2Vsrc3VmDone = FormatDefine({Mrt0, S0, S1, S2, S3, Vm, Done}),
-	Param0Vsrc0Vsrc1Vsrc2Vsrc3     = FormatDefine({Param0, S0, S1, S2, S3}),
-	Param1Vsrc0Vsrc1Vsrc2Vsrc3     = FormatDefine({Param1, S0, S1, S2, S3}),
-	Param2Vsrc0Vsrc1Vsrc2Vsrc3     = FormatDefine({Param2, S0, S1, S2, S3}),
-	Param3Vsrc0Vsrc1Vsrc2Vsrc3     = FormatDefine({Param3, S0, S1, S2, S3}),
-	Pos0Vsrc0Vsrc1Vsrc2Vsrc3Done   = FormatDefine({Pos0, S0, S1, S2, S3, Done}),
-	Saddr                          = FormatDefine({S0A2}),
-	Sdst4SbaseSoffset              = FormatDefine({DA4, S0A2, S1}),
-	Sdst8SbaseSoffset              = FormatDefine({DA8, S0A2, S1}),
-	SdstSvSoffset                  = FormatDefine({D, S0A4, S1}),
-	Sdst4SvSoffset                 = FormatDefine({DA4, S0A4, S1}),
-	Sdst8SvSoffset                 = FormatDefine({DA8, S0A4, S1}),
-	Sdst16SvSoffset                = FormatDefine({DA16, S0A4, S1}),
-	SVdstSVsrc0                    = FormatDefine({D, S0}),
-	SVdstSVsrc0SVsrc1              = FormatDefine({D, S0, S1}),
-	Sdst2Ssrc02                    = FormatDefine({DA2, S0A2}),
-	Sdst2Ssrc02Ssrc12              = FormatDefine({DA2, S0A2, S1A2}),
-	SmaskVsrc0Vsrc1                = FormatDefine({DA2, S0, S1}),
-	Vdata1VaddrSvSoffsIdxen        = FormatDefine({D, S0, S1A4, S2, Idxen}),
-	Vdata2VaddrSvSoffsIdxen        = FormatDefine({DA2, S0, S1A4, S2, Idxen}),
-	Vdata3VaddrSvSoffsIdxen        = FormatDefine({DA3, S0, S1A4, S2, Idxen}),
-	Vdata4VaddrSvSoffsIdxen        = FormatDefine({DA4, S0, S1A4, S2, Idxen}),
-	Vdata4VaddrSvSoffsIdxenFloat4  = FormatDefine({DA4, S0, S1A4, S2, Idxen, Float4}),
-	Vdata3Vaddr3StSsDmask7         = FormatDefine({DA3, S0A3, S1A8, S2A4, Dmask7}),
-	Vdata4Vaddr3StSsDmaskF         = FormatDefine({DA4, S0A3, S1A8, S2A4, DmaskF}),
-	VdstVsrc0Vsrc1Smask2           = FormatDefine({D, S0, S1, S2A2}),
-	VdstVsrc0Vsrc1Vsrc2            = FormatDefine({D, S0, S1, S2}),
-	VdstVsrcAttrChan               = FormatDefine({D, S0, Attr}),
-	VdstSdst2Vsrc0Vsrc1            = FormatDefine({D, D2A2, S0, S1}),
-	VdstGds                        = FormatDefine({D, Gds})
+	Unknown                             = FormatDefine({U}),
+	Empty                               = FormatDefine({N}),
+	Imm                                 = FormatDefine({S0}),
+	Label                               = FormatDefine({L}),
+	Mrt0OffOffComprVmDone               = FormatDefine({Mrt0, Off, Off, Compr, Vm, Done}),
+	Mrt0Vsrc0Vsrc1ComprVmDone           = FormatDefine({Mrt0, S0, S1, Compr, Vm, Done}),
+	Mrt0Vsrc0Vsrc1Vsrc2Vsrc3VmDone      = FormatDefine({Mrt0, S0, S1, S2, S3, Vm, Done}),
+	Param0Vsrc0Vsrc1Vsrc2Vsrc3          = FormatDefine({Param0, S0, S1, S2, S3}),
+	Param1Vsrc0Vsrc1Vsrc2Vsrc3          = FormatDefine({Param1, S0, S1, S2, S3}),
+	Param2Vsrc0Vsrc1Vsrc2Vsrc3          = FormatDefine({Param2, S0, S1, S2, S3}),
+	Param3Vsrc0Vsrc1Vsrc2Vsrc3          = FormatDefine({Param3, S0, S1, S2, S3}),
+	Pos0Vsrc0Vsrc1Vsrc2Vsrc3Done        = FormatDefine({Pos0, S0, S1, S2, S3, Done}),
+	Saddr                               = FormatDefine({S0A2}),
+	Sdst4SbaseSoffset                   = FormatDefine({DA4, S0A2, S1}),
+	Sdst8SbaseSoffset                   = FormatDefine({DA8, S0A2, S1}),
+	SdstSvSoffset                       = FormatDefine({D, S0A4, S1}),
+	Sdst2SvSoffset                      = FormatDefine({DA2, S0A4, S1}),
+	Sdst4SvSoffset                      = FormatDefine({DA4, S0A4, S1}),
+	Sdst8SvSoffset                      = FormatDefine({DA8, S0A4, S1}),
+	Sdst16SvSoffset                     = FormatDefine({DA16, S0A4, S1}),
+	SVdstSVsrc0                         = FormatDefine({D, S0}),
+	SVdstSVsrc0SVsrc1                   = FormatDefine({D, S0, S1}),
+	Sdst2Ssrc02                         = FormatDefine({DA2, S0A2}),
+	Sdst2Ssrc0                          = FormatDefine({DA2, S0}),
+	Sdst2Ssrc02Ssrc12                   = FormatDefine({DA2, S0A2, S1A2}),
+	SmaskVsrc0Vsrc1                     = FormatDefine({DA2, S0, S1}),
+	Ssrc0Ssrc1                          = FormatDefine({S0, S1}),
+	Vdata1VaddrSvSoffsIdxen             = FormatDefine({D, S0, S1A4, S2, Idxen}),
+	Vdata2VaddrSvSoffsIdxen             = FormatDefine({DA2, S0, S1A4, S2, Idxen}),
+	Vdata3VaddrSvSoffsIdxen             = FormatDefine({DA3, S0, S1A4, S2, Idxen}),
+	Vdata4VaddrSvSoffsIdxen             = FormatDefine({DA4, S0, S1A4, S2, Idxen}),
+	Vdata4VaddrSvSoffsIdxenFloat4       = FormatDefine({DA4, S0, S1A4, S2, Idxen, Float4}),
+	Vdata4Vaddr2SvSoffsOffenIdxenFloat4 = FormatDefine({DA4, S0A2, S1A4, S2, Offen, Idxen, Float4}),
+	Vdata3Vaddr3StSsDmask7              = FormatDefine({DA3, S0A3, S1A8, S2A4, Dmask7}),
+	Vdata4Vaddr3StSsDmaskF              = FormatDefine({DA4, S0A3, S1A8, S2A4, DmaskF}),
+	VdstVsrc0Vsrc1Smask2                = FormatDefine({D, S0, S1, S2A2}),
+	VdstVsrc0Vsrc1Vsrc2                 = FormatDefine({D, S0, S1, S2}),
+	VdstVsrcAttrChan                    = FormatDefine({D, S0, Attr}),
+	VdstSdst2Vsrc0Vsrc1                 = FormatDefine({D, D2A2, S0, S1}),
+	VdstGds                             = FormatDefine({D, Gds}),
 };
 
 } // namespace ShaderInstructionFormat
@@ -201,6 +235,7 @@ enum class ShaderOperandType
 	ExecLo,
 	ExecHi,
 	ExecZ,
+	Scc,
 	Vgpr,
 	Sgpr,
 	M0
@@ -240,6 +275,12 @@ struct ShaderInstruction
 	ShaderOperand                   dst2;
 };
 
+struct ShaderLabel
+{
+	uint32_t dst;
+	uint32_t src;
+};
+
 class ShaderCode
 {
 public:
@@ -249,8 +290,8 @@ public:
 
 	[[nodiscard]] const Vector<ShaderInstruction>& GetInstructions() const { return m_instructions; }
 	Vector<ShaderInstruction>&                     GetInstructions() { return m_instructions; }
-	[[nodiscard]] const Vector<uint32_t>&          GetLabels() const { return m_labels; }
-	Vector<uint32_t>&                              GetLabels() { return m_labels; }
+	[[nodiscard]] const Vector<ShaderLabel>&       GetLabels() const { return m_labels; }
+	Vector<ShaderLabel>&                           GetLabels() { return m_labels; }
 
 	[[nodiscard]] String DbgDump() const;
 
@@ -259,9 +300,16 @@ public:
 	[[nodiscard]] ShaderType GetType() const { return m_type; }
 	void                     SetType(ShaderType type) { this->m_type = type; }
 
+	[[nodiscard]] bool HasAnyOf(std::initializer_list<ShaderInstructionType> types) const
+	{
+		return std::any_of(types.begin(), types.end(),
+		                   [this](auto type)
+		                   { return m_instructions.Contains(type, [](auto inst, auto type) { return inst.type == type; }); });
+	}
+
 private:
 	Vector<ShaderInstruction> m_instructions;
-	Vector<uint32_t>          m_labels;
+	Vector<ShaderLabel>       m_labels;
 	ShaderType                m_type = ShaderType::Unknown;
 };
 

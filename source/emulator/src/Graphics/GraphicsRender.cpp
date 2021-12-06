@@ -2616,7 +2616,7 @@ static void FindRenderDepthInfo(const HardwareContext& hw, RenderDepthInfo* r)
 	TileGetDepthSize(z.width, z.height, z.z_info.format, z.stencil_info.format, htile, neo, &stencil_size, &htile_size, &depth_size,
 	                 &pitch);
 
-	EXIT_NOT_IMPLEMENTED((z.pitch_div8_minus1 + 1) * 8 != pitch);
+	EXIT_NOT_IMPLEMENTED(pitch != 0 && (z.pitch_div8_minus1 + 1) * 8 != pitch);
 
 	switch (z.z_info.format * 2 + z.stencil_info.format)
 	{

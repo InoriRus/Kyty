@@ -75,7 +75,7 @@ if (CLANG AND (KYTY_LINKER STREQUAL LLD))
 	set(KYTY_LD_OPTIONS "-fuse-ld=lld")
 endif()
 
-project(Kyty${KYTY_PROJECT_NAME}${CMAKE_BUILD_TYPE}${KYTY_COMPILER} VERSION 0.0.1)
+project(Kyty${KYTY_PROJECT_NAME}${CMAKE_BUILD_TYPE}${KYTY_COMPILER} VERSION 0.0.2)
 
 include(src_script.cmake)
 
