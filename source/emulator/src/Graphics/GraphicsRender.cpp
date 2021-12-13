@@ -2742,6 +2742,8 @@ static void PrepareStorageBuffers(const ShaderStorageResources& storage_buffers,
 		                        r.Dfmt() == 4 && r.Nfmt() == 4) ||
 		                       (r.Stride() == 4 && r.DstSelX() == 4 && r.DstSelY() == 0 && r.DstSelZ() == 0 && r.DstSelW() == 1 &&
 		                        r.Dfmt() == 4 && r.Nfmt() == 7) ||
+		                       (r.Stride() == 8 && r.DstSelX() == 4 && r.DstSelY() == 5 && r.DstSelZ() == 0 && r.DstSelW() == 0 &&
+		                        r.Dfmt() == 11 && r.Nfmt() == 4) ||
 		                       (r.Stride() == 16 && r.DstSelX() == 4 && r.DstSelY() == 5 && r.DstSelZ() == 6 && r.DstSelW() == 7 &&
 		                        r.Dfmt() == 14 && r.Nfmt() == 7)));
 		EXIT_NOT_IMPLEMENTED(!(r.MemoryType() == 0x00 || r.MemoryType() == 0x10 || r.MemoryType() == 0x6d));

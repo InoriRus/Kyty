@@ -300,6 +300,42 @@ constexpr char32_t BUFFER_STORE_FLOAT1[] = UR"(
                OpFunctionEnd
 )";
 
+constexpr char32_t BUFFER_STORE_FLOAT2[] = UR"(
+                      ; void buffer_store_float2(in float p1, in float p2, in int index, in int offset, in int stride, in int buffer_index)
+                      ; {
+                      ; 	int addr = (offset + index * stride)/4;
+                      ; 	buf[buffer_index].data[addr+0] = p1;
+                      ; 	buf[buffer_index].data[addr+1] = p2;
+                      ; }
+%buffer_store_float2 = OpFunction %void None %function_buffer_load_store_float2
+         %buf_s_f2_51 = OpFunctionParameter %_ptr_Function_float
+         %buf_s_f2_52 = OpFunctionParameter %_ptr_Function_float
+         %buf_s_f2_53 = OpFunctionParameter %_ptr_Function_int
+         %buf_s_f2_54 = OpFunctionParameter %_ptr_Function_int
+         %buf_s_f2_55 = OpFunctionParameter %_ptr_Function_int
+         %buf_s_f2_56 = OpFunctionParameter %_ptr_Function_int
+         %buf_s_f2_58 = OpLabel
+        %buf_s_f2_143 = OpVariable %_ptr_Function_int Function
+        %buf_s_f2_144 = OpLoad %int %buf_s_f2_54
+        %buf_s_f2_145 = OpLoad %int %buf_s_f2_53
+        %buf_s_f2_146 = OpLoad %int %buf_s_f2_55
+        %buf_s_f2_147 = OpIMul %int %buf_s_f2_145 %buf_s_f2_146
+        %buf_s_f2_148 = OpIAdd %int %buf_s_f2_144 %buf_s_f2_147
+        %buf_s_f2_149 = OpSDiv %int %buf_s_f2_148 %int_4
+               OpStore %buf_s_f2_143 %buf_s_f2_149
+        %buf_s_f2_150 = OpLoad %int %buf_s_f2_56
+        %buf_s_f2_153 = OpLoad %float %buf_s_f2_51
+        %buf_s_f2_154 = OpAccessChain %_ptr_StorageBuffer_float %buf %buf_s_f2_150 %int_0 %buf_s_f2_149
+               OpStore %buf_s_f2_154 %buf_s_f2_153
+        %buf_s_f2_155 = OpLoad %int %buf_s_f2_56
+        %buf_s_f2_158 = OpIAdd %int %buf_s_f2_149 %int_1
+        %buf_s_f2_159 = OpLoad %float %buf_s_f2_52
+        %buf_s_f2_160 = OpAccessChain %_ptr_StorageBuffer_float %buf %buf_s_f2_155 %int_0 %buf_s_f2_158
+               OpStore %buf_s_f2_160 %buf_s_f2_159
+               OpReturn
+               OpFunctionEnd
+)";
+
 constexpr char32_t TBUFFER_LOAD_FORMAT_XYZW[] = UR"(
              ; Function tbuffer_load_format_xyzw
              ; void tbuffer_load_format_xyzw(out float p1, out float p2, out float p3, out float p4, 
@@ -360,7 +396,7 @@ constexpr char32_t TBUFFER_LOAD_FORMAT_XYZW[] = UR"(
 constexpr char32_t TBUFFER_LOAD_FORMAT_X[] = UR"(
              ; void tbuffer_load_format_x(out float p1, in int index, in int offset, in int stride, in int buffer_index, in int dfmt_nfmt)
              ; {
-             ; 	if (dfmt_nfmt == 36) // dmft = 4, nfmt = 4
+             ; 	if (dfmt_nfmt == 36 || dfmt_nfmt == 39) // dmft = 4, nfmt = 4 or 7
              ; 	{
              ; 		buffer_load_float1(p1, index, offset, stride, buffer_index);
              ; 	}
@@ -380,8 +416,10 @@ constexpr char32_t TBUFFER_LOAD_FORMAT_X[] = UR"(
          %tbuf_l_f_x_89 = OpVariable %_ptr_Function_int Function
          %tbuf_l_f_x_76 = OpLoad %int %tbuf_l_f_x_31
          %tbuf_l_f_x_79 = OpIEqual %bool %tbuf_l_f_x_76 %int_36
+         %tbuf_l_f_x_79_2 = OpIEqual %bool %tbuf_l_f_x_76 %int_39
+         %tbuf_l_f_x_79_3 = OpLogicalOr %bool %tbuf_l_f_x_79 %tbuf_l_f_x_79_2
                OpSelectionMerge %tbuf_l_f_x_81 None
-               OpBranchConditional %tbuf_l_f_x_79 %tbuf_l_f_x_80 %tbuf_l_f_x_81
+               OpBranchConditional %tbuf_l_f_x_79_3 %tbuf_l_f_x_80 %tbuf_l_f_x_81
          %tbuf_l_f_x_80 = OpLabel
          %tbuf_l_f_x_84 = OpLoad %int %tbuf_l_f_x_27
                OpStore %tbuf_l_f_x_83 %tbuf_l_f_x_84
@@ -403,7 +441,7 @@ constexpr char32_t TBUFFER_LOAD_FORMAT_X[] = UR"(
 constexpr char32_t TBUFFER_STORE_FORMAT_X[] = UR"(
              ; void tbuffer_store_format_x(in float p1, in int index, in int offset, in int stride, in int buffer_index, in int dfmt_nfmt)
              ; {
-             ; 	if (dfmt_nfmt == 36) // dmft = 4, nfmt = 4
+             ; 	if (dfmt_nfmt == 36 || dfmt_nfmt == 39) // dmft = 4, nfmt = 4 or 7
              ; 	{
              ; 		buffer_store_float1(p1, index, offset, stride, buffer_index);
              ; 	}
@@ -423,8 +461,10 @@ constexpr char32_t TBUFFER_STORE_FORMAT_X[] = UR"(
         %tbuf_s_f_x_105 = OpVariable %_ptr_Function_int Function
          %tbuf_s_f_x_93 = OpLoad %int %tbuf_s_f_x_39
          %tbuf_s_f_x_94 = OpIEqual %bool %tbuf_s_f_x_93 %int_36
+         %tbuf_s_f_x_94_2 = OpIEqual %bool %tbuf_s_f_x_93 %int_39
+         %tbuf_s_f_x_94_3 = OpLogicalOr %bool %tbuf_s_f_x_94 %tbuf_s_f_x_94_2
                OpSelectionMerge %tbuf_s_f_x_96 None
-               OpBranchConditional %tbuf_s_f_x_94 %tbuf_s_f_x_95 %tbuf_s_f_x_96
+               OpBranchConditional %tbuf_s_f_x_94_3 %tbuf_s_f_x_95 %tbuf_s_f_x_96
          %tbuf_s_f_x_95 = OpLabel
          %tbuf_s_f_x_98 = OpLoad %float %tbuf_s_f_x_34
                OpStore %tbuf_s_f_x_97 %tbuf_s_f_x_98
@@ -439,6 +479,56 @@ constexpr char32_t TBUFFER_STORE_FORMAT_X[] = UR"(
         %tbuf_s_f_x_107 = OpFunctionCall %void %buffer_store_float1 %tbuf_s_f_x_97 %tbuf_s_f_x_99 %tbuf_s_f_x_101 %tbuf_s_f_x_103 %tbuf_s_f_x_105
                OpBranch %tbuf_s_f_x_96
          %tbuf_s_f_x_96 = OpLabel
+               OpReturn
+               OpFunctionEnd
+)";
+
+constexpr char32_t TBUFFER_STORE_FORMAT_XY[] = UR"(
+                        ; void tbuffer_store_format_xy(in float p1, in float p2, in int index, in int offset, in int stride, in int buffer_index, in int dfmt_nfmt)
+                        ; {
+                        ; 	if (dfmt_nfmt == 92 || dfmt_nfmt == 95) // dmft = 11, nfmt = 4 or 7
+                        ; 	{
+                        ; 		buffer_store_float2(p1, p2, index, offset, stride, buffer_index);
+                        ; 	}
+                        ; }
+%tbuffer_store_format_xy = OpFunction %void None %function_tbuffer_load_store_format_xy
+         %tbuf_s_f_xy_60 = OpFunctionParameter %_ptr_Function_float
+         %tbuf_s_f_xy_61 = OpFunctionParameter %_ptr_Function_float
+         %tbuf_s_f_xy_62 = OpFunctionParameter %_ptr_Function_int
+         %tbuf_s_f_xy_63 = OpFunctionParameter %_ptr_Function_int
+         %tbuf_s_f_xy_64 = OpFunctionParameter %_ptr_Function_int
+         %tbuf_s_f_xy_65 = OpFunctionParameter %_ptr_Function_int
+         %tbuf_s_f_xy_66 = OpFunctionParameter %_ptr_Function_int
+         %tbuf_s_f_xy_68 = OpLabel
+        %tbuf_s_f_xy_170 = OpVariable %_ptr_Function_float Function
+        %tbuf_s_f_xy_172 = OpVariable %_ptr_Function_float Function
+        %tbuf_s_f_xy_174 = OpVariable %_ptr_Function_int Function
+        %tbuf_s_f_xy_176 = OpVariable %_ptr_Function_int Function
+        %tbuf_s_f_xy_178 = OpVariable %_ptr_Function_int Function
+        %tbuf_s_f_xy_180 = OpVariable %_ptr_Function_int Function
+        %tbuf_s_f_xy_161 = OpLoad %int %tbuf_s_f_xy_66
+        %tbuf_s_f_xy_163 = OpIEqual %bool %tbuf_s_f_xy_161 %int_92
+        %tbuf_s_f_xy_164 = OpLoad %int %tbuf_s_f_xy_66
+        %tbuf_s_f_xy_166 = OpIEqual %bool %tbuf_s_f_xy_164 %int_95
+        %tbuf_s_f_xy_167 = OpLogicalOr %bool %tbuf_s_f_xy_163 %tbuf_s_f_xy_166
+               OpSelectionMerge %tbuf_s_f_xy_169 None
+               OpBranchConditional %tbuf_s_f_xy_167 %tbuf_s_f_xy_168 %tbuf_s_f_xy_169
+        %tbuf_s_f_xy_168 = OpLabel
+        %tbuf_s_f_xy_171 = OpLoad %float %tbuf_s_f_xy_60
+               OpStore %tbuf_s_f_xy_170 %tbuf_s_f_xy_171
+        %tbuf_s_f_xy_173 = OpLoad %float %tbuf_s_f_xy_61
+               OpStore %tbuf_s_f_xy_172 %tbuf_s_f_xy_173
+        %tbuf_s_f_xy_175 = OpLoad %int %tbuf_s_f_xy_62
+               OpStore %tbuf_s_f_xy_174 %tbuf_s_f_xy_175
+        %tbuf_s_f_xy_177 = OpLoad %int %tbuf_s_f_xy_63
+               OpStore %tbuf_s_f_xy_176 %tbuf_s_f_xy_177
+        %tbuf_s_f_xy_179 = OpLoad %int %tbuf_s_f_xy_64
+               OpStore %tbuf_s_f_xy_178 %tbuf_s_f_xy_179
+        %tbuf_s_f_xy_181 = OpLoad %int %tbuf_s_f_xy_65
+               OpStore %tbuf_s_f_xy_180 %tbuf_s_f_xy_181
+        %tbuf_s_f_xy_182 = OpFunctionCall %void %buffer_store_float2 %tbuf_s_f_xy_170 %tbuf_s_f_xy_172 %tbuf_s_f_xy_174 %tbuf_s_f_xy_176 %tbuf_s_f_xy_178 %tbuf_s_f_xy_180
+               OpBranch %tbuf_s_f_xy_169
+        %tbuf_s_f_xy_169 = OpLabel
                OpReturn
                OpFunctionEnd
 )";
@@ -1199,12 +1289,23 @@ static bool operand_load_uint(Spirv* spirv, ShaderOperand op, const String& resu
 
 	if (operand_is_constant(op))
 	{
-		String id = spirv->GetConstant(op);
+		bool u64 = (op.type == ShaderOperandType::IntegerInlineConstant && op.size == 2);
 
-		*load = String(U"%<result_id> = OpBitcast %uint %<id>")
-		            .ReplaceStr(U"<index>", index)
-		            .ReplaceStr(U"<id>", id)
-		            .ReplaceStr(U"<result_id>", result_id);
+		if (u64)
+		{
+			EXIT_NOT_IMPLEMENTED(shift < 0);
+			EXIT_NOT_IMPLEMENTED(op.constant.i != 0);
+
+			*load = String(U"%<result_id> = OpBitcast %uint %uint_0").ReplaceStr(U"<index>", index).ReplaceStr(U"<result_id>", result_id);
+		} else
+		{
+			String id = spirv->GetConstant(op);
+
+			*load = String(U"%<result_id> = OpBitcast %uint %<id>")
+			            .ReplaceStr(U"<index>", index)
+			            .ReplaceStr(U"<id>", id)
+			            .ReplaceStr(U"<result_id>", result_id);
+		}
 	} else if (operand_is_variable(op))
 	{
 		auto value = (shift >= 0 ? operand_variable_to_str(op, shift) : operand_variable_to_str(op));
@@ -1226,7 +1327,6 @@ static bool operand_load_uint(Spirv* spirv, ShaderOperand op, const String& resu
 		{
 			return false;
 		}
-
 	} else
 	{
 		return false;
@@ -1502,8 +1602,6 @@ KYTY_RECOMPILER_FUNC(Recompile_BufferStoreFormatX_Vdata1VaddrSvSoffsIdxen)
 
 	if (bind_info != nullptr && bind_info->storage_buffers.buffers_num > 0)
 	{
-		// EXIT_NOT_IMPLEMENTED(!operand_is_variable(inst.src[0]));
-		// EXIT_NOT_IMPLEMENTED(!operand_is_variable(inst.dst));
 		EXIT_NOT_IMPLEMENTED(!operand_is_constant(inst.src[2]));
 
 		auto   dst_value   = operand_variable_to_str(inst.dst);
@@ -1559,6 +1657,77 @@ KYTY_RECOMPILER_FUNC(Recompile_BufferStoreFormatX_Vdata1VaddrSvSoffsIdxen)
 		                   .ReplaceStr(U"<src1_value1>", src1_value1.value)
 		                   .ReplaceStr(U"<src1_value3>", src1_value3.value)
 		                   .ReplaceStr(U"<p0>", dst_value.value);
+
+		return true;
+	}
+
+	return false;
+}
+
+KYTY_RECOMPILER_FUNC(Recompile_BufferStoreFormatXy_Vdata2VaddrSvSoffsIdxen)
+{
+	const auto& inst      = code.GetInstructions().At(index);
+	const auto* bind_info = spirv->GetBindInfo();
+
+	if (bind_info != nullptr && bind_info->storage_buffers.buffers_num > 0)
+	{
+		EXIT_NOT_IMPLEMENTED(!operand_is_constant(inst.src[2]));
+
+		auto   dst_value0  = operand_variable_to_str(inst.dst, 0);
+		auto   dst_value1  = operand_variable_to_str(inst.dst, 1);
+		auto   src0_value  = operand_variable_to_str(inst.src[0]);
+		auto   src1_value0 = operand_variable_to_str(inst.src[1], 0);
+		auto   src1_value1 = operand_variable_to_str(inst.src[1], 1);
+		auto   src1_value3 = operand_variable_to_str(inst.src[1], 3);
+		String offset      = spirv->GetConstant(inst.src[2]);
+
+		EXIT_NOT_IMPLEMENTED(dst_value0.type != SpirvType::Float);
+		EXIT_NOT_IMPLEMENTED(src0_value.type != SpirvType::Float);
+		EXIT_NOT_IMPLEMENTED(src1_value0.type != SpirvType::Uint);
+		EXIT_NOT_IMPLEMENTED(src1_value1.type != SpirvType::Uint);
+		EXIT_NOT_IMPLEMENTED(src1_value3.type != SpirvType::Uint);
+
+		// TODO() check VSKIP
+
+		static const char32_t* text = UR"(
+        %exec_lo_u_<index> = OpLoad %uint %exec_lo
+        %exec_hi_u_<index> = OpLoad %uint %exec_hi ; unused
+        %exec_lo_b_<index> = OpINotEqual %bool %exec_lo_u_<index> %uint_0
+               OpSelectionMerge %t278_<index> None
+               OpBranchConditional %exec_lo_b_<index> %t277_<index> %t278_<index>       
+		%t277_<index> = OpLabel
+
+        %t100_<index> = OpLoad %float %<src0>
+        %t101_<index> = OpBitcast %int %t100_<index>
+               OpStore %temp_int_1 %t101_<index>
+        %t148_<index> = OpLoad %uint %<src1_value1>
+        %t150_<index> = OpShiftRightLogical %uint %t148_<index> %int_16
+        %t152_<index> = OpBitwiseAnd %uint %t150_<index> %uint_0x00003fff
+        %t153_<index> = OpBitcast %int %t152_<index>
+               OpStore %temp_int_3 %t153_<index>
+        %t155_<index> = OpLoad %uint %<src1_value0>
+        %t156_<index> = OpBitcast %int %t155_<index>
+               OpStore %temp_int_4 %t156_<index>                
+               OpStore %temp_int_2 %<offset>
+		%t206_<index> = OpLoad %uint %<src1_value3>
+        %t208_<index> = OpShiftRightLogical %uint %t206_<index> %int_12
+        %t210_<index> = OpBitwiseAnd %uint %t208_<index> %uint_127
+        %t211_<index> = OpBitcast %int %t210_<index>
+               OpStore %temp_int_5 %t211_<index>
+        %t110_<index> = OpFunctionCall %void %tbuffer_store_format_xy %<p0> %<p1> %temp_int_1 %temp_int_2 %temp_int_3 %temp_int_4 %temp_int_5 
+
+               OpBranch %t278_<index>			   
+        %t278_<index> = OpLabel
+)";
+		*dst_source += String(text)
+		                   .ReplaceStr(U"<index>", String::FromPrintf("%u", index))
+		                   .ReplaceStr(U"<src0>", src0_value.value)
+		                   .ReplaceStr(U"<offset>", offset)
+		                   .ReplaceStr(U"<src1_value0>", src1_value0.value)
+		                   .ReplaceStr(U"<src1_value1>", src1_value1.value)
+		                   .ReplaceStr(U"<src1_value3>", src1_value3.value)
+		                   .ReplaceStr(U"<p0>", dst_value0.value)
+		                   .ReplaceStr(U"<p1>", dst_value1.value);
 
 		return true;
 	}
@@ -1644,7 +1813,7 @@ KYTY_RECOMPILER_FUNC(Recompile_Exp_Mrt0OffOffComprVmDone)
 	const auto& inst      = code.GetInstructions().At(index);
 	const auto& next_inst = code.GetInstructions().At(index + 1);
 
-	if (!(prev_inst.type == ShaderInstructionType::SMovB64 && prev_inst.format == ShaderInstructionFormat::Sdst2Ssrc0 &&
+	if (!(prev_inst.type == ShaderInstructionType::SMovB64 && prev_inst.format == ShaderInstructionFormat::Sdst2Ssrc02 &&
 	      prev_inst.dst.type == ShaderOperandType::ExecLo && prev_inst.src[0].type == ShaderOperandType::IntegerInlineConstant &&
 	      prev_inst.src[0].constant.i == 0 && next_inst.type == ShaderInstructionType::SEndpgm))
 	{
@@ -1954,7 +2123,7 @@ KYTY_RECOMPILER_FUNC(Recompile_ImageSample_Vdata4Vaddr3StSsDmaskF)
 	return false;
 }
 
-/* XXX: Andn2, Or, Nor */
+/* XXX: Andn2, Or, Nor, Cselect */
 KYTY_RECOMPILER_FUNC(Recompile_S_XXX_B64_Sdst2Ssrc02Ssrc12)
 {
 	const auto& inst = code.GetInstructions().At(index);
@@ -2170,7 +2339,7 @@ KYTY_RECOMPILER_FUNC(Recompile_SAndSaveexecB64_Sdst2Ssrc02)
 	return true;
 }
 
-/* XXX: Eq */
+/* XXX: Eq, Le, Lg */
 KYTY_RECOMPILER_FUNC(Recompile_SCmp_XXX_U32_Ssrc0Ssrc1)
 {
 	const auto& inst = code.GetInstructions().At(index);
@@ -2493,7 +2662,7 @@ KYTY_RECOMPILER_FUNC(Recompile_SEndpgm_Empty)
 	const auto& prev_inst      = code.GetInstructions().At(index - 1);
 
 	bool after_kill =
-	    (prev_prev_inst.type == ShaderInstructionType::SMovB64 && prev_prev_inst.format == ShaderInstructionFormat::Sdst2Ssrc0 &&
+	    (prev_prev_inst.type == ShaderInstructionType::SMovB64 && prev_prev_inst.format == ShaderInstructionFormat::Sdst2Ssrc02 &&
 	     prev_prev_inst.dst.type == ShaderOperandType::ExecLo && prev_prev_inst.src[0].type == ShaderOperandType::IntegerInlineConstant &&
 	     prev_prev_inst.src[0].constant.i == 0 && prev_inst.type == ShaderInstructionType::Exp &&
 	     prev_inst.format == ShaderInstructionFormat::Mrt0OffOffComprVmDone);
@@ -2678,44 +2847,6 @@ KYTY_RECOMPILER_FUNC(Recompile_SMovB64_Sdst2Ssrc02)
 	                   .ReplaceStr(U"<dst1>", dst_value1.value)
 	                   .ReplaceStr(U"<load0>", load0)
 	                   .ReplaceStr(U"<load1>", load1)
-	                   .ReplaceStr(U"<execz>", (operand_is_exec(inst.dst) ? EXECZ : U""))
-	                   .ReplaceStr(U"<index>", index_str);
-
-	return true;
-}
-
-KYTY_RECOMPILER_FUNC(Recompile_SMovB64_Sdst2Ssrc0)
-{
-	const auto& inst = code.GetInstructions().At(index);
-
-	String index_str = String::FromPrintf("%u", index);
-
-	EXIT_NOT_IMPLEMENTED(!operand_is_variable(inst.dst));
-
-	auto dst_value0 = operand_variable_to_str(inst.dst, 0);
-	auto dst_value1 = operand_variable_to_str(inst.dst, 1);
-
-	EXIT_NOT_IMPLEMENTED(dst_value0.type != SpirvType::Uint);
-
-	EXIT_NOT_IMPLEMENTED(!(inst.src[0].type == ShaderOperandType::IntegerInlineConstant && inst.src[0].constant.i >= 0));
-
-	String load0;
-
-	if (!operand_load_uint(spirv, inst.src[0], U"t0_<index>", index_str, &load0, 0))
-	{
-		return false;
-	}
-
-	static const char32_t* text = UR"(    
-    <load0>
-    OpStore %<dst0> %t0_<index>
-    OpStore %<dst1> %uint_0
-    <execz>
-)";
-	*dst_source += String(text)
-	                   .ReplaceStr(U"<dst0>", dst_value0.value)
-	                   .ReplaceStr(U"<dst1>", dst_value1.value)
-	                   .ReplaceStr(U"<load0>", load0)
 	                   .ReplaceStr(U"<execz>", (operand_is_exec(inst.dst) ? EXECZ : U""))
 	                   .ReplaceStr(U"<index>", index_str);
 
@@ -2920,7 +3051,7 @@ KYTY_RECOMPILER_FUNC(Recompile_TBufferLoadFormatXyzw_Vdata4Vaddr2SvSoffsOffenIdx
 	return false;
 }
 
-/* XXX: Eq, Le, Neq */
+/* XXX: Eq, Ge, Le, Neq */
 KYTY_RECOMPILER_FUNC(Recompile_VCmp_XXX_F32_SmaskVsrc0Vsrc1)
 {
 	const auto& inst = code.GetInstructions().At(index);
@@ -3020,7 +3151,7 @@ KYTY_RECOMPILER_FUNC(Recompile_VCmp_XXX_I32_SmaskVsrc0Vsrc1)
 	return true;
 }
 
-/* XXX: Le */
+/* XXX: Le, Ge */
 KYTY_RECOMPILER_FUNC(Recompile_VCmp_XXX_U32_SmaskVsrc0Vsrc1)
 {
 	const auto& inst = code.GetInstructions().At(index);
@@ -3210,16 +3341,21 @@ KYTY_RECOMPILER_FUNC(Recompile_VCndmaskB32_VdstVsrc0Vsrc1Smask2)
 	}
 
 	// TODO() check VSKIP
-	// TODO() check EXEC
 
 	static const char32_t* text = UR"(    
     <load0>
     <load1>
     %t22_<index> = OpLoad %uint %<src0>
     %t23_<index> = OpLoad %uint %<src1> ; unused
-    %t2_<index> = OpINotEqual %bool %t22_<index> %uint_0
+    %tb_<index> = OpBitwiseAnd %uint %t22_<index> %uint_1
+    %t2_<index> = OpINotEqual %bool %tb_<index> %uint_0
     %t3_<index> = OpSelect %float %t2_<index> %t1_<index> %t0_<index>
-          OpStore %<dst> %t3_<index>
+        %exec_lo_u_<index> = OpLoad %uint %exec_lo
+        %exec_hi_u_<index> = OpLoad %uint %exec_hi ; unused
+        %exec_lo_b_<index> = OpINotEqual %bool %exec_lo_u_<index> %uint_0
+        %tdst_<index> = OpLoad %float %<dst>
+        %tval_<index> = OpSelect %float %exec_lo_b_<index> %t3_<index> %tdst_<index>
+               OpStore %<dst> %tval_<index>
 )";
 	*dst_source += String(text)
 	                   .ReplaceStr(U"<dst>", dst_value.value)
@@ -3311,7 +3447,8 @@ KYTY_RECOMPILER_FUNC(Recompile_VInterpP2F32_VdstVsrcAttrChan)
 	return true;
 }
 
-KYTY_RECOMPILER_FUNC(Recompile_VMadakF32_VdstVsrc0Vsrc1Vsrc2)
+/* XXX: Mad, Madak, Madmk */
+KYTY_RECOMPILER_FUNC(Recompile_V_XXX_F32_VdstVsrc0Vsrc1Vsrc2)
 {
 	const auto& inst = code.GetInstructions().At(index);
 
@@ -3343,7 +3480,6 @@ KYTY_RECOMPILER_FUNC(Recompile_VMadakF32_VdstVsrc0Vsrc1Vsrc2)
 	}
 
 	// TODO() check VSKIP
-	// TODO() check EXEC
 	// TODO() check SP_ROUND
 	// TODO() check DX10_CLAMP
 	// TODO() check IEEE
@@ -3352,68 +3488,20 @@ KYTY_RECOMPILER_FUNC(Recompile_VMadakF32_VdstVsrc0Vsrc1Vsrc2)
               <load0>
               <load1>
               <load2>
-        %t245_<index> = OpExtInst %float %GLSL_std_450 Fma %t0_<index> %t1_<index> %t2_<index>
-               OpStore %<dst> %t245_<index>
+              <param>
+        %exec_lo_u_<index> = OpLoad %uint %exec_lo
+        %exec_hi_u_<index> = OpLoad %uint %exec_hi ; unused
+        %exec_lo_b_<index> = OpINotEqual %bool %exec_lo_u_<index> %uint_0
+        %tdst_<index> = OpLoad %float %<dst>
+        %tval_<index> = OpSelect %float %exec_lo_b_<index> %t_<index> %tdst_<index>
+               OpStore %<dst> %tval_<index>
 )";
 	*dst_source += String(text)
 	                   .ReplaceStr(U"<dst>", dst_value.value)
 	                   .ReplaceStr(U"<load0>", load0)
 	                   .ReplaceStr(U"<load1>", load1)
 	                   .ReplaceStr(U"<load2>", load2)
-	                   .ReplaceStr(U"<index>", index_str);
-
-	return true;
-}
-
-KYTY_RECOMPILER_FUNC(Recompile_VMadF32_VdstVsrc0Vsrc1Vsrc2)
-{
-	const auto& inst = code.GetInstructions().At(index);
-
-	String load0;
-	String load1;
-	String load2;
-
-	String index_str = String::FromPrintf("%u", index);
-
-	EXIT_NOT_IMPLEMENTED(!operand_is_variable(inst.dst));
-	EXIT_NOT_IMPLEMENTED(inst.dst.clamp);
-	EXIT_NOT_IMPLEMENTED(inst.dst.multiplier != 1.0f);
-
-	auto dst_value = operand_variable_to_str(inst.dst);
-
-	EXIT_NOT_IMPLEMENTED(dst_value.type != SpirvType::Float);
-
-	if (!operand_load_float(spirv, inst.src[0], U"t0_<index>", index_str, &load0))
-	{
-		return false;
-	}
-	if (!operand_load_float(spirv, inst.src[1], U"t1_<index>", index_str, &load1))
-	{
-		return false;
-	}
-	if (!operand_load_float(spirv, inst.src[2], U"t2_<index>", index_str, &load2))
-	{
-		return false;
-	}
-
-	// TODO() check VSKIP
-	// TODO() check EXEC
-	// TODO() check SP_ROUND
-	// TODO() check DX10_CLAMP
-	// TODO() check IEEE
-
-	static const char32_t* text = UR"(
-              <load0>
-              <load1>
-              <load2>
-        %t245_<index> = OpExtInst %float %GLSL_std_450 Fma %t0_<index> %t1_<index> %t2_<index>
-               OpStore %<dst> %t245_<index>
-)";
-	*dst_source += String(text)
-	                   .ReplaceStr(U"<dst>", dst_value.value)
-	                   .ReplaceStr(U"<load0>", load0)
-	                   .ReplaceStr(U"<load1>", load1)
-	                   .ReplaceStr(U"<load2>", load2)
+	                   .ReplaceStr(U"<param>", param[0])
 	                   .ReplaceStr(U"<index>", index_str);
 
 	return true;
@@ -3423,74 +3511,82 @@ KYTY_RECOMPILER_FUNC(Recompile_VMbcntHiU32B32_SVdstSVsrc0SVsrc1)
 {
 	const auto& inst = code.GetInstructions().At(index);
 
-	if (inst.src[0].type == ShaderOperandType::ExecHi)
+	// if (inst.src[0].type == ShaderOperandType::ExecHi)
+	//{
+	String index_str = String::FromPrintf("%u", index);
+
+	EXIT_NOT_IMPLEMENTED(!operand_is_variable(inst.dst));
+	EXIT_NOT_IMPLEMENTED(inst.dst.clamp);
+	EXIT_NOT_IMPLEMENTED(inst.dst.multiplier != 1.0f);
+
+	auto dst_value = operand_variable_to_str(inst.dst);
+
+	EXIT_NOT_IMPLEMENTED(dst_value.type != SpirvType::Float);
+
+	String load0;
+
+	if (!operand_load_float(spirv, inst.src[1], U"t1_<index>", index_str, &load0))
 	{
-		String index_str = String::FromPrintf("%u", index);
-
-		EXIT_NOT_IMPLEMENTED(!operand_is_variable(inst.dst));
-		EXIT_NOT_IMPLEMENTED(inst.dst.clamp);
-		EXIT_NOT_IMPLEMENTED(inst.dst.multiplier != 1.0f);
-
-		auto dst_value = operand_variable_to_str(inst.dst);
-
-		EXIT_NOT_IMPLEMENTED(dst_value.type != SpirvType::Float);
-
-		String load0;
-
-		if (!operand_load_float(spirv, inst.src[1], U"t0_<index>", index_str, &load0))
-		{
-			return false;
-		}
-
-		// TODO() check VSKIP
-		// TODO() check EXEC
-
-		static const char32_t* text = UR"(    
-	    <load0>
-	    OpStore %<dst> %t0_<index>
-	)";
-		*dst_source += String(text).ReplaceStr(U"<dst>", dst_value.value).ReplaceStr(U"<load0>", load0).ReplaceStr(U"<index>", index_str);
-
-		return true;
+		return false;
 	}
 
-	return false;
+	// TODO() check VSKIP
+
+	static const char32_t* text = UR"(    
+	    <load0>
+        %exec_lo_u_<index> = OpLoad %uint %exec_lo
+        %exec_hi_u_<index> = OpLoad %uint %exec_hi ; unused
+        %exec_lo_b_<index> = OpINotEqual %bool %exec_lo_u_<index> %uint_0
+        %tdst_<index> = OpLoad %float %<dst>
+        %tval_<index> = OpSelect %float %exec_lo_b_<index> %t1_<index> %tdst_<index>
+               OpStore %<dst> %tval_<index>
+	)";
+	*dst_source += String(text).ReplaceStr(U"<dst>", dst_value.value).ReplaceStr(U"<load0>", load0).ReplaceStr(U"<index>", index_str);
+
+	return true;
+	//}
+
+	//	return false;
 }
 
 KYTY_RECOMPILER_FUNC(Recompile_VMbcntLoU32B32_SVdstSVsrc0SVsrc1)
 {
 	const auto& inst = code.GetInstructions().At(index);
 
-	if (inst.src[0].type == ShaderOperandType::ExecLo)
+	// if (inst.src[0].type == ShaderOperandType::ExecLo)
+	//{
+	String index_str = String::FromPrintf("%u", index);
+
+	EXIT_NOT_IMPLEMENTED(!operand_is_variable(inst.dst));
+
+	auto dst_value = operand_variable_to_str(inst.dst);
+
+	EXIT_NOT_IMPLEMENTED(dst_value.type != SpirvType::Float);
+
+	String load0;
+
+	if (!operand_load_float(spirv, inst.src[1], U"t1_<index>", index_str, &load0))
 	{
-		String index_str = String::FromPrintf("%u", index);
-
-		EXIT_NOT_IMPLEMENTED(!operand_is_variable(inst.dst));
-
-		auto dst_value = operand_variable_to_str(inst.dst);
-
-		EXIT_NOT_IMPLEMENTED(dst_value.type != SpirvType::Float);
-
-		String load0;
-
-		if (!operand_load_float(spirv, inst.src[1], U"t0_<index>", index_str, &load0))
-		{
-			return false;
-		}
-
-		// TODO() check VSKIP
-		// TODO() check EXEC
-
-		static const char32_t* text = UR"(    
-	    <load0>
-	    OpStore %<dst> %t0_<index>
-	)";
-		*dst_source += String(text).ReplaceStr(U"<dst>", dst_value.value).ReplaceStr(U"<load0>", load0).ReplaceStr(U"<index>", index_str);
-
-		return true;
+		return false;
 	}
 
-	return false;
+	// TODO() check VSKIP
+
+	static const char32_t* text = UR"(    
+	    <load0>
+        %exec_lo_u_<index> = OpLoad %uint %exec_lo
+        %exec_hi_u_<index> = OpLoad %uint %exec_hi ; unused
+        %exec_lo_b_<index> = OpINotEqual %bool %exec_lo_u_<index> %uint_0
+        %tdst_<index> = OpLoad %float %<dst>
+        %tval_<index> = OpSelect %float %exec_lo_b_<index> %t1_<index> %tdst_<index>
+               OpStore %<dst> %tval_<index>
+	)";
+	*dst_source += String(text).ReplaceStr(U"<dst>", dst_value.value).ReplaceStr(U"<load0>", load0).ReplaceStr(U"<index>", index_str);
+
+	return true;
+	//}
+
+	// return false;
 }
 
 /* XXX: Not */
@@ -3551,11 +3647,15 @@ KYTY_RECOMPILER_FUNC(Recompile_VMovB32_SVdstSVsrc0)
 	}
 
 	// TODO() check VSKIP
-	// TODO() check EXEC
 
 	static const char32_t* text = UR"(    
     <load0>
-    OpStore %<dst> %t0_<index>
+        %exec_lo_u_<index> = OpLoad %uint %exec_lo
+        %exec_hi_u_<index> = OpLoad %uint %exec_hi ; unused
+        %exec_lo_b_<index> = OpINotEqual %bool %exec_lo_u_<index> %uint_0
+        %tdst_<index> = OpLoad %float %<dst>
+        %tval_<index> = OpSelect %float %exec_lo_b_<index> %t0_<index> %tdst_<index>
+               OpStore %<dst> %tval_<index>
 )";
 	*dst_source += String(text).ReplaceStr(U"<dst>", dst_value.value).ReplaceStr(U"<load0>", load0).ReplaceStr(U"<index>", index_str);
 
@@ -3594,7 +3694,6 @@ KYTY_RECOMPILER_FUNC(Recompile_V_XXX_F32_SVdstSVsrc0SVsrc1)
 	}
 
 	// TODO() check VSKIP
-	// TODO() check EXEC
 	// TODO() check SP_DENORM
 	// TODO() check SP_ROUND
 	// TODO() check DX10_CLAMP
@@ -3605,9 +3704,17 @@ KYTY_RECOMPILER_FUNC(Recompile_V_XXX_F32_SVdstSVsrc0SVsrc1)
               <load1>
               <load_dst>
               <param>
-              OpStore %<dst> %t_<index>
+        %exec_lo_u_<index> = OpLoad %uint %exec_lo
+        %exec_hi_u_<index> = OpLoad %uint %exec_hi ; unused
+        %exec_lo_b_<index> = OpINotEqual %bool %exec_lo_u_<index> %uint_0
+               OpSelectionMerge %tl2_<index> None
+               OpBranchConditional %exec_lo_b_<index> %tl1_<index> %tl2_<index>
+         %tl1_<index> = OpLabel
+               OpStore %<dst> %t_<index>
               <multiply>
               <clamp>
+               OpBranch %tl2_<index>
+         %tl2_<index> = OpLabel
 )";
 	*dst_source += String(text)
 	                   .ReplaceStr(U"<multiply>", (inst.dst.multiplier != 1.0f
@@ -3647,14 +3754,18 @@ KYTY_RECOMPILER_FUNC(Recompile_V_XXX_F32_SVdstSVsrc0)
 	}
 
 	// TODO() check VSKIP
-	// TODO() check EXEC
 	// TODO() check DX10_CLAMP
 	// TODO() check IEEE
 
 	static const char32_t* text = UR"(    
     <load0>
     <param>
-    OpStore %<dst> %t_<index>
+        %exec_lo_u_<index> = OpLoad %uint %exec_lo
+        %exec_hi_u_<index> = OpLoad %uint %exec_hi ; unused
+        %exec_lo_b_<index> = OpINotEqual %bool %exec_lo_u_<index> %uint_0
+        %tdst_<index> = OpLoad %float %<dst>
+        %tval_<index> = OpSelect %float %exec_lo_b_<index> %t_<index> %tdst_<index>
+               OpStore %<dst> %tval_<index>
 )";
 	*dst_source += String(text)
 	                   .ReplaceStr(U"<dst>", dst_value.value)
@@ -3665,7 +3776,7 @@ KYTY_RECOMPILER_FUNC(Recompile_V_XXX_F32_SVdstSVsrc0)
 	return true;
 }
 
-/* XXX: And, Lshr, Lshlrev, Lshrrev, MulU32U24 */
+/* XXX: And, Bcnt, Lshr, Lshl, Lshlrev, Lshrrev, MulU32U24, MulLoU32, MulHiU32 */
 KYTY_RECOMPILER_FUNC(Recompile_V_XXX_B32_SVdstSVsrc0SVsrc1)
 {
 	const auto& inst = code.GetInstructions().At(index);
@@ -3693,7 +3804,6 @@ KYTY_RECOMPILER_FUNC(Recompile_V_XXX_B32_SVdstSVsrc0SVsrc1)
 	}
 
 	// TODO() check VSKIP
-	// TODO() check EXEC
 
 	static const char32_t* text = UR"(
               <load0>
@@ -3702,7 +3812,12 @@ KYTY_RECOMPILER_FUNC(Recompile_V_XXX_B32_SVdstSVsrc0SVsrc1)
               <param1>
               <param2>
               %tf_<index> = OpBitcast %float %t_<index>
-              OpStore %<dst> %tf_<index>
+        %exec_lo_u_<index> = OpLoad %uint %exec_lo
+        %exec_hi_u_<index> = OpLoad %uint %exec_hi ; unused
+        %exec_lo_b_<index> = OpINotEqual %bool %exec_lo_u_<index> %uint_0
+        %tdst_<index> = OpLoad %float %<dst>
+        %tval_<index> = OpSelect %float %exec_lo_b_<index> %tf_<index> %tdst_<index>
+               OpStore %<dst> %tval_<index>
 )";
 	*dst_source += String(text)
 	                   .ReplaceStr(U"<dst>", dst_value.value)
@@ -3716,7 +3831,7 @@ KYTY_RECOMPILER_FUNC(Recompile_V_XXX_B32_SVdstSVsrc0SVsrc1)
 	return true;
 }
 
-/* XXX: Ashrrev, MulLo */
+/* XXX: Ashr, Ashrrev, MulLo */
 KYTY_RECOMPILER_FUNC(Recompile_V_XXX_I32_SVdstSVsrc0SVsrc1)
 {
 	const auto& inst = code.GetInstructions().At(index);
@@ -3744,7 +3859,6 @@ KYTY_RECOMPILER_FUNC(Recompile_V_XXX_I32_SVdstSVsrc0SVsrc1)
 	}
 
 	// TODO() check VSKIP
-	// TODO() check EXEC
 
 	static const char32_t* text = UR"(
               <load0>
@@ -3753,6 +3867,12 @@ KYTY_RECOMPILER_FUNC(Recompile_V_XXX_I32_SVdstSVsrc0SVsrc1)
               <param1>
               %tf_<index> = OpBitcast %float %t_<index>
               OpStore %<dst> %tf_<index>
+        %exec_lo_u_<index> = OpLoad %uint %exec_lo
+        %exec_hi_u_<index> = OpLoad %uint %exec_hi ; unused
+        %exec_lo_b_<index> = OpINotEqual %bool %exec_lo_u_<index> %uint_0
+        %tdst_<index> = OpLoad %float %<dst>
+        %tval_<index> = OpSelect %float %exec_lo_b_<index> %tf_<index> %tdst_<index>
+               OpStore %<dst> %tval_<index>
 )";
 	*dst_source += String(text)
 	                   .ReplaceStr(U"<dst>", dst_value.value)
@@ -3833,14 +3953,18 @@ KYTY_RECOMPILER_FUNC(Recompile_VCvtF32_XXX_SVdstSVsrc0)
 	}
 
 	// TODO() check VSKIP
-	// TODO() check EXEC
 	// TODO() check SP_ROUND
 
 	static const char32_t* text = UR"(    
     <load0>
     <param0>
     <param1>
-    OpStore %<dst> %t_<index>
+        %exec_lo_u_<index> = OpLoad %uint %exec_lo
+        %exec_hi_u_<index> = OpLoad %uint %exec_hi ; unused
+        %exec_lo_b_<index> = OpINotEqual %bool %exec_lo_u_<index> %uint_0
+        %tdst_<index> = OpLoad %float %<dst>
+        %tval_<index> = OpSelect %float %exec_lo_b_<index> %t_<index> %tdst_<index>
+               OpStore %<dst> %tval_<index>
 )";
 	*dst_source += String(text)
 	                   .ReplaceStr(U"<dst>", dst_value.value)
@@ -3885,7 +4009,6 @@ KYTY_RECOMPILER_FUNC(Recompile_V_XXX_U32_VdstVsrc0Vsrc1Vsrc2)
 	}
 
 	// TODO() check VSKIP
-	// TODO() check EXEC
 	// TODO() Sad: use only lower 16 bits of Vaccum
 
 	static const char32_t* text = UR"(
@@ -3897,7 +4020,12 @@ KYTY_RECOMPILER_FUNC(Recompile_V_XXX_U32_VdstVsrc0Vsrc1Vsrc2)
                <param2>
                <param3>
          %tf_<index> = OpBitcast %float %t_<index>
-               OpStore %<dst> %tf_<index>
+        %exec_lo_u_<index> = OpLoad %uint %exec_lo
+        %exec_hi_u_<index> = OpLoad %uint %exec_hi ; unused
+        %exec_lo_b_<index> = OpINotEqual %bool %exec_lo_u_<index> %uint_0
+        %tdst_<index> = OpLoad %float %<dst>
+        %tval_<index> = OpSelect %float %exec_lo_b_<index> %tf_<index> %tdst_<index>
+               OpStore %<dst> %tval_<index>
 )";
 	*dst_source += String(text)
 	                   .ReplaceStr(U"<dst>", dst_value.value)
@@ -3976,10 +4104,11 @@ KYTY_RECOMPILER_FUNC(Recompile_V_XXX_U32_VdstSdst2Vsrc0Vsrc1)
 
 static RecompilerFunc g_recomp_func[] = {
     // clang-format off
-    {Recompile_BufferLoadDword_Vdata1VaddrSvSoffsIdxen,    ShaderInstructionType::BufferLoadDword,     ShaderInstructionFormat::Vdata1VaddrSvSoffsIdxen,        {U""}},
-    {Recompile_BufferLoadFormatX_Vdata1VaddrSvSoffsIdxen,  ShaderInstructionType::BufferLoadFormatX,   ShaderInstructionFormat::Vdata1VaddrSvSoffsIdxen,        {U""}},
-    {Recompile_BufferStoreDword_Vdata1VaddrSvSoffsIdxen,   ShaderInstructionType::BufferStoreDword,    ShaderInstructionFormat::Vdata1VaddrSvSoffsIdxen,        {U""}},
-    {Recompile_BufferStoreFormatX_Vdata1VaddrSvSoffsIdxen, ShaderInstructionType::BufferStoreFormatX,  ShaderInstructionFormat::Vdata1VaddrSvSoffsIdxen,        {U""}},
+    {Recompile_BufferLoadDword_Vdata1VaddrSvSoffsIdxen,     ShaderInstructionType::BufferLoadDword,      ShaderInstructionFormat::Vdata1VaddrSvSoffsIdxen,        {U""}},
+    {Recompile_BufferLoadFormatX_Vdata1VaddrSvSoffsIdxen,   ShaderInstructionType::BufferLoadFormatX,    ShaderInstructionFormat::Vdata1VaddrSvSoffsIdxen,        {U""}},
+    {Recompile_BufferStoreDword_Vdata1VaddrSvSoffsIdxen,    ShaderInstructionType::BufferStoreDword,     ShaderInstructionFormat::Vdata1VaddrSvSoffsIdxen,        {U""}},
+    {Recompile_BufferStoreFormatX_Vdata1VaddrSvSoffsIdxen,  ShaderInstructionType::BufferStoreFormatX,   ShaderInstructionFormat::Vdata1VaddrSvSoffsIdxen,        {U""}},
+	{Recompile_BufferStoreFormatXy_Vdata2VaddrSvSoffsIdxen, ShaderInstructionType::BufferStoreFormatXy,  ShaderInstructionFormat::Vdata2VaddrSvSoffsIdxen,        {U""}},
 
     {Recompile_DsAppend_VdstGds,                           ShaderInstructionType::DsAppend,            ShaderInstructionFormat::VdstGds,                        {U""}},
     {Recompile_DsConsume_VdstGds,                          ShaderInstructionType::DsConsume,           ShaderInstructionFormat::VdstGds,                        {U""}},
@@ -4010,27 +4139,31 @@ static RecompilerFunc g_recomp_func[] = {
     {Recompile_SLoadDwordx4_Sdst4SbaseSoffset,             ShaderInstructionType::SLoadDwordx4,        ShaderInstructionFormat::Sdst4SbaseSoffset,              {U""}},
     {Recompile_SLoadDwordx8_Sdst8SbaseSoffset,             ShaderInstructionType::SLoadDwordx8,        ShaderInstructionFormat::Sdst8SbaseSoffset,              {U""}},
 
-    {Recompile_S_XXX_B64_Sdst2Ssrc02Ssrc12, ShaderInstructionType::SAndn2B64, ShaderInstructionFormat::Sdst2Ssrc02Ssrc12, {U"%ta_<index> = OpNot %uint %t2_<index>",
-                                                                                                                           U"%tb_<index> = OpBitwiseAnd %uint %t0_<index> %ta_<index>",
-                                                                                                                           U"%tc_<index> = OpNot %uint %t3_<index>",
-                                                                                                                           U"%td_<index> = OpBitwiseAnd %uint %t1_<index> %tc_<index>"}, SccCheck::NonZero},
-    {Recompile_S_XXX_B64_Sdst2Ssrc02Ssrc12, ShaderInstructionType::SNorB64,   ShaderInstructionFormat::Sdst2Ssrc02Ssrc12, {U"%ta_<index> = OpBitwiseOr %uint %t0_<index> %t2_<index>",
-                                                                                                                           U"%tb_<index> = OpNot %uint %ta_<index>",
-                                                                                                                           U"%tc_<index> = OpBitwiseOr %uint %t1_<index> %t3_<index>",
-                                                                                                                           U"%td_<index> = OpNot %uint %tc_<index>"}, SccCheck::NonZero},
-    {Recompile_S_XXX_B64_Sdst2Ssrc02Ssrc12, ShaderInstructionType::SOrB64,    ShaderInstructionFormat::Sdst2Ssrc02Ssrc12, {U"%tb_<index> = OpBitwiseOr %uint %t0_<index> %t2_<index>",
-                                                                                                                           U"%td_<index> = OpBitwiseOr %uint %t1_<index> %t3_<index>"}, SccCheck::NonZero},
+    {Recompile_S_XXX_B64_Sdst2Ssrc02Ssrc12, ShaderInstructionType::SAndn2B64,   ShaderInstructionFormat::Sdst2Ssrc02Ssrc12, {U"%ta_<index> = OpNot %uint %t2_<index>",
+                                                                                                                             U"%tb_<index> = OpBitwiseAnd %uint %t0_<index> %ta_<index>",
+                                                                                                                             U"%tc_<index> = OpNot %uint %t3_<index>",
+                                                                                                                             U"%td_<index> = OpBitwiseAnd %uint %t1_<index> %tc_<index>"}, SccCheck::NonZero},
+    {Recompile_S_XXX_B64_Sdst2Ssrc02Ssrc12, ShaderInstructionType::SNorB64,     ShaderInstructionFormat::Sdst2Ssrc02Ssrc12, {U"%ta_<index> = OpBitwiseOr %uint %t0_<index> %t2_<index>",
+                                                                                                                             U"%tb_<index> = OpNot %uint %ta_<index>",
+                                                                                                                             U"%tc_<index> = OpBitwiseOr %uint %t1_<index> %t3_<index>",
+                                                                                                                             U"%td_<index> = OpNot %uint %tc_<index>"}, SccCheck::NonZero},
+    {Recompile_S_XXX_B64_Sdst2Ssrc02Ssrc12, ShaderInstructionType::SOrB64,      ShaderInstructionFormat::Sdst2Ssrc02Ssrc12, {U"%tb_<index> = OpBitwiseOr %uint %t0_<index> %t2_<index>",
+                                                                                                                             U"%td_<index> = OpBitwiseOr %uint %t1_<index> %t3_<index>"}, SccCheck::NonZero},
+    {Recompile_S_XXX_B64_Sdst2Ssrc02Ssrc12, ShaderInstructionType::SCselectB64, ShaderInstructionFormat::Sdst2Ssrc02Ssrc12, {U"%ts_<index> = OpLoad %uint %scc",
+                                                                                                                             U"%tsb_<index> = OpINotEqual %bool %ts_<index> %uint_0",
+                                                                                                                             U"%tb_<index> = OpSelect %uint %tsb_<index> %t0_<index> %t2_<index>",
+                                                                                                                             U"%td_<index> = OpSelect %uint %tsb_<index> %t1_<index> %t3_<index>" }, SccCheck::None},
 
-    {Recompile_VCvtPkrtzF16F32_SVdstSVsrc0SVsrc1, ShaderInstructionType::VCvtPkrtzF16F32, ShaderInstructionFormat::SVdstSVsrc0SVsrc1,  {U""}},
-    {Recompile_VMbcntHiU32B32_SVdstSVsrc0SVsrc1,  ShaderInstructionType::VMbcntHiU32B32,  ShaderInstructionFormat::SVdstSVsrc0SVsrc1,  {U""}},
-    {Recompile_VMbcntLoU32B32_SVdstSVsrc0SVsrc1,  ShaderInstructionType::VMbcntLoU32B32,  ShaderInstructionFormat::SVdstSVsrc0SVsrc1,  {U""}},
     {Recompile_S_XXX_B32_SVdstSVsrc0SVsrc1,       ShaderInstructionType::SAndB32,         ShaderInstructionFormat::SVdstSVsrc0SVsrc1,  {U"%t_<index> = OpBitwiseAnd %uint %t0_<index> %t1_<index>"}, SccCheck::NonZero},
+    {Recompile_S_XXX_B32_SVdstSVsrc0SVsrc1,       ShaderInstructionType::SBfmB32,         ShaderInstructionFormat::SVdstSVsrc0SVsrc1,  {U"%to_<index> = OpBitwiseAnd %uint %t0_<index> %uint_31", U"%ts_<index> = OpBitwiseAnd %uint %t1_<index> %uint_31", U"%t_<index> = OpBitFieldInsert %uint %uint_0 %uint_0xffffffff %to_<index> %ts_<index>"}, SccCheck::None},
     {Recompile_S_XXX_B32_SVdstSVsrc0SVsrc1,       ShaderInstructionType::SCselectB32,     ShaderInstructionFormat::SVdstSVsrc0SVsrc1,  {U"%t22_<index> = OpLoad %uint %scc", U"%t2_<index> = OpINotEqual %bool %t22_<index> %uint_0", U"%t_<index> = OpSelect %uint %t2_<index> %t0_<index> %t1_<index>"}, SccCheck::None},
     {Recompile_S_XXX_B32_SVdstSVsrc0SVsrc1,       ShaderInstructionType::SLshlB32,        ShaderInstructionFormat::SVdstSVsrc0SVsrc1,  {U"%ts_<index> = OpBitwiseAnd %uint %t1_<index> %uint_31", U"%t_<index> = OpShiftLeftLogical %uint %t0_<index> %ts_<index>"}, SccCheck::NonZero},
     {Recompile_S_XXX_B32_SVdstSVsrc0SVsrc1,       ShaderInstructionType::SLshrB32,        ShaderInstructionFormat::SVdstSVsrc0SVsrc1,  {U"%ts_<index> = OpBitwiseAnd %uint %t1_<index> %uint_31", U"%t_<index> = OpShiftRightLogical %uint %t0_<index> %ts_<index>"}, SccCheck::NonZero},
     {Recompile_S_XXX_I32_SVdstSVsrc0SVsrc1,       ShaderInstructionType::SAddI32,         ShaderInstructionFormat::SVdstSVsrc0SVsrc1,  {U"%t_<index> = OpIAdd %int %t0_<index> %t1_<index>"}, SccCheck::Overflow},
     {Recompile_S_XXX_I32_SVdstSVsrc0SVsrc1,       ShaderInstructionType::SMulI32,         ShaderInstructionFormat::SVdstSVsrc0SVsrc1,  {U"%t_<index> = OpIMul %int %t0_<index> %t1_<index>"}, SccCheck::None},
     {Recompile_V_XXX_B32_SVdstSVsrc0SVsrc1,       ShaderInstructionType::VAndB32,         ShaderInstructionFormat::SVdstSVsrc0SVsrc1,  {U"%t_<index> = OpBitwiseAnd %uint %t0_<index> %t1_<index>"}},
+	{Recompile_V_XXX_B32_SVdstSVsrc0SVsrc1,       ShaderInstructionType::VBcntU32B32,     ShaderInstructionFormat::SVdstSVsrc0SVsrc1,  {U"%tb_<index> = OpBitCount %int %t0_<index>", U"%tbu_<index> = OpBitcast %uint %tb_<index>", U"%t_<index> = OpIAdd %uint %tbu_<index> %t1_<index>"}},
+	{Recompile_V_XXX_B32_SVdstSVsrc0SVsrc1,       ShaderInstructionType::VLshlB32,        ShaderInstructionFormat::SVdstSVsrc0SVsrc1,  {U"%ts_<index> = OpBitwiseAnd %uint %t1_<index> %uint_31", U"%t_<index> = OpShiftLeftLogical %uint %t0_<index> %ts_<index>"}},
     {Recompile_V_XXX_B32_SVdstSVsrc0SVsrc1,       ShaderInstructionType::VLshlrevB32,     ShaderInstructionFormat::SVdstSVsrc0SVsrc1,  {U"%ts_<index> = OpBitwiseAnd %uint %t0_<index> %uint_31", U"%t_<index> = OpShiftLeftLogical %uint %t1_<index> %ts_<index>"}},
     {Recompile_V_XXX_B32_SVdstSVsrc0SVsrc1,       ShaderInstructionType::VLshrB32,        ShaderInstructionFormat::SVdstSVsrc0SVsrc1,  {U"%ts_<index> = OpBitwiseAnd %uint %t1_<index> %uint_31", U"%t_<index> = OpShiftRightLogical %uint %t0_<index> %ts_<index>"}},
     {Recompile_V_XXX_B32_SVdstSVsrc0SVsrc1,       ShaderInstructionType::VLshrrevB32,     ShaderInstructionFormat::SVdstSVsrc0SVsrc1,  {U"%ts_<index> = OpBitwiseAnd %uint %t0_<index> %uint_31", U"%t_<index> = OpShiftRightLogical %uint %t1_<index> %ts_<index>"}},
@@ -4041,8 +4174,14 @@ static RecompilerFunc g_recomp_func[] = {
     {Recompile_V_XXX_F32_SVdstSVsrc0SVsrc1,       ShaderInstructionType::VMulF32,         ShaderInstructionFormat::SVdstSVsrc0SVsrc1,  {U"%t_<index> = OpFMul %float %t0_<index> %t1_<index>"}},
     {Recompile_V_XXX_F32_SVdstSVsrc0SVsrc1,       ShaderInstructionType::VSubF32,         ShaderInstructionFormat::SVdstSVsrc0SVsrc1,  {U"%t_<index> = OpFSub %float %t0_<index> %t1_<index>"}},
     {Recompile_V_XXX_F32_SVdstSVsrc0SVsrc1,       ShaderInstructionType::VSubrevF32,      ShaderInstructionFormat::SVdstSVsrc0SVsrc1,  {U"%t_<index> = OpFSub %float %t1_<index> %t0_<index>"}},
+	{Recompile_V_XXX_I32_SVdstSVsrc0SVsrc1,       ShaderInstructionType::VAshrI32,        ShaderInstructionFormat::SVdstSVsrc0SVsrc1,  {U"%ts_<index> = OpBitwiseAnd %int %t1_<index> %int_31", U"%t_<index> = OpShiftRightArithmetic %int %t0_<index> %ts_<index>"}},
 	{Recompile_V_XXX_I32_SVdstSVsrc0SVsrc1,       ShaderInstructionType::VAshrrevI32,     ShaderInstructionFormat::SVdstSVsrc0SVsrc1,  {U"%ts_<index> = OpBitwiseAnd %int %t0_<index> %int_31", U"%t_<index> = OpShiftRightArithmetic %int %t1_<index> %ts_<index>"}},
 	{Recompile_V_XXX_I32_SVdstSVsrc0SVsrc1,       ShaderInstructionType::VMulLoI32,       ShaderInstructionFormat::SVdstSVsrc0SVsrc1,  {U"%t_<index> = OpFunctionCall %int %mul_lo_int %t0_<index> %t1_<index>"}},
+	{Recompile_V_XXX_B32_SVdstSVsrc0SVsrc1,       ShaderInstructionType::VMulLoU32,       ShaderInstructionFormat::SVdstSVsrc0SVsrc1,  {U"%t_<index> = OpFunctionCall %uint %mul_lo_uint %t0_<index> %t1_<index>"}},
+	{Recompile_V_XXX_B32_SVdstSVsrc0SVsrc1,       ShaderInstructionType::VMulHiU32,       ShaderInstructionFormat::SVdstSVsrc0SVsrc1,  {U"%t_<index> = OpFunctionCall %uint %mul_hi_uint %t0_<index> %t1_<index>"}},
+    {Recompile_VCvtPkrtzF16F32_SVdstSVsrc0SVsrc1, ShaderInstructionType::VCvtPkrtzF16F32, ShaderInstructionFormat::SVdstSVsrc0SVsrc1,  {U""}},
+    {Recompile_VMbcntHiU32B32_SVdstSVsrc0SVsrc1,  ShaderInstructionType::VMbcntHiU32B32,  ShaderInstructionFormat::SVdstSVsrc0SVsrc1,  {U""}},
+    {Recompile_VMbcntLoU32B32_SVdstSVsrc0SVsrc1,  ShaderInstructionType::VMbcntLoU32B32,  ShaderInstructionFormat::SVdstSVsrc0SVsrc1,  {U""}},
 
 
     {Recompile_SMovB32_SVdstSVsrc0,            ShaderInstructionType::SMovB32,             ShaderInstructionFormat::SVdstSVsrc0, {U""}},
@@ -4063,8 +4202,6 @@ static RecompilerFunc g_recomp_func[] = {
     {Recompile_SSwappcB64_Sdst2Ssrc02,         ShaderInstructionType::SSwappcB64,          ShaderInstructionFormat::Sdst2Ssrc02, {U""}},
     {Recompile_SWqmB64_Sdst2Ssrc02,            ShaderInstructionType::SWqmB64,             ShaderInstructionFormat::Sdst2Ssrc02, {U""}},
 
-	{Recompile_SMovB64_Sdst2Ssrc0,            ShaderInstructionType::SMovB64,             ShaderInstructionFormat::Sdst2Ssrc0, {U""}},
-
     {Recompile_SWaitcnt_Imm,                   ShaderInstructionType::SWaitcnt,            ShaderInstructionFormat::Imm,         {U""}},
 
     {Recompile_TBufferLoadFormatXyzw_Vdata4VaddrSvSoffsIdxenFloat4,       ShaderInstructionType::TBufferLoadFormatXyzw, ShaderInstructionFormat::Vdata4VaddrSvSoffsIdxenFloat4,  {U""}},
@@ -4076,33 +4213,41 @@ static RecompilerFunc g_recomp_func[] = {
 
     {Recompile_VCmp_XXX_F32_SmaskVsrc0Vsrc1,  ShaderInstructionType::VCmpEqF32,    ShaderInstructionFormat::SmaskVsrc0Vsrc1,      {U"OpFOrdEqual"}},
     {Recompile_VCmp_XXX_F32_SmaskVsrc0Vsrc1,  ShaderInstructionType::VCmpLeF32,    ShaderInstructionFormat::SmaskVsrc0Vsrc1,      {U"OpFOrdLessThanEqual"}},
+	{Recompile_VCmp_XXX_F32_SmaskVsrc0Vsrc1,  ShaderInstructionType::VCmpGeF32,    ShaderInstructionFormat::SmaskVsrc0Vsrc1,      {U"OpFOrdGreaterThanEqual"}},
     {Recompile_VCmp_XXX_F32_SmaskVsrc0Vsrc1,  ShaderInstructionType::VCmpNeqF32,   ShaderInstructionFormat::SmaskVsrc0Vsrc1,      {U"OpFUnordNotEqual"}},
+    {Recompile_VCmp_XXX_I32_SmaskVsrc0Vsrc1,  ShaderInstructionType::VCmpEqI32,    ShaderInstructionFormat::SmaskVsrc0Vsrc1,      {U"OpIEqual"}},
     {Recompile_VCmp_XXX_I32_SmaskVsrc0Vsrc1,  ShaderInstructionType::VCmpEqU32,    ShaderInstructionFormat::SmaskVsrc0Vsrc1,      {U"OpIEqual"}},
     {Recompile_VCmp_XXX_I32_SmaskVsrc0Vsrc1,  ShaderInstructionType::VCmpGtI32,    ShaderInstructionFormat::SmaskVsrc0Vsrc1,      {U"OpSGreaterThan"}},
+    {Recompile_VCmp_XXX_I32_SmaskVsrc0Vsrc1,  ShaderInstructionType::VCmpNeI32,    ShaderInstructionFormat::SmaskVsrc0Vsrc1,      {U"OpINotEqual"}},
     {Recompile_VCmp_XXX_I32_SmaskVsrc0Vsrc1,  ShaderInstructionType::VCmpNeU32,    ShaderInstructionFormat::SmaskVsrc0Vsrc1,      {U"OpINotEqual"}},
+	{Recompile_VCmp_XXX_U32_SmaskVsrc0Vsrc1,  ShaderInstructionType::VCmpGeU32,    ShaderInstructionFormat::SmaskVsrc0Vsrc1,      {U"OpUGreaterThanEqual"}},
     {Recompile_VCmp_XXX_U32_SmaskVsrc0Vsrc1,  ShaderInstructionType::VCmpLeU32,    ShaderInstructionFormat::SmaskVsrc0Vsrc1,      {U"OpULessThanEqual"}},
     {Recompile_VCmpx_XXX_I32_SmaskVsrc0Vsrc1, ShaderInstructionType::VCmpxEqU32,   ShaderInstructionFormat::SmaskVsrc0Vsrc1,      {U"OpIEqual"}},
-	{Recompile_VCmpx_XXX_I32_SmaskVsrc0Vsrc1, ShaderInstructionType::VCmpxNeU32,   ShaderInstructionFormat::SmaskVsrc0Vsrc1,      {U"OpINotEqual"}},
+    {Recompile_VCmpx_XXX_I32_SmaskVsrc0Vsrc1, ShaderInstructionType::VCmpxNeU32,   ShaderInstructionFormat::SmaskVsrc0Vsrc1,      {U"OpINotEqual"}},
     {Recompile_VCmpx_XXX_U32_SmaskVsrc0Vsrc1, ShaderInstructionType::VCmpxGtU32,   ShaderInstructionFormat::SmaskVsrc0Vsrc1,      {U"OpUGreaterThan"}},
 
     {Recompile_SCmp_XXX_U32_Ssrc0Ssrc1,  ShaderInstructionType::SCmpEqU32,    ShaderInstructionFormat::Ssrc0Ssrc1,      {U"OpIEqual"}},
+	{Recompile_SCmp_XXX_U32_Ssrc0Ssrc1,  ShaderInstructionType::SCmpGeU32,    ShaderInstructionFormat::Ssrc0Ssrc1,      {U"OpUGreaterThanEqual"}},
+	{Recompile_SCmp_XXX_U32_Ssrc0Ssrc1,  ShaderInstructionType::SCmpLeU32,    ShaderInstructionFormat::Ssrc0Ssrc1,      {U"OpULessThanEqual"}},
+	{Recompile_SCmp_XXX_U32_Ssrc0Ssrc1,  ShaderInstructionType::SCmpLgU32,    ShaderInstructionFormat::Ssrc0Ssrc1,      {U"OpINotEqual"}},
 
     {Recompile_VCndmaskB32_VdstVsrc0Vsrc1Smask2,   ShaderInstructionType::VCndmaskB32,  ShaderInstructionFormat::VdstVsrc0Vsrc1Smask2, {U""}},
 
     {Recompile_VInterpP1F32_VdstVsrcAttrChan,      ShaderInstructionType::VInterpP1F32, ShaderInstructionFormat::VdstVsrcAttrChan,     {U""}},
     {Recompile_VInterpP2F32_VdstVsrcAttrChan,      ShaderInstructionType::VInterpP2F32, ShaderInstructionFormat::VdstVsrcAttrChan,     {U""}},
 
-    {Recompile_VMadakF32_VdstVsrc0Vsrc1Vsrc2,  ShaderInstructionType::VMadakF32,    ShaderInstructionFormat::VdstVsrc0Vsrc1Vsrc2,  {U""}},
-    {Recompile_VMadF32_VdstVsrc0Vsrc1Vsrc2,    ShaderInstructionType::VMadF32,      ShaderInstructionFormat::VdstVsrc0Vsrc1Vsrc2,  {U""}},
-    {Recompile_V_XXX_U32_VdstVsrc0Vsrc1Vsrc2,  ShaderInstructionType::VSadU32,      ShaderInstructionFormat::VdstVsrc0Vsrc1Vsrc2,  {U"%td_<index> = OpFunctionCall %uint %abs_diff %t0_<index> %t1_<index>",
-                                                                                                                                    U"%t_<index> = OpIAdd %uint %td_<index> %t2_<index>"}},
-    {Recompile_V_XXX_U32_VdstVsrc0Vsrc1Vsrc2,  ShaderInstructionType::VBfeU32,      ShaderInstructionFormat::VdstVsrc0Vsrc1Vsrc2,  {U"%to_<index> = OpBitwiseAnd %uint %t1_<index> %uint_31",
-                                                                                                                                    U"%ts_<index> = OpBitwiseAnd %uint %t2_<index> %uint_31",
-                                                                                                                                    U"%t_<index> = OpBitFieldUExtract %uint %t0_<index> %to_<index> %ts_<index>"}},
-    {Recompile_V_XXX_U32_VdstVsrc0Vsrc1Vsrc2,  ShaderInstructionType::VMadU32U24,   ShaderInstructionFormat::VdstVsrc0Vsrc1Vsrc2,  {U"%tu0_<index> = OpBitwiseAnd %uint %t0_<index> %uint_0x00ffffff",
-                                                                                                                                    U"%tu1_<index> = OpBitwiseAnd %uint %t1_<index> %uint_0x00ffffff",
-                                                                                                                                    U"%tm_<index> = OpFunctionCall %uint %mul_lo_uint %tu0_<index> %tu1_<index>",
-                                                                                                                                    U"%t_<index> = OpIAdd %uint %tm_<index> %t2_<index>"}},
+    {Recompile_V_XXX_F32_VdstVsrc0Vsrc1Vsrc2,  ShaderInstructionType::VMadF32,    ShaderInstructionFormat::VdstVsrc0Vsrc1Vsrc2,  {U"%t_<index> = OpExtInst %float %GLSL_std_450 Fma %t0_<index> %t1_<index> %t2_<index>"}},
+    {Recompile_V_XXX_F32_VdstVsrc0Vsrc1Vsrc2,  ShaderInstructionType::VMadakF32,  ShaderInstructionFormat::VdstVsrc0Vsrc1Vsrc2,  {U"%t_<index> = OpExtInst %float %GLSL_std_450 Fma %t0_<index> %t1_<index> %t2_<index>"}},
+    {Recompile_V_XXX_F32_VdstVsrc0Vsrc1Vsrc2,  ShaderInstructionType::VMadmkF32,  ShaderInstructionFormat::VdstVsrc0Vsrc1Vsrc2,  {U"%t_<index> = OpExtInst %float %GLSL_std_450 Fma %t0_<index> %t1_<index> %t2_<index>"}},
+    {Recompile_V_XXX_U32_VdstVsrc0Vsrc1Vsrc2,  ShaderInstructionType::VSadU32,    ShaderInstructionFormat::VdstVsrc0Vsrc1Vsrc2,  {U"%td_<index> = OpFunctionCall %uint %abs_diff %t0_<index> %t1_<index>",
+                                                                                                                                  U"%t_<index> = OpIAdd %uint %td_<index> %t2_<index>"}},
+    {Recompile_V_XXX_U32_VdstVsrc0Vsrc1Vsrc2,  ShaderInstructionType::VBfeU32,    ShaderInstructionFormat::VdstVsrc0Vsrc1Vsrc2,  {U"%to_<index> = OpBitwiseAnd %uint %t1_<index> %uint_31",
+                                                                                                                                  U"%ts_<index> = OpBitwiseAnd %uint %t2_<index> %uint_31",
+                                                                                                                                  U"%t_<index> = OpBitFieldUExtract %uint %t0_<index> %to_<index> %ts_<index>"}},
+    {Recompile_V_XXX_U32_VdstVsrc0Vsrc1Vsrc2,  ShaderInstructionType::VMadU32U24, ShaderInstructionFormat::VdstVsrc0Vsrc1Vsrc2,  {U"%tu0_<index> = OpBitwiseAnd %uint %t0_<index> %uint_0x00ffffff",
+                                                                                                                                  U"%tu1_<index> = OpBitwiseAnd %uint %t1_<index> %uint_0x00ffffff",
+                                                                                                                                  U"%tm_<index> = OpFunctionCall %uint %mul_lo_uint %tu0_<index> %tu1_<index>",
+                                                                                                                                  U"%t_<index> = OpIAdd %uint %tm_<index> %t2_<index>"}},
 
     // clang-format on
 };
@@ -4580,15 +4725,17 @@ void Spirv::WriteTypes()
               %function_fetch4 = OpTypeFunction %void %_ptr_Function_float %_ptr_Function_float %_ptr_Function_float %_ptr_Function_float %_ptr_Function_v4float
                  %function_u_u = OpTypeFunction %uint %uint %uint
                  %function_i_i = OpTypeFunction %int %int %int
-   %function_tbuffer_load_format_xyzw = OpTypeFunction %void %_ptr_Function_float %_ptr_Function_float %_ptr_Function_float %_ptr_Function_float %_ptr_Function_int %_ptr_Function_int %_ptr_Function_int %_ptr_Function_int %_ptr_Function_int
-   %function_buffer_load_store_float1 = OpTypeFunction %void %_ptr_Function_float %_ptr_Function_int %_ptr_Function_int %_ptr_Function_int %_ptr_Function_int
-         %function_buffer_load_float4 = OpTypeFunction %void %_ptr_Function_float %_ptr_Function_float %_ptr_Function_float %_ptr_Function_float %_ptr_Function_int %_ptr_Function_int %_ptr_Function_int %_ptr_Function_int
-%function_tbuffer_load_store_format_x = OpTypeFunction %void %_ptr_Function_float %_ptr_Function_int %_ptr_Function_int %_ptr_Function_int %_ptr_Function_int %_ptr_Function_int
-         %function_sbuffer_load_dword = OpTypeFunction %void %_ptr_Function_uint %_ptr_Function_int %_ptr_Function_int
-       %function_sbuffer_load_dword_2 = OpTypeFunction %void %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_int %_ptr_Function_int
-       %function_sbuffer_load_dword_4 = OpTypeFunction %void %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_int %_ptr_Function_int
-       %function_sbuffer_load_dword_8 = OpTypeFunction %void %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_int %_ptr_Function_int
-      %function_sbuffer_load_dword_16 = OpTypeFunction %void %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_int %_ptr_Function_int
+    %function_tbuffer_load_format_xyzw = OpTypeFunction %void %_ptr_Function_float %_ptr_Function_float %_ptr_Function_float %_ptr_Function_float %_ptr_Function_int %_ptr_Function_int %_ptr_Function_int %_ptr_Function_int %_ptr_Function_int
+    %function_buffer_load_store_float1 = OpTypeFunction %void %_ptr_Function_float %_ptr_Function_int %_ptr_Function_int %_ptr_Function_int %_ptr_Function_int
+    %function_buffer_load_store_float2 = OpTypeFunction %void %_ptr_Function_float %_ptr_Function_float %_ptr_Function_int %_ptr_Function_int %_ptr_Function_int %_ptr_Function_int
+          %function_buffer_load_float4 = OpTypeFunction %void %_ptr_Function_float %_ptr_Function_float %_ptr_Function_float %_ptr_Function_float %_ptr_Function_int %_ptr_Function_int %_ptr_Function_int %_ptr_Function_int
+ %function_tbuffer_load_store_format_x = OpTypeFunction %void %_ptr_Function_float %_ptr_Function_int %_ptr_Function_int %_ptr_Function_int %_ptr_Function_int %_ptr_Function_int
+%function_tbuffer_load_store_format_xy = OpTypeFunction %void %_ptr_Function_float %_ptr_Function_float %_ptr_Function_int %_ptr_Function_int %_ptr_Function_int %_ptr_Function_int %_ptr_Function_int
+          %function_sbuffer_load_dword = OpTypeFunction %void %_ptr_Function_uint %_ptr_Function_int %_ptr_Function_int
+        %function_sbuffer_load_dword_2 = OpTypeFunction %void %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_int %_ptr_Function_int
+        %function_sbuffer_load_dword_4 = OpTypeFunction %void %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_int %_ptr_Function_int
+        %function_sbuffer_load_dword_8 = OpTypeFunction %void %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_int %_ptr_Function_int
+       %function_sbuffer_load_dword_16 = OpTypeFunction %void %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_uint %_ptr_Function_int %_ptr_Function_int
 )";
 
 	static const char32_t* pixel_types = UR"(	
@@ -5118,7 +5265,8 @@ void Spirv::WriteFunctions()
 		m_source += FUNC_ABS_DIFF;
 	}
 
-	if (m_code.HasAnyOf({ShaderInstructionType::VMulLoI32, ShaderInstructionType::VMadU32U24, ShaderInstructionType::VMulU32U24}))
+	if (m_code.HasAnyOf({ShaderInstructionType::VMulLoI32, ShaderInstructionType::VMulLoU32, ShaderInstructionType::VMulHiU32,
+	                     ShaderInstructionType::VMadU32U24, ShaderInstructionType::VMulU32U24}))
 	{
 		m_source += FUNC_MUL_EXTENDED;
 	}
@@ -5141,10 +5289,13 @@ void Spirv::WriteFunctions()
 		m_source += TBUFFER_LOAD_FORMAT_XYZW;
 	}
 
-	if (m_code.HasAnyOf({ShaderInstructionType::BufferStoreDword, ShaderInstructionType::BufferStoreFormatX}))
+	if (m_code.HasAnyOf({ShaderInstructionType::BufferStoreDword, ShaderInstructionType::BufferStoreFormatX,
+	                     ShaderInstructionType::BufferStoreFormatXy}))
 	{
 		m_source += BUFFER_STORE_FLOAT1;
+		m_source += BUFFER_STORE_FLOAT2;
 		m_source += TBUFFER_STORE_FORMAT_X;
+		m_source += TBUFFER_STORE_FORMAT_XY;
 	}
 
 	if (m_code.HasAnyOf({ShaderInstructionType::SBufferLoadDword, ShaderInstructionType::SBufferLoadDwordx2,
@@ -5188,6 +5339,9 @@ void Spirv::FindConstants()
 		AddConstantInt(16);
 		AddConstantInt(31);
 		AddConstantInt(36);
+		AddConstantInt(39);
+		AddConstantInt(92);
+		AddConstantInt(95);
 		AddConstantInt(119);
 		AddConstantUint(24);
 		AddConstantUint(31);
@@ -5195,6 +5349,7 @@ void Spirv::FindConstants()
 		AddConstantUint(127);
 		AddConstantUint(0x3fff);
 		AddConstantUint(0xffffff);
+		AddConstantUint(0xffffffff);
 	}
 	if (m_cs_input_info != nullptr)
 	{

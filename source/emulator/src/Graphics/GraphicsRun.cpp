@@ -916,6 +916,9 @@ void ComputeRing::DingDong(uint32_t offset_dw)
 
 	EXIT_IF(!m_active);
 
+	WindowWaitForGraphicInitialized();
+	GraphicsRenderCreateContext();
+
 	if (m_done)
 	{
 		while (!m_idle)
