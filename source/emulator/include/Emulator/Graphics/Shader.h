@@ -41,7 +41,9 @@ enum class ShaderInstructionType
 	DsConsume,
 	Exp,
 	ImageSample,
+	SAddcU32,
 	SAddI32,
+	SAddU32,
 	SAndB32,
 	SAndn2B64,
 	SAndSaveexecB64,
@@ -53,11 +55,18 @@ enum class ShaderInstructionType
 	SBufferLoadDwordx8,
 	SCbranchExecz,
 	SCbranchScc0,
+	SCmpEqI32,
 	SCmpEqU32,
-	SCmpGeU32,
 	SCmpGeI32,
+	SCmpGeU32,
+	SCmpGtI32,
+	SCmpGtU32,
+	SCmpLeI32,
 	SCmpLeU32,
+	SCmpLgI32,
 	SCmpLgU32,
+	SCmpLtI32,
+	SCmpLtU32,
 	SCselectB32,
 	SCselectB64,
 	SEndpgm,
@@ -77,25 +86,52 @@ enum class ShaderInstructionType
 	TBufferLoadFormatXyzw,
 	VAddI32,
 	VAndB32,
+	VOrB32,
+	VXorB32,
 	VAshrI32,
 	VAshrrevI32,
 	VBcntU32B32,
 	VBfeU32,
+	VBfrevB32,
+	VCvtF32I32,
+	VBfmB32,
 	VCmpEqF32,
 	VCmpEqI32,
 	VCmpEqU32,
+	VCmpFF32,
+	VCmpFI32,
+	VCmpFU32,
 	VCmpGeF32,
+	VCmpGeI32,
 	VCmpGeU32,
+	VCmpGtF32,
 	VCmpGtI32,
+	VCmpGtU32,
 	VCmpLeF32,
+	VCmpLeI32,
 	VCmpLeU32,
+	VCmpLgF32,
+	VCmpLtF32,
+	VCmpLtI32,
+	VCmpLtU32,
 	VCmpNeI32,
 	VCmpNeqF32,
 	VCmpNeU32,
+	VCmpNgeF32,
+	VCmpNgtF32,
+	VCmpNleF32,
+	VCmpNlgF32,
+	VCmpNltF32,
+	VCmpOF32,
+	VCmpTI32,
+	VCmpTruF32,
+	VCmpTU32,
+	VCmpUF32,
 	VCmpxEqU32,
 	VCmpxGtU32,
 	VCmpxNeU32,
 	VCndmaskB32,
+	VCvtF32F16,
 	VCvtF32U32,
 	VCvtF32Ubyte0,
 	VCvtF32Ubyte1,
@@ -127,6 +163,13 @@ enum class ShaderInstructionType
 	VNotB32,
 	VRcpF32,
 	VRsqF32,
+	VCeilF32,
+	VFractF32,
+	VRndneF32,
+	VTruncF32,
+	VExpF32,
+	VCosF32,
+	VFloorF32,
 	VSadU32,
 	VSqrtF32,
 	VSubF32,
@@ -297,6 +340,20 @@ struct ShaderLabel
 	uint32_t src;
 };
 
+struct ShaderDebugPrintf
+{
+	enum class Type
+	{
+		Uint,
+		Int,
+		Float
+	};
+	uint32_t              pc = 0;
+	String                format;
+	Vector<Type>          types;
+	Vector<ShaderOperand> args;
+};
+
 class ShaderCode
 {
 public:
@@ -308,6 +365,8 @@ public:
 	Vector<ShaderInstruction>&                     GetInstructions() { return m_instructions; }
 	[[nodiscard]] const Vector<ShaderLabel>&       GetLabels() const { return m_labels; }
 	Vector<ShaderLabel>&                           GetLabels() { return m_labels; }
+	[[nodiscard]] const Vector<ShaderDebugPrintf>& GetDebugPrintfs() const { return m_debug_printfs; }
+	Vector<ShaderDebugPrintf>&                     GetDebugPrintfs() { return m_debug_printfs; }
 
 	[[nodiscard]] String DbgDump() const;
 
@@ -327,6 +386,7 @@ private:
 	Vector<ShaderInstruction> m_instructions;
 	Vector<ShaderLabel>       m_labels;
 	ShaderType                m_type = ShaderType::Unknown;
+	Vector<ShaderDebugPrintf> m_debug_printfs;
 };
 
 struct ShaderId
@@ -581,7 +641,9 @@ struct ShaderVertexInputInfo
 
 struct ShaderComputeInputInfo
 {
-	uint32_t        threads_num[3]     = {};
+	uint32_t        threads_num[3]     = {0, 0, 0};
+	bool            group_id[3]        = {false, false, false};
+	int             thread_ids_num     = 0;
 	int             workgroup_register = 0;
 	ShaderResources bind;
 };
@@ -610,6 +672,7 @@ Vector<uint32_t> ShaderRecompilePS(const PixelShaderInfo* regs, const ShaderPixe
 Vector<uint32_t> ShaderRecompileCS(const ComputeShaderInfo* regs, const ShaderComputeInputInfo* input_info);
 bool             ShaderIsDisabled(uint64_t addr);
 void             ShaderDisable(uint64_t id);
+void             ShaderInjectDebugPrintf(uint64_t id, const ShaderDebugPrintf& cmd);
 
 } // namespace Kyty::Libs::Graphics
 

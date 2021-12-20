@@ -34,7 +34,7 @@ void* VideoOutBufferObject::Create(GraphicContext* ctx, const uint64_t* vaddr, c
 
 	vk_obj->extent.width  = width;
 	vk_obj->extent.height = height;
-	vk_obj->format        = VK_FORMAT_R8G8B8A8_SRGB;
+	vk_obj->format        = VK_FORMAT_B8G8R8A8_SRGB; // VK_FORMAT_R8G8B8A8_SRGB;
 	vk_obj->image         = nullptr;
 	vk_obj->image_view    = nullptr;
 

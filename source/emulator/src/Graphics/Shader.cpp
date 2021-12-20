@@ -73,7 +73,14 @@ struct ShaderUsageInfo
 	int                    slots_num   = 0;
 };
 
-static Vector<uint64_t>* g_disabled_shaders = nullptr;
+struct ShaderDebugPrintfCmds
+{
+	uint64_t                  id = 0;
+	Vector<ShaderDebugPrintf> cmds;
+};
+
+static Vector<uint64_t>*              g_disabled_shaders = nullptr;
+static Vector<ShaderDebugPrintfCmds>* g_debug_printfs    = nullptr;
 
 static String operand_to_str(ShaderOperand op)
 {
@@ -144,6 +151,12 @@ static String operand_array_to_str(ShaderOperand op, int n)
 			break;
 		case ShaderOperandType::Sgpr: ret = String::FromPrintf("s[%d:%d]", op.register_id, op.register_id + n - 1); break;
 		case ShaderOperandType::Vgpr: ret = String::FromPrintf("v[%d:%d]", op.register_id, op.register_id + n - 1); break;
+		case ShaderOperandType::LiteralConstant:
+			if (n == 2)
+			{
+				ret = String::FromPrintf("%f (%u)", op.constant.f, op.constant.u);
+			}
+			break;
 		case ShaderOperandType::IntegerInlineConstant:
 			if (n == 2)
 			{
@@ -438,10 +451,17 @@ KYTY_SHADER_PARSER(shader_parse_sopc)
 
 	switch (opcode)
 	{
+		case 0x00: inst.type = ShaderInstructionType::SCmpEqI32; break;
+		case 0x01: inst.type = ShaderInstructionType::SCmpLgI32; break;
+		case 0x02: inst.type = ShaderInstructionType::SCmpGtI32; break;
 		case 0x03: inst.type = ShaderInstructionType::SCmpGeI32; break;
+		case 0x04: inst.type = ShaderInstructionType::SCmpLtI32; break;
+		case 0x05: inst.type = ShaderInstructionType::SCmpLeI32; break;
 		case 0x06: inst.type = ShaderInstructionType::SCmpEqU32; break;
 		case 0x07: inst.type = ShaderInstructionType::SCmpLgU32; break;
+		case 0x08: inst.type = ShaderInstructionType::SCmpGtU32; break;
 		case 0x09: inst.type = ShaderInstructionType::SCmpGeU32; break;
+		case 0x0a: inst.type = ShaderInstructionType::SCmpLtU32; break;
 		case 0x0b: inst.type = ShaderInstructionType::SCmpLeU32; break;
 
 		default: printf("%s", dst->DbgDump().C_Str()); EXIT("unknown sopc opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 "\n", opcode, pc);
@@ -627,7 +647,9 @@ KYTY_SHADER_PARSER(shader_parse_sop2)
 
 	switch (opcode)
 	{
+		case 0x00: inst.type = ShaderInstructionType::SAddU32; break;
 		case 0x02: inst.type = ShaderInstructionType::SAddI32; break;
+		case 0x04: inst.type = ShaderInstructionType::SAddcU32; break;
 		case 0x0a: inst.type = ShaderInstructionType::SCselectB32; break;
 		case 0x0b:
 			inst.type        = ShaderInstructionType::SCselectB64;
@@ -700,16 +722,38 @@ KYTY_SHADER_PARSER(shader_parse_vopc)
 
 	switch (opcode)
 	{
+		case 0x00: inst.type = ShaderInstructionType::VCmpFF32; break;
+		case 0x01: inst.type = ShaderInstructionType::VCmpLtF32; break;
 		case 0x02: inst.type = ShaderInstructionType::VCmpEqF32; break;
 		case 0x03: inst.type = ShaderInstructionType::VCmpLeF32; break;
+		case 0x04: inst.type = ShaderInstructionType::VCmpGtF32; break;
+		case 0x05: inst.type = ShaderInstructionType::VCmpLgF32; break;
+		case 0x06: inst.type = ShaderInstructionType::VCmpGeF32; break;
+		case 0x07: inst.type = ShaderInstructionType::VCmpOF32; break;
+		case 0x08: inst.type = ShaderInstructionType::VCmpUF32; break;
+		case 0x09: inst.type = ShaderInstructionType::VCmpNgeF32; break;
+		case 0x0a: inst.type = ShaderInstructionType::VCmpNlgF32; break;
+		case 0x0b: inst.type = ShaderInstructionType::VCmpNgtF32; break;
+		case 0x0c: inst.type = ShaderInstructionType::VCmpNleF32; break;
 		case 0x0d: inst.type = ShaderInstructionType::VCmpNeqF32; break;
+		case 0x0e: inst.type = ShaderInstructionType::VCmpNltF32; break;
+		case 0x0f: inst.type = ShaderInstructionType::VCmpTruF32; break;
+		case 0x80: inst.type = ShaderInstructionType::VCmpFI32; break;
+		case 0x81: inst.type = ShaderInstructionType::VCmpLtI32; break;
 		case 0x82: inst.type = ShaderInstructionType::VCmpEqI32; break;
+		case 0x83: inst.type = ShaderInstructionType::VCmpLeI32; break;
 		case 0x84: inst.type = ShaderInstructionType::VCmpGtI32; break;
 		case 0x85: inst.type = ShaderInstructionType::VCmpNeI32; break;
+		case 0x86: inst.type = ShaderInstructionType::VCmpGeI32; break;
+		case 0x87: inst.type = ShaderInstructionType::VCmpTI32; break;
+		case 0xc0: inst.type = ShaderInstructionType::VCmpFU32; break;
+		case 0xc1: inst.type = ShaderInstructionType::VCmpLtU32; break;
 		case 0xc2: inst.type = ShaderInstructionType::VCmpEqU32; break;
 		case 0xc3: inst.type = ShaderInstructionType::VCmpLeU32; break;
+		case 0xc4: inst.type = ShaderInstructionType::VCmpGtU32; break;
 		case 0xc5: inst.type = ShaderInstructionType::VCmpNeU32; break;
 		case 0xc6: inst.type = ShaderInstructionType::VCmpGeU32; break;
+		case 0xc7: inst.type = ShaderInstructionType::VCmpTU32; break;
 		case 0xd2: inst.type = ShaderInstructionType::VCmpxEqU32; break;
 		case 0xd4: inst.type = ShaderInstructionType::VCmpxGtU32; break;
 		case 0xd5: inst.type = ShaderInstructionType::VCmpxNeU32; break;
@@ -750,16 +794,26 @@ KYTY_SHADER_PARSER(shader_parse_vop1)
 	switch (opcode)
 	{
 		case 0x01: inst.type = ShaderInstructionType::VMovB32; break;
+		case 0x05: inst.type = ShaderInstructionType::VCvtF32I32; break;
 		case 0x06: inst.type = ShaderInstructionType::VCvtF32U32; break;
 		case 0x07: inst.type = ShaderInstructionType::VCvtU32F32; break;
+		case 0x0b: inst.type = ShaderInstructionType::VCvtF32F16; break;
 		case 0x11: inst.type = ShaderInstructionType::VCvtF32Ubyte0; break;
 		case 0x12: inst.type = ShaderInstructionType::VCvtF32Ubyte1; break;
 		case 0x13: inst.type = ShaderInstructionType::VCvtF32Ubyte2; break;
 		case 0x14: inst.type = ShaderInstructionType::VCvtF32Ubyte3; break;
+		case 0x20: inst.type = ShaderInstructionType::VFractF32; break;
+		case 0x21: inst.type = ShaderInstructionType::VTruncF32; break;
+		case 0x22: inst.type = ShaderInstructionType::VCeilF32; break;
+		case 0x23: inst.type = ShaderInstructionType::VRndneF32; break;
+		case 0x24: inst.type = ShaderInstructionType::VFloorF32; break;
+		case 0x25: inst.type = ShaderInstructionType::VExpF32; break;
 		case 0x2a: inst.type = ShaderInstructionType::VRcpF32; break;
 		case 0x2e: inst.type = ShaderInstructionType::VRsqF32; break;
 		case 0x33: inst.type = ShaderInstructionType::VSqrtF32; break;
+		case 0x36: inst.type = ShaderInstructionType::VCosF32; break;
 		case 0x37: inst.type = ShaderInstructionType::VNotB32; break;
+		case 0x38: inst.type = ShaderInstructionType::VBfrevB32; break;
 		default: printf("%s", dst->DbgDump().C_Str()); EXIT("unknown vop1 opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 "\n", opcode, pc);
 	}
 
@@ -818,6 +872,9 @@ KYTY_SHADER_PARSER(shader_parse_vop2)
 		case 0x19: inst.type = ShaderInstructionType::VLshlB32; break;
 		case 0x1a: inst.type = ShaderInstructionType::VLshlrevB32; break;
 		case 0x1b: inst.type = ShaderInstructionType::VAndB32; break;
+		case 0x1c: inst.type = ShaderInstructionType::VOrB32; break;
+		case 0x1d: inst.type = ShaderInstructionType::VXorB32; break;
+		case 0x1e: inst.type = ShaderInstructionType::VBfmB32; break;
 		case 0x1f: inst.type = ShaderInstructionType::VMacF32; break;
 		case 0x20:
 			inst.type              = ShaderInstructionType::VMadmkF32;
@@ -958,15 +1015,38 @@ KYTY_SHADER_PARSER(shader_parse_vop3)
 
 	switch (opcode)
 	{
+		case 0x00: inst.type = ShaderInstructionType::VCmpFF32; break;
+		case 0x01: inst.type = ShaderInstructionType::VCmpLtF32; break;
 		case 0x02: inst.type = ShaderInstructionType::VCmpEqF32; break;
 		case 0x03: inst.type = ShaderInstructionType::VCmpLeF32; break;
+		case 0x04: inst.type = ShaderInstructionType::VCmpGtF32; break;
+		case 0x05: inst.type = ShaderInstructionType::VCmpLgF32; break;
 		case 0x06: inst.type = ShaderInstructionType::VCmpGeF32; break;
+		case 0x07: inst.type = ShaderInstructionType::VCmpOF32; break;
+		case 0x08: inst.type = ShaderInstructionType::VCmpUF32; break;
+		case 0x09: inst.type = ShaderInstructionType::VCmpNgeF32; break;
+		case 0x0a: inst.type = ShaderInstructionType::VCmpNlgF32; break;
+		case 0x0b: inst.type = ShaderInstructionType::VCmpNgtF32; break;
+		case 0x0c: inst.type = ShaderInstructionType::VCmpNleF32; break;
 		case 0x0d: inst.type = ShaderInstructionType::VCmpNeqF32; break;
+		case 0x0e: inst.type = ShaderInstructionType::VCmpNltF32; break;
+		case 0x0f: inst.type = ShaderInstructionType::VCmpTruF32; break;
+		case 0x80: inst.type = ShaderInstructionType::VCmpFI32; break;
+		case 0x81: inst.type = ShaderInstructionType::VCmpLtI32; break;
+		case 0x82: inst.type = ShaderInstructionType::VCmpEqI32; break;
+		case 0x83: inst.type = ShaderInstructionType::VCmpLeI32; break;
 		case 0x84: inst.type = ShaderInstructionType::VCmpGtI32; break;
+		case 0x85: inst.type = ShaderInstructionType::VCmpNeI32; break;
+		case 0x86: inst.type = ShaderInstructionType::VCmpGeI32; break;
+		case 0x87: inst.type = ShaderInstructionType::VCmpTI32; break;
+		case 0xc0: inst.type = ShaderInstructionType::VCmpFU32; break;
+		case 0xc1: inst.type = ShaderInstructionType::VCmpLtU32; break;
 		case 0xc2: inst.type = ShaderInstructionType::VCmpEqU32; break;
 		case 0xc3: inst.type = ShaderInstructionType::VCmpLeU32; break;
+		case 0xc4: inst.type = ShaderInstructionType::VCmpGtU32; break;
 		case 0xc5: inst.type = ShaderInstructionType::VCmpNeU32; break;
 		case 0xc6: inst.type = ShaderInstructionType::VCmpGeU32; break;
+		case 0xc7: inst.type = ShaderInstructionType::VCmpTU32; break;
 		case 0xd4: inst.type = ShaderInstructionType::VCmpxGtU32; break;
 		case 0x100:
 			inst.type        = ShaderInstructionType::VCndmaskB32;
@@ -987,12 +1067,27 @@ KYTY_SHADER_PARSER(shader_parse_vop3)
 		case 0x119: inst.type = ShaderInstructionType::VLshlB32; break;
 		case 0x11a: inst.type = ShaderInstructionType::VLshlrevB32; break;
 		case 0x11b: inst.type = ShaderInstructionType::VAndB32; break;
+		case 0x11c: inst.type = ShaderInstructionType::VOrB32; break;
+		case 0x11d: inst.type = ShaderInstructionType::VXorB32; break;
+		case 0x11e: inst.type = ShaderInstructionType::VBfmB32; break;
 		case 0x11f: inst.type = ShaderInstructionType::VMacF32; break;
 		case 0x122: inst.type = ShaderInstructionType::VBcntU32B32; break;
 		case 0x123: inst.type = ShaderInstructionType::VMbcntLoU32B32; break;
 		case 0x124: inst.type = ShaderInstructionType::VMbcntHiU32B32; break;
 		case 0x125:
 			inst.type      = ShaderInstructionType::VAddI32;
+			inst.format    = ShaderInstructionFormat::VdstSdst2Vsrc0Vsrc1;
+			inst.dst2      = operand_parse(sdst);
+			inst.dst2.size = 2;
+			break;
+		case 0x126:
+			inst.type      = ShaderInstructionType::VSubI32;
+			inst.format    = ShaderInstructionFormat::VdstSdst2Vsrc0Vsrc1;
+			inst.dst2      = operand_parse(sdst);
+			inst.dst2.size = 2;
+			break;
+		case 0x127:
+			inst.type      = ShaderInstructionType::VSubrevI32;
 			inst.format    = ShaderInstructionFormat::VdstSdst2Vsrc0Vsrc1;
 			inst.dst2      = operand_parse(sdst);
 			inst.dst2.size = 2;
@@ -1707,18 +1802,18 @@ static void ps_check(const PsStageRegisters& ps)
 static void cs_check(const CsStageRegisters& cs)
 {
 	// EXIT_NOT_IMPLEMENTED(cs.num_thread_x != 0x00000040);
-	EXIT_NOT_IMPLEMENTED(cs.num_thread_y != 0x00000001);
-	EXIT_NOT_IMPLEMENTED(cs.num_thread_z != 0x00000001);
+	// EXIT_NOT_IMPLEMENTED(cs.num_thread_y != 0x00000001);
+	// EXIT_NOT_IMPLEMENTED(cs.num_thread_z != 0x00000001);
 	// EXIT_NOT_IMPLEMENTED(cs.vgprs != 0x00 && cs.vgprs != 0x01);
 	// EXIT_NOT_IMPLEMENTED(cs.sgprs != 0x01 && cs.sgprs != 0x02);
 	EXIT_NOT_IMPLEMENTED(cs.bulky != 0x00);
 	EXIT_NOT_IMPLEMENTED(cs.scratch_en != 0x00);
 	// EXIT_NOT_IMPLEMENTED(cs.user_sgpr != 0x0c);
 	EXIT_NOT_IMPLEMENTED(cs.tgid_x_en != 0x01);
-	EXIT_NOT_IMPLEMENTED(cs.tgid_y_en != 0x00);
-	EXIT_NOT_IMPLEMENTED(cs.tgid_z_en != 0x00);
+	// EXIT_NOT_IMPLEMENTED(cs.tgid_y_en != 0x00);
+	// EXIT_NOT_IMPLEMENTED(cs.tgid_z_en != 0x00);
 	EXIT_NOT_IMPLEMENTED(cs.tg_size_en != 0x00);
-	EXIT_NOT_IMPLEMENTED(cs.tidig_comp_cnt != 0x00);
+	EXIT_NOT_IMPLEMENTED(cs.tidig_comp_cnt > 2);
 	EXIT_NOT_IMPLEMENTED(cs.lds_size != 0x00);
 
 	//	EXIT_NOT_IMPLEMENTED(cs.m_computePgmRsrc1 != 0x002c0040);
@@ -2319,6 +2414,10 @@ void ShaderGetInputInfoCS(const ComputeShaderInfo* regs, ShaderComputeInputInfo*
 	info->threads_num[0] = regs->cs_regs.num_thread_x;
 	info->threads_num[1] = regs->cs_regs.num_thread_y;
 	info->threads_num[2] = regs->cs_regs.num_thread_z;
+	info->group_id[0]    = regs->cs_regs.tgid_x_en != 0;
+	info->group_id[1]    = regs->cs_regs.tgid_y_en != 0;
+	info->group_id[2]    = regs->cs_regs.tgid_z_en != 0;
+	info->thread_ids_num = regs->cs_regs.tidig_comp_cnt + 1;
 
 	info->workgroup_register = regs->cs_regs.user_sgpr;
 
@@ -2580,6 +2679,10 @@ void ShaderDbgDumpInputInfo(const ShaderComputeInputInfo* info)
 	printf("ShaderDbgDumpInputInfo()\n");
 
 	printf("\t workgroup_register = %d\n", info->workgroup_register);
+	printf("\t thread_ids_num     = %d\n", info->thread_ids_num);
+	printf("\t threads_num        = {%u, %u, %u}\n", info->threads_num[0], info->threads_num[1], info->threads_num[2]);
+	printf("\t threadgroup_id     = {%s, %s, %s}\n", info->group_id[0] ? "true" : "false", info->group_id[1] ? "true" : "false",
+	       info->group_id[2] ? "true" : "false");
 
 	ShaderDbgDumpResources(info->bind);
 }
@@ -2771,6 +2874,15 @@ Vector<uint32_t> ShaderRecompileVS(const VertexShaderInfo* regs, const ShaderVer
 
 		log.DumpOriginalShader(code);
 
+		if (g_debug_printfs != nullptr)
+		{
+			auto id = (static_cast<uint64_t>(header->hash0) << 32u) | header->crc32;
+			if (auto index = g_debug_printfs->Find(id, [](auto cmd, auto id) { return cmd.id == id; }); g_debug_printfs->IndexValid(index))
+			{
+				code.GetDebugPrintfs() = g_debug_printfs->At(index).cmds;
+			}
+		}
+
 		source = SpirvGenerateSource(code, input_info, nullptr, nullptr);
 	}
 
@@ -2827,6 +2939,15 @@ Vector<uint32_t> ShaderRecompilePS(const PixelShaderInfo* regs, const ShaderPixe
 
 	log.DumpOriginalShader(code);
 
+	if (g_debug_printfs != nullptr)
+	{
+		auto id = (static_cast<uint64_t>(header->hash0) << 32u) | header->crc32;
+		if (auto index = g_debug_printfs->Find(id, [](auto cmd, auto id) { return cmd.id == id; }); g_debug_printfs->IndexValid(index))
+		{
+			code.GetDebugPrintfs() = g_debug_printfs->At(index).cmds;
+		}
+	}
+
 	auto source = SpirvGenerateSource(code, nullptr, input_info, nullptr);
 
 	log.DumpRecompiledShader(source);
@@ -2854,7 +2975,7 @@ Vector<uint32_t> ShaderRecompileCS(const ComputeShaderInfo* regs, const ShaderCo
 	cs_print("ShaderRecompileCS()", regs->cs_regs);
 	cs_check(regs->cs_regs);
 
-	EXIT_NOT_IMPLEMENTED(regs->cs_regs.user_sgpr != regs->cs_user_sgpr.count);
+	EXIT_NOT_IMPLEMENTED(regs->cs_regs.user_sgpr > regs->cs_user_sgpr.count);
 
 	for (int i = 0; i < input_info->bind.storage_buffers.buffers_num; i++)
 	{
@@ -2876,6 +2997,15 @@ Vector<uint32_t> ShaderRecompileCS(const ComputeShaderInfo* regs, const ShaderCo
 	Vector<uint32_t> ret;
 
 	log.DumpOriginalShader(code);
+
+	if (g_debug_printfs != nullptr)
+	{
+		auto id = (static_cast<uint64_t>(header->hash0) << 32u) | header->crc32;
+		if (auto index = g_debug_printfs->Find(id, [](auto cmd, auto id) { return cmd.id == id; }); g_debug_printfs->IndexValid(index))
+		{
+			code.GetDebugPrintfs() = g_debug_printfs->At(index).cmds;
+		}
+	}
 
 	auto source = SpirvGenerateSource(code, nullptr, nullptr, input_info);
 
@@ -3110,6 +3240,13 @@ ShaderId ShaderGetIdCS(const ComputeShaderInfo* regs, const ShaderComputeInputIn
 	ret.ids.Add(header->crc32);
 
 	ret.ids.Add(input_info->workgroup_register);
+	ret.ids.Add(input_info->thread_ids_num);
+
+	for (int i = 0; i < 3; i++)
+	{
+		ret.ids.Add(input_info->threads_num[i]);
+		ret.ids.Add(static_cast<uint32_t>(input_info->group_id[i]));
+	}
 
 	ShaderGetBindIds(&ret, input_info->bind);
 
@@ -3144,6 +3281,29 @@ void ShaderDisable(uint64_t id)
 	{
 		g_disabled_shaders->Add(id);
 	}
+}
+
+void ShaderInjectDebugPrintf(uint64_t id, const ShaderDebugPrintf& cmd)
+{
+	if (g_debug_printfs == nullptr)
+	{
+		g_debug_printfs = new Vector<ShaderDebugPrintfCmds>;
+	}
+
+	for (auto& c: *g_debug_printfs)
+	{
+		if (c.id == id)
+		{
+			c.cmds.Add(cmd);
+			return;
+		}
+	}
+
+	ShaderDebugPrintfCmds c;
+	c.id = id;
+	c.cmds.Add(cmd);
+
+	g_debug_printfs->Add(c);
 }
 
 } // namespace Kyty::Libs::Graphics

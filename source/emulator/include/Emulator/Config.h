@@ -60,6 +60,8 @@ String         GetPrintfOutputFile();
 ProfilerDirection GetProfilerDirection();
 String            GetProfilerOutputFile();
 
+bool SpirvDebugPrintfEnabled();
+
 } // namespace Kyty::Config
 
 #endif

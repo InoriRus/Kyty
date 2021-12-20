@@ -3221,8 +3221,8 @@ void GraphicsRenderDispatchDirect(CommandBuffer* buffer, HardwareContext* ctx, u
 
 	EXIT_NOT_IMPLEMENTED(mode != 0);
 	// EXIT_NOT_IMPLEMENTED(thread_group_x != 2);
-	EXIT_NOT_IMPLEMENTED(thread_group_y != 1);
-	EXIT_NOT_IMPLEMENTED(thread_group_z != 1);
+	// EXIT_NOT_IMPLEMENTED(thread_group_y != 1);
+	// EXIT_NOT_IMPLEMENTED(thread_group_z != 1);
 
 	const auto& cs_regs = ctx->GetCs();
 

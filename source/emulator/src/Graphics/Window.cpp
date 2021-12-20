@@ -43,7 +43,7 @@
 #ifdef KYTY_EMU_ENABLED
 
 //#define KYTY_ENABLE_BEST_PRACTICES
-//#define KYTY_ENABLE_DEBUG_PRINTF
+#define KYTY_ENABLE_DEBUG_PRINTF
 #define KYTY_DBG_INPUT
 
 namespace Kyty::Libs::Graphics {
@@ -1617,6 +1617,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugMessengerCallback(VkDebugUtilsM
 	const char* severity_color = FG_DEFAULT;
 	bool        skip           = false;
 	bool        error          = false;
+	bool        debug_printf   = false;
 	switch (message_severity)
 	{
 		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
@@ -1625,8 +1626,17 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugMessengerCallback(VkDebugUtilsM
 			skip           = true;
 			break;
 		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
-			severity_str   = "I";
-			severity_color = FG_DEFAULT;
+			if ((message_types & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT) != 0 && Config::SpirvDebugPrintfEnabled() &&
+			    strcmp(callback_data->pMessageIdName, "UNASSIGNED-DEBUG-PRINTF") == 0)
+			{
+				debug_printf   = true;
+				severity_color = FG_BRIGHT_YELLOW;
+				skip           = true;
+			} else
+			{
+				severity_str   = "I";
+				severity_color = FG_DEFAULT;
+			}
 			break;
 		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
 			severity_str   = "W";
@@ -1650,6 +1660,15 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugMessengerCallback(VkDebugUtilsM
 	{
 		printf("%s[Vulkan][%s][%u]: %s%s\n", severity_color, severity_str, static_cast<uint32_t>(message_types), callback_data->pMessage,
 		       FG_DEFAULT);
+	}
+
+	if (debug_printf)
+	{
+		auto strs = String::FromUtf8(callback_data->pMessage).Split(U'|');
+		if (!strs.IsEmpty())
+		{
+			printf("%s%s%s\n", severity_color, strs.At(strs.Size() - 1).C_Str(), FG_DEFAULT);
+		}
 	}
 
 	return VK_FALSE;
@@ -1836,10 +1855,19 @@ static void VulkanCreate(WindowContext* ctx)
 #endif
 	};
 
+	uint32_t enabled_features_count = sizeof(enabled_features) / sizeof(VkValidationFeatureEnableEXT);
+
+#ifdef KYTY_ENABLE_DEBUG_PRINTF
+	if (!Config::SpirvDebugPrintfEnabled())
+	{
+		enabled_features_count--;
+	}
+#endif
+
 	VkValidationFeaturesEXT validation_features {};
 	validation_features.sType                          = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
 	validation_features.pNext                          = nullptr;
-	validation_features.enabledValidationFeatureCount  = sizeof(enabled_features) / sizeof(VkValidationFeatureEnableEXT);
+	validation_features.enabledValidationFeatureCount  = enabled_features_count;
 	validation_features.pEnabledValidationFeatures     = enabled_features;
 	validation_features.disabledValidationFeatureCount = 0;
 	validation_features.pDisabledValidationFeatures    = disabled_features;
@@ -1893,10 +1921,14 @@ static void VulkanCreate(WindowContext* ctx)
 	}
 
 	Vector<const char*> device_extensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME,
-#ifdef KYTY_ENABLE_DEBUG_PRINTF
-	                                         VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME,
-#endif
 	                                         "VK_KHR_maintenance1"};
+
+#ifdef KYTY_ENABLE_DEBUG_PRINTF
+	if (Config::SpirvDebugPrintfEnabled())
+	{
+		device_extensions.Add(VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME);
+	}
+#endif
 
 	ctx->surface_capabilities = new SurfaceCapabilities {};
 

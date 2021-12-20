@@ -24,6 +24,7 @@ struct Config
 	String                 printf_output_file          = U"_kyty.txt";
 	ProfilerDirection      profiler_direction          = ProfilerDirection::None;
 	String                 profiler_output_file        = U"_profile.prof";
+	bool                   spirv_debug_printf_enabled  = false;
 };
 
 static Config* g_config = nullptr;
@@ -93,6 +94,7 @@ void Load(const Scripts::ScriptVar& cfg)
 	LoadStr(g_config->printf_output_file, cfg, U"PrintfOutputFile");
 	LoadEnum(g_config->profiler_direction, cfg, U"ProfilerDirection");
 	LoadStr(g_config->profiler_output_file, cfg, U"ProfilerOutputFile");
+	LoadBool(g_config->spirv_debug_printf_enabled, cfg, U"SpirvDebugPrintfEnabled");
 }
 
 uint32_t GetScreenWidth()
@@ -163,6 +165,11 @@ ProfilerDirection GetProfilerDirection()
 String GetProfilerOutputFile()
 {
 	return g_config->profiler_output_file;
+}
+
+bool SpirvDebugPrintfEnabled()
+{
+	return g_config->spirv_debug_printf_enabled;
 }
 
 } // namespace Kyty::Config

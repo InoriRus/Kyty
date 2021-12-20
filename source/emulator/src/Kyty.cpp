@@ -6,6 +6,7 @@
 #include "Kyty/Core/String.h"
 #include "Kyty/Core/Subsystems.h"
 #include "Kyty/Core/Threads.h"
+#include "Kyty/Core/Vector.h"
 #include "Kyty/Scripts/Scripts.h"
 
 #include "Emulator/Common.h"
@@ -240,6 +241,82 @@ KYTY_SCRIPT_FUNC(kyty_shader_disable)
 	return 0;
 }
 
+KYTY_SCRIPT_FUNC(kyty_shader_printf)
+{
+	if (Scripts::ArgGetVarCount() != 4)
+	{
+		EXIT("invalid args\n");
+	}
+
+	auto id     = Scripts::ArgGetVar(0).ToString().ToUint64(16);
+	auto pc     = Scripts::ArgGetVar(1).ToInteger();
+	auto format = Scripts::ArgGetVar(2).ToString();
+	auto args   = Scripts::ArgGetVar(3);
+
+	if (!args.IsTable())
+	{
+		EXIT("invalid args\n");
+	}
+
+	Libs::Graphics::ShaderDebugPrintf p;
+	p.pc     = pc;
+	p.format = format;
+
+	for (const auto& t: args.GetPairs())
+	{
+		const auto& arg_t = t.GetValue();
+
+		if (!arg_t.IsTable())
+		{
+			EXIT("invalid arg\n");
+		}
+
+		auto type = arg_t.GetValue(0).ToString();
+		auto arg  = arg_t.GetValue(1).ToString();
+
+		Libs::Graphics::ShaderOperand op;
+
+		if (arg.StartsWith('s', String::Case::Insensitive) && Core::Char::IsDecimal(arg.At(1)))
+		{
+			op.type        = Libs::Graphics::ShaderOperandType::Sgpr;
+			op.register_id = arg.RemoveFirst(1).ToInt32();
+			op.size        = 1;
+		} else if (arg.StartsWith('v', String::Case::Insensitive) && Core::Char::IsDecimal(arg.At(1)))
+		{
+			op.type        = Libs::Graphics::ShaderOperandType::Vgpr;
+			op.register_id = arg.RemoveFirst(1).ToInt32();
+			op.size        = 1;
+		} else
+		{
+			EXIT("unknown arg: %s\n", arg.C_Str());
+		}
+
+		p.args.Add(op);
+
+		Libs::Graphics::ShaderDebugPrintf::Type st = Libs::Graphics::ShaderDebugPrintf::Type::Int;
+
+		if (type.EqualNoCase(U"int"))
+		{
+			st = Libs::Graphics::ShaderDebugPrintf::Type::Int;
+		} else if (type.EqualNoCase(U"uint"))
+		{
+			st = Libs::Graphics::ShaderDebugPrintf::Type::Uint;
+		} else if (type.EqualNoCase(U"float"))
+		{
+			st = Libs::Graphics::ShaderDebugPrintf::Type::Float;
+		} else
+		{
+			EXIT("unknown type: %s\n", arg.C_Str());
+		}
+
+		p.types.Add(st);
+	}
+
+	Libs::Graphics::ShaderInjectDebugPrintf(id, p);
+
+	return 0;
+}
+
 void kyty_help() {}
 
 } // namespace LuaFunc
@@ -253,6 +330,7 @@ void kyty_reg()
 	Scripts::RegisterFunc("kyty_execute", LuaFunc::kyty_execute_func, LuaFunc::kyty_help);
 	Scripts::RegisterFunc("kyty_mount", LuaFunc::kyty_mount_func, LuaFunc::kyty_help);
 	Scripts::RegisterFunc("kyty_shader_disable", LuaFunc::kyty_shader_disable, LuaFunc::kyty_help);
+	Scripts::RegisterFunc("kyty_shader_printf", LuaFunc::kyty_shader_printf, LuaFunc::kyty_help);
 }
 
 #else
