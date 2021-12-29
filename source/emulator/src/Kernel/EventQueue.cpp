@@ -49,9 +49,9 @@ KernelEqueuePrivate::~KernelEqueuePrivate()
 	{
 		auto& event = m_events[index];
 
-		if (event.filter.delete_func != nullptr)
+		if (event.filter.delete_event_func != nullptr)
 		{
-			event.filter.delete_func(&event);
+			event.filter.delete_event_func(this, &event);
 		}
 	}
 }
@@ -176,9 +176,9 @@ bool KernelEqueuePrivate::DeleteEvent(uintptr_t ident, int16_t filter)
 	{
 		auto& event = m_events[index];
 
-		if (event.filter.delete_func != nullptr)
+		if (event.filter.delete_event_func != nullptr)
 		{
-			event.filter.delete_func(&event);
+			event.filter.delete_event_func(this, &event);
 		}
 
 		m_events.Remove(index);
@@ -267,7 +267,7 @@ int KYTY_SYSV_ABI KernelDeleteEqueue(KernelEqueue eq)
 
 int KYTY_SYSV_ABI KernelWaitEqueue(KernelEqueue eq, KernelEvent* ev, int num, int* out, const KernelUseconds* timo)
 {
-	PRINT_NAME();
+	// PRINT_NAME();
 
 	if (eq == nullptr)
 	{
@@ -286,7 +286,7 @@ int KYTY_SYSV_ABI KernelWaitEqueue(KernelEqueue eq, KernelEvent* ev, int num, in
 
 	EXIT_NOT_IMPLEMENTED(out == nullptr);
 
-	printf("\tEqueue wait: %s\n", eq->GetName().C_Str());
+	// printf("\tEqueue wait: %s\n", eq->GetName().C_Str());
 
 	if (timo == nullptr)
 	{
@@ -306,11 +306,11 @@ int KYTY_SYSV_ABI KernelWaitEqueue(KernelEqueue eq, KernelEvent* ev, int num, in
 
 	if (*out == 0)
 	{
-		printf("\ttimedout\n");
+		// printf("\ttimedout\n");
 		return KERNEL_ERROR_ETIMEDOUT;
 	}
 
-	printf("\treceived %u events\n", *out);
+	// printf("\treceived %u events\n", *out);
 
 	return OK;
 }

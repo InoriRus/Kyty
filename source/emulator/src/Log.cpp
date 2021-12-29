@@ -167,6 +167,35 @@ void SetOutputFile(const String& file_name, Core::File::Encoding enc)
 
 } // namespace Log
 
+void emu_printf(const char* format, ...)
+{
+	EXIT_IF(!Log::g_log_initialized);
+
+	EXIT_IF(Log::g_mutex == nullptr);
+
+	Log::g_mutex->Lock();
+	{
+		va_list args {};
+		va_start(args, format);
+		String s;
+		s.Printf(format, args);
+		va_end(args);
+
+		if (!Log::g_colored_printf)
+		{
+			s = Log::RemoveColors(s);
+		}
+
+		::printf("%s", s.C_Str());
+
+		if (Log::g_dir == Log::Direction::File && Log::g_file != nullptr)
+		{
+			Log::g_file->Write(s);
+		}
+	}
+	Log::g_mutex->Unlock();
+}
+
 void printf(const char* format, ...)
 {
 	EXIT_IF(!Log::g_log_initialized);

@@ -16,27 +16,31 @@ struct VulkanMemory;
 class TextureObject: public GpuObject
 {
 public:
-	static constexpr int PARAM_DFMT    = 0;
-	static constexpr int PARAM_NFMT    = 1;
-	static constexpr int PARAM_WIDTH   = 2;
-	static constexpr int PARAM_HEIGHT  = 3;
-	static constexpr int PARAM_LEVELS  = 4;
-	static constexpr int PARAM_TILE    = 5;
-	static constexpr int PARAM_NEO     = 6;
-	static constexpr int PARAM_SWIZZLE = 7;
+	static constexpr int TEXTURE_USAGE_SAMPLED = 0;
+	static constexpr int TEXTURE_USAGE_STORAGE = 1;
 
-	TextureObject(uint32_t dfmt, uint32_t nfmt, uint32_t width, uint32_t height, uint32_t levels, bool htile, bool neo, uint32_t swizzle)
+	static constexpr int PARAM_DFMT_NFMT    = 0;
+	static constexpr int PARAM_PITCH        = 1;
+	static constexpr int PARAM_WIDTH_HEIGHT = 2;
+	static constexpr int PARAM_USAGE        = 3;
+	static constexpr int PARAM_LEVELS       = 4;
+	static constexpr int PARAM_TILE         = 5;
+	static constexpr int PARAM_NEO          = 6;
+	static constexpr int PARAM_SWIZZLE      = 7;
+
+	TextureObject(uint32_t dfmt, uint32_t nfmt, uint32_t width, uint32_t height, uint32_t pitch, uint32_t levels, bool htile, bool neo,
+	              uint32_t swizzle, uint32_t usage)
 	{
-		params[PARAM_DFMT]    = dfmt;
-		params[PARAM_NFMT]    = nfmt;
-		params[PARAM_WIDTH]   = width;
-		params[PARAM_HEIGHT]  = height;
-		params[PARAM_LEVELS]  = levels;
-		params[PARAM_TILE]    = htile ? 1 : 0;
-		params[PARAM_NEO]     = neo ? 1 : 0;
-		params[PARAM_SWIZZLE] = swizzle;
-		check_hash            = true;
-		type                  = Graphics::GpuMemoryObjectType::Texture;
+		params[PARAM_DFMT_NFMT]    = (static_cast<uint64_t>(dfmt) << 32u) | nfmt;
+		params[PARAM_PITCH]        = pitch;
+		params[PARAM_WIDTH_HEIGHT] = (static_cast<uint64_t>(width) << 32u) | height;
+		params[PARAM_USAGE]        = usage;
+		params[PARAM_LEVELS]       = levels;
+		params[PARAM_TILE]         = htile ? 1 : 0;
+		params[PARAM_NEO]          = neo ? 1 : 0;
+		params[PARAM_SWIZZLE]      = swizzle;
+		check_hash                 = true;
+		type                       = Graphics::GpuMemoryObjectType::Texture;
 	}
 
 	void* Create(GraphicContext* ctx, const uint64_t* vaddr, const uint64_t* size, int vaddr_num, VulkanMemory* mem) const override;

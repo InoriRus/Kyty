@@ -423,7 +423,7 @@ void TileConvertTiledToLinear(void* dst, const void* src, TileMode mode, uint32_
 	uint32_t padded_height[16] = {0};
 	uint32_t level_sizes[16]   = {0};
 
-	TileGetTextureSize(dfmt, nfmt, width, height, levels, true, neo, nullptr, level_sizes, padded_width, padded_height);
+	TileGetTextureSize(dfmt, nfmt, width, height, width, levels, true, neo, nullptr, level_sizes, padded_width, padded_height);
 
 	uint32_t mip_width  = width;
 	uint32_t mip_height = height;
@@ -558,45 +558,60 @@ void TileGetDepthSize(uint32_t width, uint32_t height, uint32_t z_format, uint32
 	*stencil_size = 0;
 }
 
-void TileGetVideoOutSize(uint32_t width, uint32_t height, bool tile, bool neo, uint32_t* size)
+void TileGetVideoOutSize(uint32_t width, uint32_t height, bool tile, bool neo, uint32_t* size, uint32_t* pitch)
 {
 	EXIT_IF(size == nullptr);
+	EXIT_IF(pitch == nullptr);
+
+	uint32_t ret_size  = 0;
+	uint32_t ret_pitch = 0;
 
 	if (width == 1920 && height == 1080 && tile && !neo)
 	{
-		*size = 8355840;
+		ret_size  = 8355840;
+		ret_pitch = 1920;
 	}
 	if (width == 1920 && height == 1080 && tile && neo)
 	{
-		*size = 8847360;
+		ret_size  = 8847360;
+		ret_pitch = 1920;
 	}
 	if (width == 1920 && height == 1080 && !tile && !neo)
 	{
-		*size = 8294400;
+		ret_size  = 8294400;
+		ret_pitch = 1920;
 	}
 	if (width == 1920 && height == 1080 && !tile && neo)
 	{
-		*size = 8294400;
+		ret_size  = 8294400;
+		ret_pitch = 1920;
 	}
 	if (width == 1280 && height == 720 && tile && !neo)
 	{
-		*size = 3932160;
+		ret_size  = 3932160;
+		ret_pitch = 1280;
 	}
 	if (width == 1280 && height == 720 && tile && neo)
 	{
-		*size = 3932160;
+		ret_size  = 3932160;
+		ret_pitch = 1280;
 	}
 	if (width == 1280 && height == 720 && !tile && !neo)
 	{
-		*size = 3686400;
+		ret_size  = 3686400;
+		ret_pitch = 1280;
 	}
 	if (width == 1280 && height == 720 && !tile && neo)
 	{
-		*size = 3686400;
+		ret_size  = 3686400;
+		ret_pitch = 1280;
 	}
+
+	*size  = ret_size;
+	*pitch = ret_pitch;
 }
 
-void TileGetTextureSize(uint32_t dfmt, uint32_t nfmt, uint32_t width, uint32_t height, uint32_t levels, bool tile, bool neo,
+void TileGetTextureSize(uint32_t dfmt, uint32_t nfmt, uint32_t width, uint32_t height, uint32_t pitch, uint32_t levels, bool tile, bool neo,
                         uint32_t* total_size, uint32_t* level_sizes, uint32_t* padded_width, uint32_t* padded_height)
 {
 	struct Padded
@@ -643,8 +658,8 @@ void TileGetTextureSize(uint32_t dfmt, uint32_t nfmt, uint32_t width, uint32_t h
 
 	for (const auto& i: infos)
 	{
-		if (i.dfmt == dfmt && i.nfmt == nfmt && i.width == width && i.height == height && i.levels >= levels && i.tile == tile &&
-		    i.neo == neo)
+		if (i.dfmt == dfmt && i.nfmt == nfmt && i.width == width && i.width == pitch && i.height == height && i.levels >= levels &&
+		    i.tile == tile && i.neo == neo)
 		{
 			for (uint32_t l = 0; l < levels; l++)
 			{
@@ -665,6 +680,20 @@ void TileGetTextureSize(uint32_t dfmt, uint32_t nfmt, uint32_t width, uint32_t h
 					padded_height[l] = i.padded[l].height;
 				}
 			}
+			return;
+		}
+	}
+
+	if (!tile && levels == 1 && dfmt == 10 && nfmt == 9)
+	{
+		uint32_t size = pitch * height * 4;
+		if (total_size != nullptr)
+		{
+			*total_size = size;
+		}
+		if (level_sizes != nullptr)
+		{
+			level_sizes[0] = size;
 		}
 	}
 }

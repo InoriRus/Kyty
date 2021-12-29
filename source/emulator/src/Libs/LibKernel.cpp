@@ -246,9 +246,18 @@ static int KYTY_SYSV_ABI write(int d, const char* str, int64_t size)
 
 	int size_int = static_cast<int>(size);
 
-	printf(FG_BRIGHT_MAGENTA "%.*s" DEFAULT, size_int, str);
+	emu_printf(FG_BRIGHT_MAGENTA "%.*s" DEFAULT, size_int, str);
 
 	return size_int;
+}
+
+static int64_t KYTY_SYSV_ABI read(int d, void* buf, uint64_t nbytes)
+{
+	// PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(d != 0);
+
+	return static_cast<int64_t>(strlen(std::fgets(static_cast<char*>(buf), static_cast<int>(nbytes), stdin)));
 }
 
 static int KYTY_SYSV_ABI KernelGetModuleInfoFromAddr(uint64_t addr, int n, ModuleInfo* r)
@@ -457,6 +466,7 @@ LIB_DEFINE(InitLibKernel_1_Equeue)
 	LIB_FUNC("D0OdFMjp46I", EventQueue::KernelCreateEqueue);
 	LIB_FUNC("jpFjmgAC5AE", EventQueue::KernelDeleteEqueue);
 	LIB_FUNC("fzyMKs9kim0", EventQueue::KernelWaitEqueue);
+	LIB_FUNC("vz+pg2zdopI", EventQueue::KernelGetEventUserData);
 }
 
 LIB_DEFINE(InitLibKernel_1_EventFlag)
@@ -481,6 +491,7 @@ LIB_DEFINE(InitLibKernel_1_Pthread)
 	LIB_FUNC("6UgtwV+0zb4", LibKernel::PthreadCreate);
 	LIB_FUNC("3PtV6p3QNX4", LibKernel::PthreadEqual);
 	LIB_FUNC("onNY9Byn-W8", LibKernel::PthreadJoin);
+	LIB_FUNC("4qGrR6eoP9Y", LibKernel::PthreadDetach);
 	LIB_FUNC("How7B8Oet6k", LibKernel::PthreadGetname);
 
 	LIB_FUNC("62KCwEMmzcM", LibKernel::PthreadAttrDestroy);
@@ -509,6 +520,7 @@ LIB_DEFINE(InitLibKernel_1_Pthread)
 	LIB_FUNC("QBi7HCK03hw", LibKernel::KernelClockGettime);
 	LIB_FUNC("ejekcaNQNq0", LibKernel::KernelGettimeofday);
 	LIB_FUNC("1j3S3n-tTW4", LibKernel::KernelGetTscFrequency);
+	LIB_FUNC("4J2sUJmuHZQ", LibKernel::KernelGetProcessTime);
 
 	LIB_FUNC("7H0iTOciTLo", LibKernel::pthread_mutex_lock_s);
 	LIB_FUNC("2Z+PpY6CaJg", LibKernel::pthread_mutex_unlock_s);
@@ -535,6 +547,7 @@ LIB_DEFINE(InitLibKernel_1)
 	LIB_FUNC("959qrazPIrg", LibKernel::KernelGetProcParam);
 	LIB_FUNC("p5EcQeEeJAE", LibKernel::KernelRtldSetApplicationHeapAPI);
 	LIB_FUNC("FxVZqBAA7ks", LibKernel::write);
+	LIB_FUNC("DRuBt2pvICk", LibKernel::read);
 	LIB_FUNC("f7KBOafysXo", LibKernel::KernelGetModuleInfoFromAddr);
 	LIB_FUNC("zE-wXIZjLoM", LibKernel::KernelDebugRaiseExceptionOnReleaseMode);
 	LIB_FUNC("OMDRKKAZ8I4", LibKernel::KernelDebugRaiseException);

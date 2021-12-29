@@ -19,9 +19,12 @@ LIB_DEFINE(InitVideoOut_1)
 	LIB_FUNC("i6-sR91Wt-4", VideoOut::VideoOutSetBufferAttribute);
 	LIB_FUNC("CBiu4mCE1DA", VideoOut::VideoOutSetFlipRate);
 	LIB_FUNC("HXzjK9yI30k", VideoOut::VideoOutAddFlipEvent);
+	LIB_FUNC("Xru92wHJRmg", VideoOut::VideoOutAddVblankEvent);
 	LIB_FUNC("w3BY+tAEiQY", VideoOut::VideoOutRegisterBuffers);
 	LIB_FUNC("U46NwOiJpys", VideoOut::VideoOutSubmitFlip);
 	LIB_FUNC("SbU3dwp80lQ", VideoOut::VideoOutGetFlipStatus);
+	LIB_FUNC("1FZBKy8HeNU", VideoOut::VideoOutGetVblankStatus);
+	LIB_FUNC("MTxxrOCeSig", VideoOut::VideoOutSetWindowModeMargins);
 }
 
 } // namespace Kyty::Libs

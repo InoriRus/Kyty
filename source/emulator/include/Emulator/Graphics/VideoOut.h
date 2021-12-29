@@ -19,12 +19,14 @@ namespace Kyty::Libs::VideoOut {
 struct VideoOutResolutionStatus;
 struct VideoOutBufferAttribute;
 struct VideoOutFlipStatus;
+struct VideoOutVblankStatus;
 
 struct VideoOutBufferImageInfo
 {
-	Graphics::VideoOutVulkanImage* image       = nullptr;
-	uint32_t                       index       = static_cast<uint32_t>(-1);
-	uint64_t                       buffer_size = 0;
+	Graphics::VideoOutVulkanImage* image        = nullptr;
+	uint32_t                       index        = static_cast<uint32_t>(-1);
+	uint64_t                       buffer_size  = 0;
+	uint64_t                       buffer_pitch = 0;
 };
 
 void                    VideoOutInit(uint32_t width, uint32_t height);
@@ -38,12 +40,17 @@ KYTY_SYSV_ABI void VideoOutSetBufferAttribute(VideoOutBufferAttribute* attribute
                                               uint32_t aspect_ratio, uint32_t width, uint32_t height, uint32_t pitch_in_pixel);
 KYTY_SYSV_ABI int  VideoOutSetFlipRate(int handle, int rate);
 KYTY_SYSV_ABI int  VideoOutAddFlipEvent(LibKernel::EventQueue::KernelEqueue eq, int handle, void* udata);
+KYTY_SYSV_ABI int  VideoOutAddVblankEvent(LibKernel::EventQueue::KernelEqueue eq, int handle, void* udata);
 KYTY_SYSV_ABI int  VideoOutRegisterBuffers(int handle, int start_index, void* const* addresses, int buffer_num,
                                            const VideoOutBufferAttribute* attribute);
 KYTY_SYSV_ABI int  VideoOutSubmitFlip(int handle, int index, int flip_mode, int64_t flip_arg);
 KYTY_SYSV_ABI int  VideoOutGetFlipStatus(int handle, VideoOutFlipStatus* status);
+KYTY_SYSV_ABI int  VideoOutGetVblankStatus(int handle, VideoOutVblankStatus* status);
+KYTY_SYSV_ABI int  VideoOutSetWindowModeMargins(int handle, int top, int bottom);
 
-bool FlipWindow(uint32_t micros);
+void VideoOutBeginVblank();
+void VideoOutEndVblank();
+bool VideoOutFlipWindow(uint32_t micros);
 
 } // namespace Kyty::Libs::VideoOut
 

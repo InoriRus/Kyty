@@ -35,6 +35,8 @@
 	    [[maybe_unused]] uint32_t dw, [[maybe_unused]] uint32_t num_dw
 #define KYTY_CP_OP_PARSER(f) static uint32_t f(KYTY_CP_OP_PARSER_ARGS)
 
+KYTY_ENUM_RANGE(Kyty::Libs::Graphics::ShaderInstructionType, 0, static_cast<int>(Kyty::Libs::Graphics::ShaderInstructionType::ZMax));
+
 namespace Kyty::Libs::Graphics {
 
 struct ShaderBinaryInfo
@@ -212,6 +214,7 @@ static String dbg_fmt_to_str(const ShaderInstruction& inst)
 		case ShaderInstructionFormat::Vdata4Vaddr2SvSoffsOffenIdxenFloat4: return U"Vdata4Vaddr2SvSoffsOffenIdxenFloat4"; break;
 		case ShaderInstructionFormat::Vdata3Vaddr3StSsDmask7: return U"Vdata4Vaddr3StSsDmask7"; break;
 		case ShaderInstructionFormat::Vdata4Vaddr3StSsDmaskF: return U"Vdata4Vaddr3StSsDmaskF"; break;
+		case ShaderInstructionFormat::Vdata4Vaddr3StDmaskF: return U"Vdata4Vaddr3StDmaskF"; break;
 		case ShaderInstructionFormat::SVdstSVsrc0SVsrc1: return U"SVdstSVsrc0SVsrc1"; break;
 		case ShaderInstructionFormat::VdstVsrc0Vsrc1Smask2: return U"VdstVsrc0Vsrc1Smask2"; break;
 		case ShaderInstructionFormat::VdstVsrc0Vsrc1Vsrc2: return U"VdstVsrc0Vsrc1Vsrc2"; break;
@@ -474,7 +477,32 @@ KYTY_SHADER_PARSER(shader_parse_sopc)
 
 KYTY_SHADER_PARSER(shader_parse_sopk)
 {
-	KYTY_NOT_IMPLEMENTED;
+	EXIT_IF(dst == nullptr);
+	EXIT_IF(src == nullptr);
+	EXIT_IF(buffer == nullptr || buffer < src);
+
+	uint32_t opcode = (buffer[0] >> 23u) & 0x1fu;
+	auto     imm    = static_cast<int16_t>(buffer[0] >> 0u & 0xffffu);
+	uint32_t sdst   = (buffer[0] >> 16u) & 0x7fu;
+
+	ShaderInstruction inst;
+	inst.pc  = pc;
+	inst.dst = operand_parse(sdst);
+
+	switch (opcode) // NOLINT
+	{
+		case 0x00:
+			inst.type              = ShaderInstructionType::SMovkI32;
+			inst.format            = ShaderInstructionFormat::SVdstSVsrc0;
+			inst.src[0].type       = ShaderOperandType::IntegerInlineConstant;
+			inst.src[0].constant.i = imm;
+			inst.src_num           = 1;
+			break;
+		default: printf("%s", dst->DbgDump().C_Str()); EXIT("unknown sopk opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 "\n", opcode, pc);
+	}
+
+	dst->GetInstructions().Add(inst);
+
 	return 1;
 }
 
@@ -659,8 +687,22 @@ KYTY_SHADER_PARSER(shader_parse_sop2)
 			inst.src[1].size = 2;
 			break;
 		case 0x0e: inst.type = ShaderInstructionType::SAndB32; break;
+		case 0x0f:
+			inst.type        = ShaderInstructionType::SAndB64;
+			inst.format      = ShaderInstructionFormat::Sdst2Ssrc02Ssrc12;
+			inst.dst.size    = 2;
+			inst.src[0].size = 2;
+			inst.src[1].size = 2;
+			break;
 		case 0x11:
 			inst.type        = ShaderInstructionType::SOrB64;
+			inst.format      = ShaderInstructionFormat::Sdst2Ssrc02Ssrc12;
+			inst.dst.size    = 2;
+			inst.src[0].size = 2;
+			inst.src[1].size = 2;
+			break;
+		case 0x13:
+			inst.type        = ShaderInstructionType::SXorB64;
 			inst.format      = ShaderInstructionFormat::Sdst2Ssrc02Ssrc12;
 			inst.dst.size    = 2;
 			inst.src[0].size = 2;
@@ -673,8 +715,29 @@ KYTY_SHADER_PARSER(shader_parse_sop2)
 			inst.src[0].size = 2;
 			inst.src[1].size = 2;
 			break;
+		case 0x17:
+			inst.type        = ShaderInstructionType::SOrn2B64;
+			inst.format      = ShaderInstructionFormat::Sdst2Ssrc02Ssrc12;
+			inst.dst.size    = 2;
+			inst.src[0].size = 2;
+			inst.src[1].size = 2;
+			break;
+		case 0x19:
+			inst.type        = ShaderInstructionType::SNandB64;
+			inst.format      = ShaderInstructionFormat::Sdst2Ssrc02Ssrc12;
+			inst.dst.size    = 2;
+			inst.src[0].size = 2;
+			inst.src[1].size = 2;
+			break;
 		case 0x1b:
 			inst.type        = ShaderInstructionType::SNorB64;
+			inst.format      = ShaderInstructionFormat::Sdst2Ssrc02Ssrc12;
+			inst.dst.size    = 2;
+			inst.src[0].size = 2;
+			inst.src[1].size = 2;
+			break;
+		case 0x1d:
+			inst.type        = ShaderInstructionType::SXnorB64;
 			inst.format      = ShaderInstructionFormat::Sdst2Ssrc02Ssrc12;
 			inst.dst.size    = 2;
 			inst.src[0].size = 2;
@@ -757,6 +820,7 @@ KYTY_SHADER_PARSER(shader_parse_vopc)
 		case 0xd2: inst.type = ShaderInstructionType::VCmpxEqU32; break;
 		case 0xd4: inst.type = ShaderInstructionType::VCmpxGtU32; break;
 		case 0xd5: inst.type = ShaderInstructionType::VCmpxNeU32; break;
+		case 0xd6: inst.type = ShaderInstructionType::VCmpxGeU32; break;
 		default: printf("%s", dst->DbgDump().C_Str()); EXIT("unknown vopc opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 "\n", opcode, pc);
 	}
 
@@ -1047,7 +1111,10 @@ KYTY_SHADER_PARSER(shader_parse_vop3)
 		case 0xc5: inst.type = ShaderInstructionType::VCmpNeU32; break;
 		case 0xc6: inst.type = ShaderInstructionType::VCmpGeU32; break;
 		case 0xc7: inst.type = ShaderInstructionType::VCmpTU32; break;
+		case 0xd2: inst.type = ShaderInstructionType::VCmpxEqU32; break;
 		case 0xd4: inst.type = ShaderInstructionType::VCmpxGtU32; break;
+		case 0xd5: inst.type = ShaderInstructionType::VCmpxNeU32; break;
+		case 0xd6: inst.type = ShaderInstructionType::VCmpxGeU32; break;
 		case 0x100:
 			inst.type        = ShaderInstructionType::VCndmaskB32;
 			inst.format      = ShaderInstructionFormat::VdstVsrc0Vsrc1Smask2;
@@ -1441,7 +1508,7 @@ KYTY_SHADER_PARSER(shader_parse_mimg)
 	EXIT_IF(buffer == nullptr || buffer < src);
 
 	uint32_t slc    = (buffer[0] >> 25u) & 0x1u;
-	uint32_t opcode = (buffer[0] >> 18u) & 0x1fu;
+	uint32_t opcode = (buffer[0] >> 18u) & 0x7fu;
 	uint32_t lwe    = (buffer[0] >> 17u) & 0x1u;
 	uint32_t tff    = (buffer[0] >> 16u) & 0x1u;
 	uint32_t r128   = (buffer[0] >> 15u) & 0x1u;
@@ -1474,23 +1541,33 @@ KYTY_SHADER_PARSER(shader_parse_mimg)
 	inst.src[1]  = operand_parse(srsrc * 4);
 	inst.src[2]  = operand_parse(ssamp * 4);
 
-	if (dmask == 0x7)
-	{
-		inst.format   = ShaderInstructionFormat::Vdata3Vaddr3StSsDmask7;
-		inst.dst.size = 3;
-	} else if (dmask == 0xf)
-	{
-		inst.format   = ShaderInstructionFormat::Vdata4Vaddr3StSsDmaskF;
-		inst.dst.size = 4;
-	}
-
-	switch (opcode) // NOLINT
+	switch (opcode)
 	{
 		case 0x00:
+			inst.type        = ShaderInstructionType::ImageLoad;
+			inst.src[0].size = 3;
+			inst.src[1].size = 8;
+			inst.src_num     = 2;
+			if (dmask == 0xf)
+			{
+				inst.format   = ShaderInstructionFormat::Vdata4Vaddr3StDmaskF;
+				inst.dst.size = 4;
+			}
+			break;
+		case 0x20:
 			inst.type        = ShaderInstructionType::ImageSample;
 			inst.src[0].size = 3;
 			inst.src[1].size = 8;
 			inst.src[2].size = 4;
+			if (dmask == 0x7)
+			{
+				inst.format   = ShaderInstructionFormat::Vdata3Vaddr3StSsDmask7;
+				inst.dst.size = 3;
+			} else if (dmask == 0xf)
+			{
+				inst.format   = ShaderInstructionFormat::Vdata4Vaddr3StSsDmaskF;
+				inst.dst.size = 4;
+			}
 			break;
 		default: printf("%s", dst->DbgDump().C_Str()); EXIT("unknown mimg opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 "\n", opcode, pc);
 	}
@@ -2222,7 +2299,7 @@ static void ShaderGetGdsPointer(ShaderGdsResources* info, int start_index, int s
 	info->pointers_num++;
 }
 
-static void ShaderCalcBindingIndices(ShaderResources* bind)
+static void ShaderCalcBindingIndices(ShaderBindResources* bind)
 {
 	int binding_index = 0;
 
@@ -2473,7 +2550,7 @@ void ShaderGetInputInfoCS(const ComputeShaderInfo* regs, ShaderComputeInputInfo*
 	ShaderCalcBindingIndices(&info->bind);
 }
 
-static void ShaderDbgDumpResources(const ShaderResources& bind)
+static void ShaderDbgDumpResources(const ShaderBindResources& bind)
 {
 	printf("\t descriptor_set_slot           = %u\n", bind.descriptor_set_slot);
 	printf("\t push_constant_offset          = %u\n", bind.push_constant_offset);
@@ -2835,44 +2912,33 @@ private:
 	String     m_file_name;
 };
 
-Vector<uint32_t> ShaderRecompileVS(const VertexShaderInfo* regs, const ShaderVertexInputInfo* input_info)
+ShaderCode ShaderParseVS(const VertexShaderInfo* regs)
 {
 	KYTY_PROFILER_FUNCTION(profiler::colors::Amber300);
 
-	String           source;
-	Vector<uint32_t> ret;
-	ShaderLogHelper  log("vs");
+	ShaderCode code;
+	code.SetType(ShaderType::Vertex);
 
 	if (regs->vs_embedded)
 	{
-		source = SpirvGetEmbeddedVs(regs->vs_embedded_id);
+		code.SetEmbedded(true);
+		code.SetEmbeddedId(regs->vs_embedded_id);
 	} else
 	{
 		const auto* src = reinterpret_cast<const uint32_t*>(regs->vs_regs.GetGpuAddress());
 
 		EXIT_NOT_IMPLEMENTED(src == nullptr);
 
-		vs_print("ShaderRecompileVS()", regs->vs_regs);
+		vs_print("ShaderParseVS()", regs->vs_regs);
 		vs_check(regs->vs_regs);
-
-		for (int i = 0; i < input_info->bind.storage_buffers.buffers_num; i++)
-		{
-			const auto& r = input_info->bind.storage_buffers.buffers[i];
-			EXIT_NOT_IMPLEMENTED(((r.Stride() * r.NumRecords()) & 0x3u) != 0);
-		}
 
 		const auto* header = GetBinaryInfo(src);
 
 		EXIT_NOT_IMPLEMENTED(header == nullptr);
 
-		bi_print("ShaderRecompileVS():ShaderBinaryInfo", *header);
-
-		ShaderCode code;
-		code.SetType(ShaderType::Vertex);
+		bi_print("ShaderParseVS():ShaderBinaryInfo", *header);
 
 		shader_parse(0, src, nullptr, &code);
-
-		log.DumpOriginalShader(code);
 
 		if (g_debug_printfs != nullptr)
 		{
@@ -2882,6 +2948,31 @@ Vector<uint32_t> ShaderRecompileVS(const VertexShaderInfo* regs, const ShaderVer
 				code.GetDebugPrintfs() = g_debug_printfs->At(index).cmds;
 			}
 		}
+	}
+
+	return code;
+}
+
+Vector<uint32_t> ShaderRecompileVS(const ShaderCode& code, const ShaderVertexInputInfo* input_info)
+{
+	KYTY_PROFILER_FUNCTION(profiler::colors::Amber300);
+
+	String           source;
+	Vector<uint32_t> ret;
+	ShaderLogHelper  log("vs");
+
+	if (code.IsEmbedded())
+	{
+		source = SpirvGetEmbeddedVs(code.GetEmbeddedId());
+	} else
+	{
+		for (int i = 0; i < input_info->bind.storage_buffers.buffers_num; i++)
+		{
+			const auto& r = input_info->bind.storage_buffers.buffers[i];
+			EXIT_NOT_IMPLEMENTED(((r.Stride() * r.NumRecords()) & 0x3u) != 0);
+		}
+
+		log.DumpOriginalShader(code);
 
 		source = SpirvGenerateSource(code, input_info, nullptr, nullptr);
 	}
@@ -2898,20 +2989,47 @@ Vector<uint32_t> ShaderRecompileVS(const VertexShaderInfo* regs, const ShaderVer
 	return ret;
 }
 
-Vector<uint32_t> ShaderRecompilePS(const PixelShaderInfo* regs, const ShaderPixelInputInfo* input_info)
+ShaderCode ShaderParsePS(const PixelShaderInfo* regs)
 {
 	KYTY_PROFILER_FUNCTION(profiler::colors::Blue300);
-
-	ShaderLogHelper log("ps");
 
 	const auto* src = reinterpret_cast<const uint32_t*>(regs->ps_regs.data_addr);
 
 	EXIT_NOT_IMPLEMENTED(src == nullptr);
 
-	ps_print("ShaderRecompilePS()", regs->ps_regs);
+	ps_print("ShaderParsePS()", regs->ps_regs);
 	ps_check(regs->ps_regs);
 
 	EXIT_NOT_IMPLEMENTED(regs->ps_regs.user_sgpr != regs->ps_user_sgpr.count);
+
+	const auto* header = GetBinaryInfo(src);
+
+	EXIT_NOT_IMPLEMENTED(header == nullptr);
+
+	bi_print("ShaderParsePS():ShaderBinaryInfo", *header);
+
+	ShaderCode code;
+	code.SetType(ShaderType::Pixel);
+
+	shader_parse(0, src, nullptr, &code);
+
+	if (g_debug_printfs != nullptr)
+	{
+		auto id = (static_cast<uint64_t>(header->hash0) << 32u) | header->crc32;
+		if (auto index = g_debug_printfs->Find(id, [](auto cmd, auto id) { return cmd.id == id; }); g_debug_printfs->IndexValid(index))
+		{
+			code.GetDebugPrintfs() = g_debug_printfs->At(index).cmds;
+		}
+	}
+
+	return code;
+}
+
+Vector<uint32_t> ShaderRecompilePS(const ShaderCode& code, const ShaderPixelInputInfo* input_info)
+{
+	KYTY_PROFILER_FUNCTION(profiler::colors::Blue300);
+
+	ShaderLogHelper log("ps");
 
 	for (uint32_t i = 0; i < input_info->input_num; i++)
 	{
@@ -2924,29 +3042,9 @@ Vector<uint32_t> ShaderRecompilePS(const PixelShaderInfo* regs, const ShaderPixe
 		EXIT_NOT_IMPLEMENTED(((r.Stride() * r.NumRecords()) & 0x3u) != 0);
 	}
 
-	const auto* header = GetBinaryInfo(src);
-
-	EXIT_NOT_IMPLEMENTED(header == nullptr);
-
-	bi_print("ShaderRecompilePS():ShaderBinaryInfo", *header);
-
-	ShaderCode code;
-	code.SetType(ShaderType::Pixel);
-
-	shader_parse(0, src, nullptr, &code);
-
 	Vector<uint32_t> ret;
 
 	log.DumpOriginalShader(code);
-
-	if (g_debug_printfs != nullptr)
-	{
-		auto id = (static_cast<uint64_t>(header->hash0) << 32u) | header->crc32;
-		if (auto index = g_debug_printfs->Find(id, [](auto cmd, auto id) { return cmd.id == id; }); g_debug_printfs->IndexValid(index))
-		{
-			code.GetDebugPrintfs() = g_debug_printfs->At(index).cmds;
-		}
-	}
 
 	auto source = SpirvGenerateSource(code, nullptr, input_info, nullptr);
 
@@ -2962,41 +3060,29 @@ Vector<uint32_t> ShaderRecompilePS(const PixelShaderInfo* regs, const ShaderPixe
 	return ret;
 }
 
-Vector<uint32_t> ShaderRecompileCS(const ComputeShaderInfo* regs, const ShaderComputeInputInfo* input_info)
+ShaderCode ShaderParseCS(const ComputeShaderInfo* regs)
 {
 	KYTY_PROFILER_FUNCTION(profiler::colors::CyanA700);
-
-	ShaderLogHelper log("cs");
 
 	const auto* src = reinterpret_cast<const uint32_t*>(regs->cs_regs.data_addr);
 
 	EXIT_NOT_IMPLEMENTED(src == nullptr);
 
-	cs_print("ShaderRecompileCS()", regs->cs_regs);
+	cs_print("ShaderParseCS()", regs->cs_regs);
 	cs_check(regs->cs_regs);
 
 	EXIT_NOT_IMPLEMENTED(regs->cs_regs.user_sgpr > regs->cs_user_sgpr.count);
-
-	for (int i = 0; i < input_info->bind.storage_buffers.buffers_num; i++)
-	{
-		const auto& r = input_info->bind.storage_buffers.buffers[i];
-		EXIT_NOT_IMPLEMENTED(((r.Stride() * r.NumRecords()) & 0x3u) != 0);
-	}
 
 	const auto* header = GetBinaryInfo(src);
 
 	EXIT_NOT_IMPLEMENTED(header == nullptr);
 
-	bi_print("ShaderRecompileCS():ShaderBinaryInfo", *header);
+	bi_print("ShaderParseCS():ShaderBinaryInfo", *header);
 
 	ShaderCode code;
 	code.SetType(ShaderType::Compute);
 
 	shader_parse(0, src, nullptr, &code);
-
-	Vector<uint32_t> ret;
-
-	log.DumpOriginalShader(code);
 
 	if (g_debug_printfs != nullptr)
 	{
@@ -3006,6 +3092,25 @@ Vector<uint32_t> ShaderRecompileCS(const ComputeShaderInfo* regs, const ShaderCo
 			code.GetDebugPrintfs() = g_debug_printfs->At(index).cmds;
 		}
 	}
+
+	return code;
+}
+
+Vector<uint32_t> ShaderRecompileCS(const ShaderCode& code, const ShaderComputeInputInfo* input_info)
+{
+	KYTY_PROFILER_FUNCTION(profiler::colors::CyanA700);
+
+	ShaderLogHelper log("cs");
+
+	for (int i = 0; i < input_info->bind.storage_buffers.buffers_num; i++)
+	{
+		const auto& r = input_info->bind.storage_buffers.buffers[i];
+		EXIT_NOT_IMPLEMENTED(((r.Stride() * r.NumRecords()) & 0x3u) != 0);
+	}
+
+	Vector<uint32_t> ret;
+
+	log.DumpOriginalShader(code);
 
 	auto source = SpirvGenerateSource(code, nullptr, nullptr, input_info);
 
@@ -3023,7 +3128,37 @@ Vector<uint32_t> ShaderRecompileCS(const ComputeShaderInfo* regs, const ShaderCo
 	return ret;
 }
 
-static void ShaderGetBindIds(ShaderId* ret, const ShaderResources& bind)
+static ShaderBindParameters ShaderUpdateBindInfo(const ShaderCode& code, const ShaderBindResources* bind)
+{
+	ShaderBindParameters p {};
+	if (bind->textures2D.textures_num > 0)
+	{
+		bool image_sample = code.HasAnyOf({ShaderInstructionType::ImageSample});
+		bool image_load   = code.HasAnyOf({ShaderInstructionType::ImageLoad});
+
+		EXIT_NOT_IMPLEMENTED(image_sample && image_load);
+
+		p.textures2D_without_sampler = image_load;
+	}
+	return p;
+}
+
+ShaderBindParameters ShaderGetBindParametersVS(const ShaderCode& code, const ShaderVertexInputInfo* input_info)
+{
+	return ShaderUpdateBindInfo(code, &input_info->bind);
+}
+
+ShaderBindParameters ShaderGetBindParametersPS(const ShaderCode& code, const ShaderPixelInputInfo* input_info)
+{
+	return ShaderUpdateBindInfo(code, &input_info->bind);
+}
+
+ShaderBindParameters ShaderGetBindParametersCS(const ShaderCode& code, const ShaderComputeInputInfo* input_info)
+{
+	return ShaderUpdateBindInfo(code, &input_info->bind);
+}
+
+static void ShaderGetBindIds(ShaderId* ret, const ShaderBindResources& bind)
 {
 	ret->ids.Add(bind.storage_buffers.buffers_num);
 

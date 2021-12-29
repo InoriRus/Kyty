@@ -21,14 +21,16 @@ public:
 	static constexpr int PARAM_HEIGHT = 2;
 	static constexpr int PARAM_TILED  = 3;
 	static constexpr int PARAM_NEO    = 4;
+	static constexpr int PARAM_PITCH  = 5;
 
-	explicit VideoOutBufferObject(uint32_t pixel_format, uint32_t width, uint32_t height, bool tiled, bool neo)
+	explicit VideoOutBufferObject(uint32_t pixel_format, uint32_t width, uint32_t height, bool tiled, bool neo, uint32_t pitch)
 	{
 		params[PARAM_FORMAT] = pixel_format;
 		params[PARAM_WIDTH]  = width;
 		params[PARAM_HEIGHT] = height;
 		params[PARAM_TILED]  = tiled ? 1 : 0;
 		params[PARAM_NEO]    = neo ? 1 : 0;
+		params[PARAM_PITCH]  = pitch;
 		check_hash           = true;
 		type                 = Graphics::GpuMemoryObjectType::VideoOutBuffer;
 	}

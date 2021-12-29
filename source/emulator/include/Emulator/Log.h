@@ -77,6 +77,7 @@ String RemoveColors(const String& str);
 } // namespace Log
 
 void printf(const char* format, ...) KYTY_FORMAT_PRINTF(1, 2);
+void emu_printf(const char* format, ...) KYTY_FORMAT_PRINTF(1, 2);
 
 } // namespace Kyty
 

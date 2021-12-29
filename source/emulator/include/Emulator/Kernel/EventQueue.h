@@ -22,9 +22,11 @@ constexpr int16_t KERNEL_EVFILT_HRTIMER   = -15;
 class KernelEqueuePrivate;
 struct KernelEqueueEvent;
 
+using KernelEqueue = KernelEqueuePrivate*;
+
 using trigger_func_t = void (*)(KernelEqueueEvent* event, void* trigger_data);
 using reset_func_t   = void (*)(KernelEqueueEvent* event);
-using delete_func_t  = void (*)(KernelEqueueEvent* event);
+using delete_func_t  = void (*)(KernelEqueue eq, KernelEqueueEvent* event);
 
 struct KernelEvent
 {
@@ -38,10 +40,10 @@ struct KernelEvent
 
 struct KernelFilter
 {
-	void*          data         = nullptr;
-	trigger_func_t trigger_func = nullptr;
-	reset_func_t   reset_func   = nullptr;
-	delete_func_t  delete_func  = nullptr;
+	void*          data              = nullptr;
+	trigger_func_t trigger_func      = nullptr;
+	reset_func_t   reset_func        = nullptr;
+	delete_func_t  delete_event_func = nullptr;
 };
 
 struct KernelEqueueEvent
@@ -50,8 +52,6 @@ struct KernelEqueueEvent
 	KernelEvent  event;
 	KernelFilter filter;
 };
-
-using KernelEqueue = KernelEqueuePrivate*;
 
 int KYTY_SYSV_ABI KernelAddEvent(KernelEqueue eq, const KernelEqueueEvent& event);
 int KYTY_SYSV_ABI KernelTriggerEvent(KernelEqueue eq, uintptr_t ident, int16_t filter, void* trigger_data);

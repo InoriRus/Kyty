@@ -21,6 +21,7 @@ void     GraphicsRunWait();
 void     GraphicsRunDone();
 void     GraphicsRunDingDong(uint32_t ring_id, uint32_t offset_dw);
 int      GraphicsRunGetFrameNum();
+bool     GraphicsRunAreSubmitsAllowed();
 
 } // namespace Kyty::Libs::Graphics
 

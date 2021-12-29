@@ -34,7 +34,12 @@ public:
 	void* GetObject(GraphicContext* ctx, const uint64_t* vaddr, const uint64_t* size, int vaddr_num, const GpuObject& info);
 	void  ResetHash(GraphicContext* ctx, uint64_t* vaddr, uint64_t* size, int vaddr_num, GpuMemoryObjectType type);
 	void  FrameDone();
-	void  WriteBack(GraphicContext* ctx);
+
+	// Sync: GPU -> CPU
+	void WriteBack(GraphicContext* ctx);
+
+	// Sync: CPU -> GPU
+	void Flush(GraphicContext* ctx);
 
 	void DbgDump();
 
@@ -387,7 +392,17 @@ void* GpuMemory::GetObject(GraphicContext* ctx, const uint64_t* vaddr, const uin
 
 		for (int vi = 0; vi < vaddr_num; vi++)
 		{
-			EXIT_NOT_IMPLEMENTED(!h.free && vaddr_overlap(h.vaddr, h.size, h.overlaps_num, vaddr[vi], size[vi]));
+			if (!h.free && vaddr_overlap(h.vaddr, h.size, h.overlaps_num, vaddr[vi], size[vi]))
+			{
+				if (h.overlaps_num == 1 &&
+				    (h.overlaps[0].type == GpuMemoryObjectType::Label || h.overlaps[0].type == GpuMemoryObjectType::StorageBuffer))
+				{
+					Free(ctx, h);
+				} else
+				{
+					KYTY_NOT_IMPLEMENTED;
+				}
+			}
 		}
 	}
 
@@ -641,6 +656,25 @@ void GpuMemory::WriteBack(GraphicContext* ctx)
 	}
 }
 
+void GpuMemory::Flush(GraphicContext* ctx)
+{
+	Core::LockGuard lock(m_mutex);
+
+	for (auto& h: m_objects)
+	{
+		if (!h.free)
+		{
+			for (int oi = 0; oi < h.overlaps_num; oi++)
+			{
+				auto& o = h.overlaps[oi];
+
+				EXIT_IF(o.update_func == nullptr);
+				o.update_func(ctx, o.params, o.obj, h.vaddr, h.size, h.vaddr_num);
+			}
+		}
+	}
+}
+
 void GpuMemory::DbgDump()
 {
 	Core::LockGuard lock(m_mutex);
@@ -756,11 +790,13 @@ void GpuMemoryDbgDump()
 	g_gpu_memory->DbgDump();
 }
 
-void GpuMemoryFlush()
+void GpuMemoryFlush(GraphicContext* ctx)
 {
 	EXIT_IF(g_gpu_memory == nullptr);
+	EXIT_IF(ctx == nullptr);
 
-	// TODO(): update vulkan objects after CPU-drawing
+	// update vulkan objects after CPU-drawing
+	g_gpu_memory->Flush(ctx);
 }
 
 void GpuMemoryFrameDone()
@@ -775,6 +811,7 @@ void GpuMemoryWriteBack(GraphicContext* ctx)
 	EXIT_IF(g_gpu_memory == nullptr);
 	EXIT_IF(ctx == nullptr);
 
+	// update CPU memory after GPU-drawing
 	g_gpu_memory->WriteBack(ctx);
 }
 

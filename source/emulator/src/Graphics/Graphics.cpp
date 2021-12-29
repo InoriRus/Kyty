@@ -89,6 +89,7 @@ int KYTY_SYSV_ABI GraphicsSetPsShader350(uint32_t* cmd, uint64_t size, const uin
 {
 	PRINT_NAME();
 
+	EXIT_NOT_IMPLEMENTED(ps_regs == nullptr);
 	EXIT_NOT_IMPLEMENTED(size < sizeof(PsStageRegisters) / 12 + 1);
 
 	printf("\t cmd_buffer      = %016" PRIx64 "\n", reinterpret_cast<uint64_t>(cmd));
@@ -323,19 +324,20 @@ int KYTY_SYSV_ABI GraphicsSubmitDone()
 	PRINT_NAME();
 
 	GraphicsRunDone();
-	// GpuMemoryFrameDone();
-	// GpuMemoryDbgDump();
 
 	return OK;
+}
+
+int KYTY_SYSV_ABI GraphicsAreSubmitsAllowed()
+{
+	return GraphicsRunAreSubmitsAllowed() ? 1 : 0;
 }
 
 void KYTY_SYSV_ABI GraphicsFlushMemory()
 {
 	PRINT_NAME();
 
-	GraphicsRunDone();
-
-	EXIT("1");
+	GpuMemoryFlush(WindowGetGraphicContext());
 }
 
 int KYTY_SYSV_ABI GraphicsAddEqEvent(LibKernel::EventQueue::KernelEqueue eq, int id, void* udata)

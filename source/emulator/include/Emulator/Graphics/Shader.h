@@ -40,11 +40,13 @@ enum class ShaderInstructionType
 	DsAppend,
 	DsConsume,
 	Exp,
+	ImageLoad,
 	ImageSample,
 	SAddcU32,
 	SAddI32,
 	SAddU32,
 	SAndB32,
+	SAndB64,
 	SAndn2B64,
 	SAndSaveexecB64,
 	SBfmB32,
@@ -76,25 +78,28 @@ enum class ShaderInstructionType
 	SLshrB32,
 	SMovB32,
 	SMovB64,
+	SMovkI32,
 	SMulI32,
+	SNandB64,
 	SNorB64,
 	SOrB64,
+	SOrn2B64,
 	SSetpcB64,
 	SSwappcB64,
 	SWaitcnt,
 	SWqmB64,
+	SXnorB64,
+	SXorB64,
 	TBufferLoadFormatXyzw,
 	VAddI32,
 	VAndB32,
-	VOrB32,
-	VXorB32,
 	VAshrI32,
 	VAshrrevI32,
 	VBcntU32B32,
 	VBfeU32,
-	VBfrevB32,
-	VCvtF32I32,
 	VBfmB32,
+	VBfrevB32,
+	VCeilF32,
 	VCmpEqF32,
 	VCmpEqI32,
 	VCmpEqU32,
@@ -128,10 +133,13 @@ enum class ShaderInstructionType
 	VCmpTU32,
 	VCmpUF32,
 	VCmpxEqU32,
+	VCmpxGeU32,
 	VCmpxGtU32,
 	VCmpxNeU32,
 	VCndmaskB32,
+	VCosF32,
 	VCvtF32F16,
+	VCvtF32I32,
 	VCvtF32U32,
 	VCvtF32Ubyte0,
 	VCvtF32Ubyte1,
@@ -139,6 +147,9 @@ enum class ShaderInstructionType
 	VCvtF32Ubyte3,
 	VCvtPkrtzF16F32,
 	VCvtU32F32,
+	VExpF32,
+	VFloorF32,
+	VFractF32,
 	VInterpP1F32,
 	VInterpP2F32,
 	VLshlB32,
@@ -161,21 +172,19 @@ enum class ShaderInstructionType
 	VMulLoU32,
 	VMulU32U24,
 	VNotB32,
+	VOrB32,
 	VRcpF32,
-	VRsqF32,
-	VCeilF32,
-	VFractF32,
 	VRndneF32,
-	VTruncF32,
-	VExpF32,
-	VCosF32,
-	VFloorF32,
+	VRsqF32,
 	VSadU32,
 	VSqrtF32,
 	VSubF32,
 	VSubI32,
 	VSubrevF32,
 	VSubrevI32,
+	VTruncF32,
+	VXorB32,
+	ZMax
 };
 
 namespace ShaderInstructionFormat {
@@ -274,6 +283,7 @@ enum Format : uint64_t
 	Vdata4Vaddr2SvSoffsOffenIdxenFloat4 = FormatDefine({DA4, S0A2, S1A4, S2, Offen, Idxen, Float4}),
 	Vdata3Vaddr3StSsDmask7              = FormatDefine({DA3, S0A3, S1A8, S2A4, Dmask7}),
 	Vdata4Vaddr3StSsDmaskF              = FormatDefine({DA4, S0A3, S1A8, S2A4, DmaskF}),
+	Vdata4Vaddr3StDmaskF                = FormatDefine({DA4, S0A3, S1A8, DmaskF}),
 	VdstVsrc0Vsrc1Smask2                = FormatDefine({D, S0, S1, S2A2}),
 	VdstVsrc0Vsrc1Vsrc2                 = FormatDefine({D, S0, S1, S2}),
 	VdstVsrcAttrChan                    = FormatDefine({D, S0, Attr}),
@@ -382,11 +392,18 @@ public:
 		                   { return m_instructions.Contains(type, [](auto inst, auto type) { return inst.type == type; }); });
 	}
 
+	[[nodiscard]] bool     IsEmbedded() const { return m_embedded; }
+	void                   SetEmbedded(bool embedded) { this->m_embedded = embedded; }
+	[[nodiscard]] uint32_t GetEmbeddedId() const { return m_embedded_id; }
+	void                   SetEmbeddedId(uint32_t embedded_id) { m_embedded_id = embedded_id; }
+
 private:
 	Vector<ShaderInstruction> m_instructions;
 	Vector<ShaderLabel>       m_labels;
 	ShaderType                m_type = ShaderType::Unknown;
 	Vector<ShaderDebugPrintf> m_debug_printfs;
+	uint32_t                  m_embedded_id = 0;
+	bool                      m_embedded    = false;
 };
 
 struct ShaderId
@@ -562,9 +579,8 @@ struct ShaderStorageResources
 	int                  slots[BUFFERS_MAX]          = {0};
 	int                  start_register[BUFFERS_MAX] = {0};
 	bool                 extended[BUFFERS_MAX]       = {};
-	// int                  extended_index[BUFFERS_MAX] = {0};
-	int buffers_num   = 0;
-	int binding_index = 0;
+	int                  buffers_num                 = 0;
+	int                  binding_index               = 0;
 };
 
 struct ShaderTextureResources
@@ -574,9 +590,8 @@ struct ShaderTextureResources
 	ShaderTextureResource textures[RES_MAX];
 	int                   start_register[RES_MAX] = {0};
 	bool                  extended[RES_MAX]       = {};
-	// int                   extended_index[RES_MAX] = {0};
-	int textures_num  = 0;
-	int binding_index = 0;
+	int                   textures_num            = 0;
+	int                   binding_index           = 0;
 };
 
 struct ShaderSamplerResources
@@ -586,9 +601,8 @@ struct ShaderSamplerResources
 	ShaderSamplerResource samplers[RES_MAX];
 	int                   start_register[RES_MAX] = {0};
 	bool                  extended[RES_MAX]       = {};
-	// int                   extended_index[RES_MAX] = {0};
-	int samplers_num  = 0;
-	int binding_index = 0;
+	int                   samplers_num            = 0;
+	int                   binding_index           = 0;
 };
 
 struct ShaderGdsResources
@@ -599,21 +613,19 @@ struct ShaderGdsResources
 	int               slots[POINTERS_MAX]          = {0};
 	int               start_register[POINTERS_MAX] = {0};
 	bool              extended[POINTERS_MAX]       = {};
-	// int               extended_index[POINTERS_MAX] = {0};
-	int pointers_num  = 0;
-	int binding_index = 0;
+	int               pointers_num                 = 0;
+	int               binding_index                = 0;
 };
 
 struct ShaderExtendedResources
 {
-	bool used = false;
-	int  slot = 0;
-	// int                    dw_num         = 0;
+	bool                   used           = false;
+	int                    slot           = 0;
 	int                    start_register = 0;
 	ShaderExtendedResource data;
 };
 
-struct ShaderResources
+struct ShaderBindResources
 {
 	uint32_t                push_constant_offset = 0;
 	uint32_t                push_constant_size   = 0;
@@ -623,6 +635,11 @@ struct ShaderResources
 	ShaderSamplerResources  samplers;
 	ShaderGdsResources      gds_pointers;
 	ShaderExtendedResources extended;
+};
+
+struct ShaderBindParameters
+{
+	bool textures2D_without_sampler = false;
 };
 
 struct ShaderVertexInputInfo
@@ -636,43 +653,49 @@ struct ShaderVertexInputInfo
 	ShaderVertexInputBuffer buffers[RES_MAX];
 	int                     buffers_num  = 0;
 	int                     export_count = 0;
-	ShaderResources         bind;
+	ShaderBindResources     bind;
 };
 
 struct ShaderComputeInputInfo
 {
-	uint32_t        threads_num[3]     = {0, 0, 0};
-	bool            group_id[3]        = {false, false, false};
-	int             thread_ids_num     = 0;
-	int             workgroup_register = 0;
-	ShaderResources bind;
+	uint32_t            threads_num[3]     = {0, 0, 0};
+	bool                group_id[3]        = {false, false, false};
+	int                 thread_ids_num     = 0;
+	int                 workgroup_register = 0;
+	ShaderBindResources bind;
 };
 
 struct ShaderPixelInputInfo
 {
-	uint32_t        interpolator_settings[32] = {0};
-	uint32_t        input_num                 = 0;
-	uint8_t         target_output_mode[8]     = {};
-	bool            ps_pos_xy                 = false;
-	bool            ps_pixel_kill_enable      = false;
-	ShaderResources bind;
+	uint32_t            interpolator_settings[32] = {0};
+	uint32_t            input_num                 = 0;
+	uint8_t             target_output_mode[8]     = {};
+	bool                ps_pos_xy                 = false;
+	bool                ps_pixel_kill_enable      = false;
+	ShaderBindResources bind;
 };
 
-void             ShaderGetInputInfoVS(const VertexShaderInfo* regs, ShaderVertexInputInfo* info);
-void             ShaderGetInputInfoPS(const PixelShaderInfo* regs, const ShaderVertexInputInfo* vs_info, ShaderPixelInputInfo* ps_info);
-void             ShaderGetInputInfoCS(const ComputeShaderInfo* regs, ShaderComputeInputInfo* info);
-void             ShaderDbgDumpInputInfo(const ShaderVertexInputInfo* info);
-void             ShaderDbgDumpInputInfo(const ShaderPixelInputInfo* info);
-void             ShaderDbgDumpInputInfo(const ShaderComputeInputInfo* info);
-ShaderId         ShaderGetIdVS(const VertexShaderInfo* regs, const ShaderVertexInputInfo* input_info);
-ShaderId         ShaderGetIdPS(const PixelShaderInfo* regs, const ShaderPixelInputInfo* input_info);
-ShaderId         ShaderGetIdCS(const ComputeShaderInfo* regs, const ShaderComputeInputInfo* input_info);
-Vector<uint32_t> ShaderRecompileVS(const VertexShaderInfo* regs, const ShaderVertexInputInfo* input_info);
-Vector<uint32_t> ShaderRecompilePS(const PixelShaderInfo* regs, const ShaderPixelInputInfo* input_info);
-Vector<uint32_t> ShaderRecompileCS(const ComputeShaderInfo* regs, const ShaderComputeInputInfo* input_info);
-bool             ShaderIsDisabled(uint64_t addr);
-void             ShaderDisable(uint64_t id);
-void             ShaderInjectDebugPrintf(uint64_t id, const ShaderDebugPrintf& cmd);
+void                 ShaderGetInputInfoVS(const VertexShaderInfo* regs, ShaderVertexInputInfo* info);
+void                 ShaderGetInputInfoPS(const PixelShaderInfo* regs, const ShaderVertexInputInfo* vs_info, ShaderPixelInputInfo* ps_info);
+void                 ShaderGetInputInfoCS(const ComputeShaderInfo* regs, ShaderComputeInputInfo* info);
+void                 ShaderDbgDumpInputInfo(const ShaderVertexInputInfo* info);
+void                 ShaderDbgDumpInputInfo(const ShaderPixelInputInfo* info);
+void                 ShaderDbgDumpInputInfo(const ShaderComputeInputInfo* info);
+ShaderId             ShaderGetIdVS(const VertexShaderInfo* regs, const ShaderVertexInputInfo* input_info);
+ShaderId             ShaderGetIdPS(const PixelShaderInfo* regs, const ShaderPixelInputInfo* input_info);
+ShaderId             ShaderGetIdCS(const ComputeShaderInfo* regs, const ShaderComputeInputInfo* input_info);
+ShaderCode           ShaderParseVS(const VertexShaderInfo* regs);
+ShaderCode           ShaderParsePS(const PixelShaderInfo* regs);
+ShaderCode           ShaderParseCS(const ComputeShaderInfo* regs);
+ShaderBindParameters ShaderGetBindParametersVS(const ShaderCode& code, const ShaderVertexInputInfo* input_info);
+ShaderBindParameters ShaderGetBindParametersPS(const ShaderCode& code, const ShaderPixelInputInfo* input_info);
+ShaderBindParameters ShaderGetBindParametersCS(const ShaderCode& code, const ShaderComputeInputInfo* input_info);
+Vector<uint32_t>     ShaderRecompileVS(const ShaderCode& code, const ShaderVertexInputInfo* input_info);
+Vector<uint32_t>     ShaderRecompilePS(const ShaderCode& code, const ShaderPixelInputInfo* input_info);
+Vector<uint32_t>     ShaderRecompileCS(const ShaderCode& code, const ShaderComputeInputInfo* input_info);
+bool                 ShaderIsDisabled(uint64_t addr);
+void                 ShaderDisable(uint64_t id);
+void                 ShaderInjectDebugPrintf(uint64_t id, const ShaderDebugPrintf& cmd);
 
 } // namespace Kyty::Libs::Graphics
 

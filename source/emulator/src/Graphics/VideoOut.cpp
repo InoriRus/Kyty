@@ -5,6 +5,7 @@
 #include "Kyty/Core/LinkList.h"
 #include "Kyty/Core/String.h"
 #include "Kyty/Core/Threads.h"
+#include "Kyty/Core/Vector.h"
 
 #include "Emulator/Common.h"
 #include "Emulator/Config.h"
@@ -30,7 +31,9 @@ LIB_NAME("VideoOut", "VideoOut");
 
 namespace EventQueue = LibKernel::EventQueue;
 
-constexpr int VIDEO_OUT_EVENT_FLIP = 0;
+constexpr int VIDEO_OUT_EVENT_FLIP             = 0;
+constexpr int VIDEO_OUT_EVENT_VBLANK           = 1;
+constexpr int VIDEO_OUT_EVENT_PRE_VBLANK_START = 2;
 
 struct VideoOutResolutionStatus
 {
@@ -72,6 +75,16 @@ struct VideoOutFlipStatus
 	uint32_t reserved1      = 0;
 };
 
+struct VideoOutVblankStatus
+{
+	uint64_t count       = 0;
+	uint64_t processTime = 0;
+	uint64_t tsc         = 0;
+	uint64_t reserved[1] = {0};
+	uint8_t  flags       = 0;
+	uint8_t  pad1[7]     = {};
+};
+
 struct VideoOutBufferSet
 {
 	VideoOutBufferAttribute attr        = {};
@@ -84,19 +97,25 @@ struct VideoOutBufferInfo
 	void*                          buffer        = nullptr;
 	Graphics::VideoOutVulkanImage* buffer_vulkan = nullptr;
 	uint64_t                       buffer_size   = 0;
+	uint64_t                       buffer_pitch  = 0;
 	int                            set_id        = 0;
 };
 
 struct VideoOutConfig
 {
-	VideoOutResolutionStatus resolution;
-	bool                     opened    = false;
-	int                      flip_rate = 0;
-	EventQueue::KernelEqueue flip_eq   = nullptr;
-	VideoOutFlipStatus       flip_status;
-	VideoOutBufferInfo       buffers[16];
-	VideoOutBufferSet        buffers_sets[16];
-	int                      buffers_sets_num = 0;
+	Core::Mutex                      mutex;
+	VideoOutResolutionStatus         resolution;
+	bool                             opened    = false;
+	int                              flip_rate = 0;
+	Vector<EventQueue::KernelEqueue> flip_eqs;
+	Vector<EventQueue::KernelEqueue> pre_vblank_eqs;
+	Vector<EventQueue::KernelEqueue> vblank_eqs;
+	VideoOutFlipStatus               flip_status;
+	VideoOutVblankStatus             pre_vblank_status;
+	VideoOutVblankStatus             vblank_status;
+	VideoOutBufferInfo               buffers[16];
+	VideoOutBufferSet                buffers_sets[16];
+	int                              buffers_sets_num = 0;
 };
 
 class FlipQueue
@@ -158,6 +177,9 @@ public:
 
 	FlipQueue& GetFlipQueue() { return m_flip_queue; }
 
+	void VblankBegin();
+	void VblankEnd();
+
 private:
 	Core::Mutex               m_mutex;
 	VideoOutConfig            m_video_out_ctx[VIDEO_OUT_NUM_MAX];
@@ -167,8 +189,11 @@ private:
 
 static VideoOutContext* g_video_out_context = nullptr;
 
-static uint64_t calc_buffer_size(const VideoOutBufferAttribute* attribute)
+static void calc_buffer_size(const VideoOutBufferAttribute* attribute, uint64_t* size, uint64_t* pitch)
 {
+	EXIT_IF(size == nullptr);
+	EXIT_IF(pitch == nullptr);
+
 	bool     tile   = attribute->tilingMode == 0;
 	bool     neo    = Config::IsNeo();
 	uint32_t width  = attribute->width;
@@ -179,10 +204,12 @@ static uint64_t calc_buffer_size(const VideoOutBufferAttribute* attribute)
 	EXIT_NOT_IMPLEMENTED(attribute->aspectRatio != 0);
 	EXIT_NOT_IMPLEMENTED(attribute->pixelFormat != 0x80000000);
 
-	uint32_t size = 0;
-	Graphics::TileGetVideoOutSize(width, height, tile, neo, &size);
+	uint32_t size32  = 0;
+	uint32_t pitch32 = 0;
+	Graphics::TileGetVideoOutSize(width, height, tile, neo, &size32, &pitch32);
 
-	return size;
+	*size  = size32;
+	*pitch = pitch32;
 }
 
 void VideoOutInit(uint32_t width, uint32_t height)
@@ -220,7 +247,9 @@ int VideoOutContext::Open()
 		}
 	}
 
-	EXIT_IF(m_video_out_ctx[handle].flip_eq != nullptr);
+	EXIT_IF(!m_video_out_ctx[handle].flip_eqs.IsEmpty());
+	EXIT_IF(!m_video_out_ctx[handle].pre_vblank_eqs.IsEmpty());
+	EXIT_IF(!m_video_out_ctx[handle].vblank_eqs.IsEmpty());
 	EXIT_IF(m_video_out_ctx[handle].flip_rate != 0);
 
 	m_video_out_ctx[handle].opened                    = true;
@@ -228,6 +257,8 @@ int VideoOutContext::Open()
 	m_video_out_ctx[handle].flip_status.flipArg       = -1;
 	m_video_out_ctx[handle].flip_status.currentBuffer = -1;
 	m_video_out_ctx[handle].flip_status.count         = 0;
+	m_video_out_ctx[handle].pre_vblank_status         = VideoOutVblankStatus();
+	m_video_out_ctx[handle].vblank_status             = VideoOutVblankStatus();
 
 	return handle;
 }
@@ -241,11 +272,35 @@ void VideoOutContext::Close(int handle)
 
 	m_video_out_ctx[handle].opened = false;
 
-	if (m_video_out_ctx[handle].flip_eq != nullptr)
+	m_video_out_ctx[handle].mutex.Lock();
+	for (auto& flip_eq: m_video_out_ctx[handle].flip_eqs)
 	{
-		EventQueue::KernelDeleteEvent(m_video_out_ctx[handle].flip_eq, VIDEO_OUT_EVENT_FLIP, EventQueue::KERNEL_EVFILT_VIDEO_OUT);
-		EXIT_IF(m_video_out_ctx[handle].flip_eq != nullptr);
+		if (flip_eq != nullptr)
+		{
+			auto result = EventQueue::KernelDeleteEvent(flip_eq, VIDEO_OUT_EVENT_FLIP, EventQueue::KERNEL_EVFILT_VIDEO_OUT);
+			EXIT_NOT_IMPLEMENTED(result != OK);
+		}
 	}
+	m_video_out_ctx[handle].flip_eqs.Clear();
+	for (auto& vblank_eq: m_video_out_ctx[handle].pre_vblank_eqs)
+	{
+		if (vblank_eq != nullptr)
+		{
+			auto result = EventQueue::KernelDeleteEvent(vblank_eq, VIDEO_OUT_EVENT_VBLANK, EventQueue::KERNEL_EVFILT_VIDEO_OUT);
+			EXIT_NOT_IMPLEMENTED(result != OK);
+		}
+	}
+	m_video_out_ctx[handle].pre_vblank_eqs.Clear();
+	for (auto& vblank_eq: m_video_out_ctx[handle].vblank_eqs)
+	{
+		if (vblank_eq != nullptr)
+		{
+			auto result = EventQueue::KernelDeleteEvent(vblank_eq, VIDEO_OUT_EVENT_PRE_VBLANK_START, EventQueue::KERNEL_EVFILT_VIDEO_OUT);
+			EXIT_NOT_IMPLEMENTED(result != OK);
+		}
+	}
+	m_video_out_ctx[handle].vblank_eqs.Clear();
+	m_video_out_ctx[handle].mutex.Unlock();
 
 	m_video_out_ctx[handle].flip_rate = 0;
 
@@ -270,6 +325,62 @@ VideoOutConfig* VideoOutContext::Get(int handle)
 	return m_video_out_ctx + handle;
 }
 
+void VideoOutContext::VblankBegin()
+{
+	Core::LockGuard lock(m_mutex);
+
+	for (int i = 1; i < VIDEO_OUT_NUM_MAX; i++)
+	{
+		auto& ctx = m_video_out_ctx[i];
+		if (ctx.opened)
+		{
+			ctx.mutex.Lock();
+			ctx.pre_vblank_status.count++;
+			ctx.pre_vblank_status.processTime = LibKernel::KernelGetProcessTime();
+			ctx.pre_vblank_status.tsc         = LibKernel::KernelReadTsc();
+
+			for (auto& vblank_eq: ctx.pre_vblank_eqs)
+			{
+				if (vblank_eq != nullptr)
+				{
+					auto result = EventQueue::KernelTriggerEvent(vblank_eq, VIDEO_OUT_EVENT_VBLANK, EventQueue::KERNEL_EVFILT_VIDEO_OUT,
+					                                             reinterpret_cast<void*>(ctx.pre_vblank_status.count));
+					EXIT_NOT_IMPLEMENTED(result != OK);
+				}
+			}
+			ctx.mutex.Unlock();
+		}
+	}
+}
+
+void VideoOutContext::VblankEnd()
+{
+	Core::LockGuard lock(m_mutex);
+
+	for (int i = 1; i < VIDEO_OUT_NUM_MAX; i++)
+	{
+		auto& ctx = m_video_out_ctx[i];
+		if (ctx.opened)
+		{
+			ctx.mutex.Lock();
+			ctx.vblank_status.count++;
+			ctx.vblank_status.processTime = LibKernel::KernelGetProcessTime();
+			ctx.vblank_status.tsc         = LibKernel::KernelReadTsc();
+
+			for (auto& vblank_eq: ctx.vblank_eqs)
+			{
+				if (vblank_eq != nullptr)
+				{
+					auto result = EventQueue::KernelTriggerEvent(vblank_eq, VIDEO_OUT_EVENT_VBLANK, EventQueue::KERNEL_EVFILT_VIDEO_OUT,
+					                                             reinterpret_cast<void*>(ctx.vblank_status.count));
+					EXIT_NOT_IMPLEMENTED(result != OK);
+				}
+			}
+			ctx.mutex.Unlock();
+		}
+	}
+}
+
 VideoOutBufferImageInfo VideoOutContext::FindImage(void* buffer)
 {
 	VideoOutBufferImageInfo ret;
@@ -286,9 +397,10 @@ VideoOutBufferImageInfo VideoOutContext::FindImage(void* buffer)
 				{
 					if (ctx.buffers[j].buffer == buffer)
 					{
-						ret.image       = ctx.buffers[j].buffer_vulkan;
-						ret.buffer_size = ctx.buffers[j].buffer_size;
-						ret.index       = j - ctx.buffers_sets[i].start_index;
+						ret.image        = ctx.buffers[j].buffer_vulkan;
+						ret.buffer_size  = ctx.buffers[j].buffer_size;
+						ret.buffer_pitch = ctx.buffers[j].buffer_pitch;
+						ret.index        = j - ctx.buffers_sets[i].start_index;
 						goto END;
 					}
 				}
@@ -356,32 +468,23 @@ bool FlipQueue::Flip(uint32_t micros)
 
 	auto* buffer = r.cfg->buffers[r.index].buffer_vulkan;
 
-	//	if (buffer->framebuffer == nullptr)
-	//	{
-	//		// TODO(): Flush via GpuMemoryFlush()
-	//		const auto& attribute   = r.cfg->buffers_sets[r.cfg->buffers[r.index].set_id].attr;
-	//		auto        buffer_size = calc_buffer_size(&attribute);
-	//		EXIT_NOT_IMPLEMENTED(buffer_size == 0);
-	//		Graphics::VideoOutBufferObject vulkan_buffer_info(attribute.pixelFormat, attribute.width, attribute.height,
-	//		                                                  (attribute.tilingMode == 0), Config::IsNeo());
-	//		r.cfg->buffers[r.index].buffer_vulkan = static_cast<Graphics::VideoOutVulkanImage*>(
-	//		    Graphics::GpuMemoryGetObject(g_video_out_context->GetGraphicCtx(),
-	// reinterpret_cast<uint64_t>(r.cfg->buffers[r.index].buffer), 		                                 buffer_size, vulkan_buffer_info));
-	//		EXIT_NOT_IMPLEMENTED(r.cfg->buffers[r.index].buffer_vulkan != buffer);
-	//	}
-
 	Graphics::WindowDrawBuffer(buffer);
 
-	if (r.cfg->flip_eq != nullptr)
+	m_mutex.Lock();
+
+	r.cfg->mutex.Lock();
+	for (auto& flip_eq: r.cfg->flip_eqs)
 	{
-		auto result = EventQueue::KernelTriggerEvent(r.cfg->flip_eq, VIDEO_OUT_EVENT_FLIP, EventQueue::KERNEL_EVFILT_VIDEO_OUT,
-		                                             reinterpret_cast<void*>(r.flip_arg));
-		EXIT_NOT_IMPLEMENTED(result != OK);
+		if (flip_eq != nullptr)
+		{
+			auto result = EventQueue::KernelTriggerEvent(flip_eq, VIDEO_OUT_EVENT_FLIP, EventQueue::KERNEL_EVFILT_VIDEO_OUT,
+			                                             reinterpret_cast<void*>(r.flip_arg));
+			EXIT_NOT_IMPLEMENTED(result != OK);
+		}
 	}
+	r.cfg->mutex.Unlock();
 
 	printf("Flip done: %d\n", r.index);
-
-	m_mutex.Lock();
 
 	m_requests.Remove(first);
 	m_done_cond_var.Signal();
@@ -412,11 +515,25 @@ void FlipQueue::GetFlipStatus(VideoOutConfig* cfg, VideoOutFlipStatus* out)
 	*out = cfg->flip_status;
 }
 
-bool FlipWindow(uint32_t micros)
+bool VideoOutFlipWindow(uint32_t micros)
 {
 	EXIT_IF(g_video_out_context == nullptr);
 
 	return g_video_out_context->GetFlipQueue().Flip(micros);
+}
+
+void VideoOutBeginVblank()
+{
+	EXIT_IF(g_video_out_context == nullptr);
+
+	g_video_out_context->VblankBegin();
+}
+
+void VideoOutEndVblank()
+{
+	EXIT_IF(g_video_out_context == nullptr);
+
+	g_video_out_context->VblankEnd();
 }
 
 KYTY_SYSV_ABI int VideoOutOpen(int user_id, int bus_type, int index, const void* param)
@@ -511,19 +628,63 @@ static void flip_event_reset_func(LibKernel::EventQueue::KernelEqueueEvent* even
 	event->event.data   = 0;
 }
 
-static void flip_event_delete_func(LibKernel::EventQueue::KernelEqueueEvent* event)
+static void flip_event_delete_func(EventQueue::KernelEqueue eq, LibKernel::EventQueue::KernelEqueueEvent* event)
 {
 	EXIT_IF(event == nullptr);
 	EXIT_IF(event->filter.data == nullptr);
+
+	EXIT_NOT_IMPLEMENTED(event->event.ident != VIDEO_OUT_EVENT_FLIP);
+	EXIT_NOT_IMPLEMENTED(event->event.filter != EventQueue::KERNEL_EVFILT_VIDEO_OUT);
+
 	if (event->filter.data != nullptr)
 	{
 		auto* video_out = static_cast<VideoOutConfig*>(event->filter.data);
-		EXIT_IF(video_out->flip_eq == nullptr);
-		video_out->flip_eq = nullptr;
+		video_out->mutex.Lock();
+		EXIT_IF(video_out->flip_eqs.IsEmpty());
+		auto index = video_out->flip_eqs.Find(eq);
+		EXIT_NOT_IMPLEMENTED(!video_out->flip_eqs.IndexValid(index));
+		video_out->flip_eqs[index] = nullptr;
+		video_out->mutex.Unlock();
 	}
 }
 
 static void flip_event_trigger_func(LibKernel::EventQueue::KernelEqueueEvent* event, void* trigger_data)
+{
+	EXIT_IF(event == nullptr);
+	event->triggered = true;
+	event->event.fflags++;
+	event->event.data = reinterpret_cast<intptr_t>(trigger_data);
+}
+
+static void vblank_event_reset_func(LibKernel::EventQueue::KernelEqueueEvent* event)
+{
+	EXIT_IF(event == nullptr);
+	event->triggered    = false;
+	event->event.fflags = 0;
+	event->event.data   = 0;
+}
+
+static void vblank_event_delete_func(EventQueue::KernelEqueue eq, LibKernel::EventQueue::KernelEqueueEvent* event)
+{
+	EXIT_IF(event == nullptr);
+	EXIT_IF(event->filter.data == nullptr);
+
+	EXIT_NOT_IMPLEMENTED(event->event.ident != VIDEO_OUT_EVENT_VBLANK);
+	EXIT_NOT_IMPLEMENTED(event->event.filter != EventQueue::KERNEL_EVFILT_VIDEO_OUT);
+
+	if (event->filter.data != nullptr)
+	{
+		auto* video_out = static_cast<VideoOutConfig*>(event->filter.data);
+		video_out->mutex.Lock();
+		EXIT_IF(video_out->vblank_eqs.IsEmpty());
+		auto index = video_out->vblank_eqs.Find(eq);
+		EXIT_NOT_IMPLEMENTED(!video_out->vblank_eqs.IndexValid(index));
+		video_out->vblank_eqs[index] = nullptr;
+		video_out->mutex.Unlock();
+	}
+}
+
+static void vblank_event_trigger_func(LibKernel::EventQueue::KernelEqueueEvent* event, void* trigger_data)
 {
 	EXIT_IF(event == nullptr);
 	event->triggered = true;
@@ -539,7 +700,9 @@ KYTY_SYSV_ABI int VideoOutAddFlipEvent(EventQueue::KernelEqueue eq, int handle, 
 
 	auto* ctx = g_video_out_context->Get(handle);
 
-	EXIT_NOT_IMPLEMENTED(ctx->flip_eq != nullptr);
+	ctx->mutex.Lock();
+
+	EXIT_NOT_IMPLEMENTED(ctx->flip_eqs.Contains(eq));
 
 	if (eq == nullptr)
 	{
@@ -547,20 +710,60 @@ KYTY_SYSV_ABI int VideoOutAddFlipEvent(EventQueue::KernelEqueue eq, int handle, 
 	}
 
 	EventQueue::KernelEqueueEvent event;
-	event.triggered           = false;
-	event.event.ident         = VIDEO_OUT_EVENT_FLIP;
-	event.event.filter        = EventQueue::KERNEL_EVFILT_VIDEO_OUT;
-	event.event.udata         = udata;
-	event.event.fflags        = 0;
-	event.event.data          = 0;
-	event.filter.delete_func  = flip_event_delete_func;
-	event.filter.reset_func   = flip_event_reset_func;
-	event.filter.trigger_func = flip_event_trigger_func;
-	event.filter.data         = ctx;
+	event.triggered                = false;
+	event.event.ident              = VIDEO_OUT_EVENT_FLIP;
+	event.event.filter             = EventQueue::KERNEL_EVFILT_VIDEO_OUT;
+	event.event.udata              = udata;
+	event.event.fflags             = 0;
+	event.event.data               = 0;
+	event.filter.delete_event_func = flip_event_delete_func;
+	event.filter.reset_func        = flip_event_reset_func;
+	event.filter.trigger_func      = flip_event_trigger_func;
+	event.filter.data              = ctx;
 
 	int result = EventQueue::KernelAddEvent(eq, event);
 
-	ctx->flip_eq = eq;
+	ctx->flip_eqs.Add(eq);
+
+	ctx->mutex.Unlock();
+
+	return result;
+}
+
+KYTY_SYSV_ABI int VideoOutAddVblankEvent(LibKernel::EventQueue::KernelEqueue eq, int handle, void* udata)
+{
+	PRINT_NAME();
+
+	EXIT_IF(g_video_out_context == nullptr);
+
+	auto* ctx = g_video_out_context->Get(handle);
+
+	ctx->mutex.Lock();
+
+	EXIT_NOT_IMPLEMENTED(ctx->vblank_eqs.Contains(eq));
+
+	if (eq == nullptr)
+	{
+		return VIDEO_OUT_ERROR_INVALID_EVENT_QUEUE;
+	}
+
+	EventQueue::KernelEqueueEvent event;
+	event.triggered                = false;
+	event.event.ident              = VIDEO_OUT_EVENT_VBLANK;
+	event.event.filter             = EventQueue::KERNEL_EVFILT_VIDEO_OUT;
+	event.event.udata              = udata;
+	event.event.fflags             = 0;
+	event.event.data               = 0;
+	event.filter.delete_event_func = vblank_event_delete_func;
+	event.filter.reset_func        = vblank_event_reset_func;
+	event.filter.trigger_func      = vblank_event_trigger_func;
+	event.filter.data              = ctx;
+
+	int result = EventQueue::KernelAddEvent(eq, event);
+
+	ctx->vblank_eqs.Add(eq);
+
+	ctx->mutex.Unlock();
 
 	return result;
 }
@@ -615,16 +818,19 @@ KYTY_SYSV_ABI int VideoOutRegisterBuffers(int handle, int start_index, void* con
 	EXIT_NOT_IMPLEMENTED(attribute->pitchInPixel != attribute->width);
 	EXIT_NOT_IMPLEMENTED(attribute->option != 0);
 
-	auto buffer_size = calc_buffer_size(attribute);
+	uint64_t buffer_size  = 0;
+	uint64_t buffer_pitch = 0;
+	calc_buffer_size(attribute, &buffer_size, &buffer_pitch);
 
 	EXIT_NOT_IMPLEMENTED(buffer_size == 0);
+	EXIT_NOT_IMPLEMENTED(buffer_pitch == 0);
 
 	ctx->buffers_sets[set_index].start_index = start_index;
 	ctx->buffers_sets[set_index].num         = buffer_num;
 	ctx->buffers_sets[set_index].attr        = *attribute;
 
 	Graphics::VideoOutBufferObject vulkan_buffer_info(attribute->pixelFormat, attribute->width, attribute->height,
-	                                                  (attribute->tilingMode == 0), Config::IsNeo());
+	                                                  (attribute->tilingMode == 0), Config::IsNeo(), buffer_pitch);
 
 	for (int i = 0; i < buffer_num; i++)
 	{
@@ -636,6 +842,7 @@ KYTY_SYSV_ABI int VideoOutRegisterBuffers(int handle, int start_index, void* con
 		ctx->buffers[i + start_index].set_id        = set_index;
 		ctx->buffers[i + start_index].buffer        = addresses[i];
 		ctx->buffers[i + start_index].buffer_size   = buffer_size;
+		ctx->buffers[i + start_index].buffer_pitch  = buffer_pitch;
 		ctx->buffers[i + start_index].buffer_vulkan = static_cast<Graphics::VideoOutVulkanImage*>(Graphics::GpuMemoryGetObject(
 		    g_video_out_context->GetGraphicCtx(), reinterpret_cast<uint64_t>(addresses[i]), buffer_size, vulkan_buffer_info));
 
@@ -713,6 +920,44 @@ KYTY_SYSV_ABI int VideoOutGetFlipStatus(int handle, VideoOutFlipStatus* status)
 	printf("\t gcQueueNum = %d\n", status->gcQueueNum);
 	printf("\t flipPendingNum = %d\n", status->flipPendingNum);
 	printf("\t currentBuffer = %d\n", status->currentBuffer);
+
+	return OK;
+}
+
+KYTY_SYSV_ABI int VideoOutGetVblankStatus(int handle, VideoOutVblankStatus* status)
+{
+	PRINT_NAME();
+
+	EXIT_IF(g_video_out_context == nullptr);
+
+	if (status == nullptr)
+	{
+		return VIDEO_OUT_ERROR_INVALID_ADDRESS;
+	}
+
+	auto* ctx = g_video_out_context->Get(handle);
+
+	ctx->mutex.Lock();
+	*status = ctx->vblank_status;
+	ctx->mutex.Unlock();
+
+	printf("\t count = %" PRIu64 "\n", status->count);
+	printf("\t processTime = %" PRIu64 "\n", status->processTime);
+	printf("\t tsc = %" PRIu64 "\n", status->tsc);
+
+	return OK;
+}
+
+KYTY_SYSV_ABI int VideoOutSetWindowModeMargins(int handle, int top, int bottom)
+{
+	PRINT_NAME();
+
+	EXIT_IF(g_video_out_context == nullptr);
+
+	[[maybe_unused]] auto* ctx = g_video_out_context->Get(handle);
+
+	printf("\t top    = %d\n", top);
+	printf("\t bottom = %d\n", bottom);
 
 	return OK;
 }

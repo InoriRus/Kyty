@@ -12,6 +12,7 @@ namespace Kyty::Libs::Graphics {
 
 class HardwareContext;
 class UserConfig;
+class CommandProcessor;
 struct VideoOutVulkanImage;
 struct DepthStencilVulkanImage;
 struct TextureVulkanImage;
@@ -26,6 +27,8 @@ class CommandBuffer
 public:
 	CommandBuffer() { Allocate(); }
 	virtual ~CommandBuffer() { Free(); }
+
+	void SetParent(CommandProcessor* parent) { m_parent = parent; }
 
 	KYTY_CLASS_NO_COPY(CommandBuffer);
 
@@ -48,11 +51,14 @@ public:
 
 	void SetQueue(int queue) { m_queue = queue; }
 
+	void CommandProcessorWait();
+
 private:
 	VulkanCommandPool* m_pool    = nullptr;
 	uint32_t           m_index   = static_cast<uint32_t>(-1);
 	int                m_queue   = -1;
 	bool               m_execute = false;
+	CommandProcessor*  m_parent  = nullptr;
 };
 
 void GraphicsRenderInit();
@@ -67,7 +73,10 @@ void GraphicsRenderWriteAtEndOfPipe(CommandBuffer* buffer, uint32_t* dst_gpu_add
 void GraphicsRenderWriteAtEndOfPipeGds(CommandBuffer* buffer, uint32_t* dst_gpu_addr, uint32_t dw_offset, uint32_t dw_num);
 void GraphicsRenderWriteAtEndOfPipeWithInterruptWriteBackFlip(CommandBuffer* buffer, uint32_t* dst_gpu_addr, uint32_t value, int handle,
                                                               int index, int flip_mode, int64_t flip_arg);
+void GraphicsRenderWriteAtEndOfPipeWithFlip(CommandBuffer* buffer, uint32_t* dst_gpu_addr, uint32_t value, int handle, int index,
+                                            int flip_mode, int64_t flip_arg);
 void GraphicsRenderWriteAtEndOfPipeWithWriteBack(CommandBuffer* buffer, uint64_t* dst_gpu_addr, uint64_t value);
+void GraphicsRenderWriteAtEndOfPipeWithInterruptWriteBack(CommandBuffer* buffer, uint64_t* dst_gpu_addr, uint64_t value);
 void GraphicsRenderWriteAtEndOfPipeWithInterrupt(CommandBuffer* buffer, uint64_t* dst_gpu_addr, uint64_t value);
 void GraphicsRenderWriteBack();
 void GraphicsRenderDispatchDirect(CommandBuffer* buffer, HardwareContext* ctx, uint32_t thread_group_x, uint32_t thread_group_y,

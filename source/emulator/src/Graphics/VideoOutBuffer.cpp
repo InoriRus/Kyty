@@ -34,7 +34,7 @@ void* VideoOutBufferObject::Create(GraphicContext* ctx, const uint64_t* vaddr, c
 
 	vk_obj->extent.width  = width;
 	vk_obj->extent.height = height;
-	vk_obj->format        = VK_FORMAT_B8G8R8A8_SRGB; // VK_FORMAT_R8G8B8A8_SRGB;
+	vk_obj->format        = VK_FORMAT_B8G8R8A8_SRGB;
 	vk_obj->image         = nullptr;
 	vk_obj->image_view    = nullptr;
 
@@ -68,12 +68,17 @@ void* VideoOutBufferObject::Create(GraphicContext* ctx, const uint64_t* vaddr, c
 
 	EXIT_NOT_IMPLEMENTED(!allocated);
 
-	// vkBindImageMemory(ctx->device, vk_obj->image, mem->memory, mem->offset);
 	VulkanBindImageMemory(ctx, vk_obj, mem);
 
 	vk_obj->memory = *mem;
 
-	EXIT_NOT_IMPLEMENTED(mem->requirements.size > *size);
+	printf("VideoOutBufferObject::Create()\n");
+	printf("\t mem->requirements.size = %" PRIu64 "\n", mem->requirements.size);
+	printf("\t width                  = %" PRIu64 "\n", width);
+	printf("\t height                 = %" PRIu64 "\n", height);
+	printf("\t size                   = %" PRIu64 "\n", *size);
+
+	// EXIT_NOT_IMPLEMENTED(mem->requirements.size > *size);
 
 	GetUpdateFunc()(ctx, params, vk_obj, vaddr, size, vaddr_num);
 
@@ -130,26 +135,30 @@ static void update_func(GraphicContext* ctx, const uint64_t* params, void* obj, 
 
 	auto* vk_obj = static_cast<VideoOutVulkanImage*>(obj);
 
-	bool tiled = (params[VideoOutBufferObject::PARAM_TILED] != 0);
-	bool neo   = (params[VideoOutBufferObject::PARAM_NEO] != 0);
+	bool tiled  = (params[VideoOutBufferObject::PARAM_TILED] != 0);
+	bool neo    = (params[VideoOutBufferObject::PARAM_NEO] != 0);
+	auto pitch  = params[VideoOutBufferObject::PARAM_PITCH];
+	auto width  = params[VideoOutBufferObject::PARAM_WIDTH];
+	auto height = params[VideoOutBufferObject::PARAM_HEIGHT];
 
 	if (tiled && buffer_is_tiled(*vaddr, *size))
 	{
+		EXIT_NOT_IMPLEMENTED(width != pitch);
 		auto* temp_buf = new uint8_t[*size];
-		TileConvertTiledToLinear(temp_buf, reinterpret_cast<void*>(*vaddr), TileMode::VideoOutTiled,
-		                         params[VideoOutBufferObject::PARAM_WIDTH], params[VideoOutBufferObject::PARAM_HEIGHT], neo);
-		UtilFillImage(ctx, vk_obj, temp_buf, *size);
+		TileConvertTiledToLinear(temp_buf, reinterpret_cast<void*>(*vaddr), TileMode::VideoOutTiled, width, height, neo);
+		UtilFillImage(ctx, vk_obj, temp_buf, *size, pitch);
 		delete[] temp_buf;
 	} else
 	{
-		UtilFillImage(ctx, vk_obj, reinterpret_cast<void*>(*vaddr), *size);
+		UtilFillImage(ctx, vk_obj, reinterpret_cast<void*>(*vaddr), *size, pitch);
 	}
 }
 
 bool VideoOutBufferObject::Equal(const uint64_t* other) const
 {
 	return (params[PARAM_FORMAT] == other[PARAM_FORMAT] && params[PARAM_WIDTH] == other[PARAM_WIDTH] &&
-	        params[PARAM_HEIGHT] == other[PARAM_HEIGHT] && params[PARAM_TILED] == other[PARAM_TILED]);
+	        params[PARAM_HEIGHT] == other[PARAM_HEIGHT] && params[PARAM_TILED] == other[PARAM_TILED] &&
+	        params[PARAM_PITCH] == other[PARAM_PITCH]);
 }
 
 static void delete_func(GraphicContext* ctx, void* obj, VulkanMemory* mem)

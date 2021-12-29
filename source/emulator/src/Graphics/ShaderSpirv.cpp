@@ -1140,7 +1140,7 @@ public:
 	void                                      SetPsInputInfo(const ShaderPixelInputInfo* input_info) { m_ps_input_info = input_info; }
 	[[nodiscard]] const ShaderPixelInputInfo* GetPsInputInfo() const { return m_ps_input_info; }
 
-	[[nodiscard]] const ShaderResources* GetBindInfo() const { return m_bind; }
+	[[nodiscard]] const ShaderBindResources* GetBindInfo() const { return m_bind; }
 
 	void                 AddConstantUint(uint32_t u);
 	void                 AddConstantInt(int i);
@@ -1199,7 +1199,8 @@ private:
 	const ShaderVertexInputInfo*  m_vs_input_info = nullptr;
 	const ShaderComputeInputInfo* m_cs_input_info = nullptr;
 	const ShaderPixelInputInfo*   m_ps_input_info = nullptr;
-	const ShaderResources*        m_bind          = nullptr;
+	const ShaderBindResources*    m_bind          = nullptr;
+	ShaderBindParameters          m_bind_params;
 
 	Core::Array2<int, 64, 2> m_extended_mapping {};
 };
@@ -2126,12 +2127,12 @@ KYTY_RECOMPILER_FUNC(Recompile_ImageSample_Vdata3Vaddr3StSsDmask7)
 
 		static const char32_t* text = UR"(
          %t24_<index> = OpLoad %uint %<src1_value0>
-         %t26_<index> = OpAccessChain %_ptr_UniformConstant_SampledImage %textures2D %t24_<index>
-         %t27_<index> = OpLoad %SampledImage %t26_<index>
+         %t26_<index> = OpAccessChain %_ptr_UniformConstant_Image %textures2D %t24_<index>
+         %t27_<index> = OpLoad %Image %t26_<index>
          %t33_<index> = OpLoad %uint %<src2_value0>
          %t35_<index> = OpAccessChain %_ptr_UniformConstant_Sampler %samplers %t33_<index>
          %t36_<index> = OpLoad %Sampler %t35_<index>
-         %t38_<index> = OpSampledImage %_SampledImage %t27_<index> %t36_<index>
+         %t38_<index> = OpSampledImage %SampledImage %t27_<index> %t36_<index>
          %t39_<index> = OpLoad %float %<src0_value0>
          %t40_<index> = OpLoad %float %<src0_value1>
          %t42_<index> = OpCompositeConstruct %v2float %t39_<index> %t40_<index>
@@ -2191,12 +2192,12 @@ KYTY_RECOMPILER_FUNC(Recompile_ImageSample_Vdata4Vaddr3StSsDmaskF)
 
 		static const char32_t* text = UR"(
          %t24_<index> = OpLoad %uint %<src1_value0>
-         %t26_<index> = OpAccessChain %_ptr_UniformConstant_SampledImage %textures2D %t24_<index>
-         %t27_<index> = OpLoad %SampledImage %t26_<index>
+         %t26_<index> = OpAccessChain %_ptr_UniformConstant_Image %textures2D %t24_<index>
+         %t27_<index> = OpLoad %Image %t26_<index>
          %t33_<index> = OpLoad %uint %<src2_value0>
          %t35_<index> = OpAccessChain %_ptr_UniformConstant_Sampler %samplers %t33_<index>
          %t36_<index> = OpLoad %Sampler %t35_<index>
-         %t38_<index> = OpSampledImage %_SampledImage %t27_<index> %t36_<index>
+         %t38_<index> = OpSampledImage %SampledImage %t27_<index> %t36_<index>
          %t39_<index> = OpLoad %float %<src0_value0>
          %t40_<index> = OpLoad %float %<src0_value1>
          %t42_<index> = OpCompositeConstruct %v2float %t39_<index> %t40_<index>
@@ -2222,6 +2223,72 @@ KYTY_RECOMPILER_FUNC(Recompile_ImageSample_Vdata4Vaddr3StSsDmaskF)
 		                   .ReplaceStr(U"<src0_value2>", src0_value2.value)
 		                   .ReplaceStr(U"<src1_value0>", src1_value0.value)
 		                   .ReplaceStr(U"<src2_value0>", src2_value0.value)
+		                   .ReplaceStr(U"<dst_value0>", dst_value0.value)
+		                   .ReplaceStr(U"<dst_value1>", dst_value1.value)
+		                   .ReplaceStr(U"<dst_value2>", dst_value2.value)
+		                   .ReplaceStr(U"<dst_value3>", dst_value3.value);
+
+		return true;
+	}
+
+	return false;
+}
+
+KYTY_RECOMPILER_FUNC(Recompile_ImageLoad_Vdata4Vaddr3StDmaskF)
+{
+	const auto& inst      = code.GetInstructions().At(index);
+	const auto* bind_info = spirv->GetBindInfo();
+
+	if (bind_info != nullptr && bind_info->textures2D.textures_num > 0)
+	{
+		auto dst_value0  = operand_variable_to_str(inst.dst, 0);
+		auto dst_value1  = operand_variable_to_str(inst.dst, 1);
+		auto dst_value2  = operand_variable_to_str(inst.dst, 2);
+		auto dst_value3  = operand_variable_to_str(inst.dst, 3);
+		auto src0_value0 = operand_variable_to_str(inst.src[0], 0);
+		auto src0_value1 = operand_variable_to_str(inst.src[0], 1);
+		auto src0_value2 = operand_variable_to_str(inst.src[0], 2);
+		auto src1_value0 = operand_variable_to_str(inst.src[1], 0);
+
+		EXIT_NOT_IMPLEMENTED(dst_value0.type != SpirvType::Float);
+		EXIT_NOT_IMPLEMENTED(src0_value0.type != SpirvType::Float);
+		EXIT_NOT_IMPLEMENTED(src1_value0.type != SpirvType::Uint);
+
+		// TODO() check VSKIP
+		// TODO() check LOD_CLAMPED
+		// TODO() swizzle channels
+		// TODO() convert SRGB -> LINEAR if SRGB format was replaced with UNORM
+
+		static const char32_t* text = UR"(
+         %t24_<index> = OpLoad %uint %<src1_value0>
+         %t26_<index> = OpAccessChain %_ptr_UniformConstant_Image %textures2D %t24_<index>
+         %t27_<index> = OpLoad %Image %t26_<index>
+         %t67_<index> = OpLoad %float %<src0_value0>
+         %t69_<index> = OpBitcast %uint %t67_<index>
+         %t70_<index> = OpLoad %float %<src0_value1>
+         %t71_<index> = OpBitcast %uint %t70_<index>
+         %t73_<index> = OpCompositeConstruct %v2uint %t69_<index> %t71_<index>
+         %t74_<index> = OpImageRead %v4float %t27_<index> %t73_<index>
+               OpStore %temp_v4float %t74_<index>
+         %t46_<index> = OpAccessChain %_ptr_Function_float %temp_v4float %uint_0
+         %t47_<index> = OpLoad %float %t46_<index>
+               OpStore %<dst_value0> %t47_<index>
+         %t50_<index> = OpAccessChain %_ptr_Function_float %temp_v4float %uint_1
+         %t51_<index> = OpLoad %float %t50_<index>
+               OpStore %<dst_value1> %t51_<index>
+         %t54_<index> = OpAccessChain %_ptr_Function_float %temp_v4float %uint_2
+         %t55_<index> = OpLoad %float %t54_<index>
+               OpStore %<dst_value2> %t55_<index>
+         %t57_<index> = OpAccessChain %_ptr_Function_float %temp_v4float %uint_3
+         %t58_<index> = OpLoad %float %t57_<index>
+               OpStore %<dst_value3> %t58_<index>
+)";
+		*dst_source += String(text)
+		                   .ReplaceStr(U"<index>", String::FromPrintf("%u", index))
+		                   .ReplaceStr(U"<src0_value0>", src0_value0.value)
+		                   .ReplaceStr(U"<src0_value1>", src0_value1.value)
+		                   .ReplaceStr(U"<src0_value2>", src0_value2.value)
+		                   .ReplaceStr(U"<src1_value0>", src1_value0.value)
 		                   .ReplaceStr(U"<dst_value0>", dst_value0.value)
 		                   .ReplaceStr(U"<dst_value1>", dst_value1.value)
 		                   .ReplaceStr(U"<dst_value2>", dst_value2.value)
@@ -3529,7 +3596,7 @@ KYTY_RECOMPILER_FUNC(Recompile_VCmpx_XXX_I32_SmaskVsrc0Vsrc1)
 	return true;
 }
 
-/* XXX: Gt */
+/* XXX: Gt, Ge */
 KYTY_RECOMPILER_FUNC(Recompile_VCmpx_XXX_U32_SmaskVsrc0Vsrc1)
 {
 	const auto& inst = code.GetInstructions().At(index);
@@ -4463,6 +4530,7 @@ static RecompilerFunc g_recomp_func[] = {
     {Recompile_Exp_Param_XXX_Vsrc0Vsrc1Vsrc2Vsrc3,         ShaderInstructionType::Exp,                 ShaderInstructionFormat::Param3Vsrc0Vsrc1Vsrc2Vsrc3,     {U"param3"}},
     {Recompile_Exp_Pos0Vsrc0Vsrc1Vsrc2Vsrc3Done,           ShaderInstructionType::Exp,                 ShaderInstructionFormat::Pos0Vsrc0Vsrc1Vsrc2Vsrc3Done,   {U""}},
 
+    {Recompile_ImageLoad_Vdata4Vaddr3StDmaskF,             ShaderInstructionType::ImageLoad,           ShaderInstructionFormat::Vdata4Vaddr3StDmaskF,           {U""}},
     {Recompile_ImageSample_Vdata3Vaddr3StSsDmask7,         ShaderInstructionType::ImageSample,         ShaderInstructionFormat::Vdata3Vaddr3StSsDmask7,         {U""}},
     {Recompile_ImageSample_Vdata4Vaddr3StSsDmaskF,         ShaderInstructionType::ImageSample,         ShaderInstructionFormat::Vdata4Vaddr3StSsDmaskF,         {U""}},
 
@@ -4484,12 +4552,28 @@ static RecompilerFunc g_recomp_func[] = {
                                                                                                                              U"%tb_<index> = OpBitwiseAnd %uint %t0_<index> %ta_<index>",
                                                                                                                              U"%tc_<index> = OpNot %uint %t3_<index>",
                                                                                                                              U"%td_<index> = OpBitwiseAnd %uint %t1_<index> %tc_<index>"}, SccCheck::NonZero},
+    {Recompile_S_XXX_B64_Sdst2Ssrc02Ssrc12, ShaderInstructionType::SOrn2B64,    ShaderInstructionFormat::Sdst2Ssrc02Ssrc12, {U"%ta_<index> = OpNot %uint %t2_<index>",
+                                                                                                                             U"%tb_<index> = OpBitwiseOr %uint %t0_<index> %ta_<index>",
+                                                                                                                             U"%tc_<index> = OpNot %uint %t3_<index>",
+                                                                                                                             U"%td_<index> = OpBitwiseOr %uint %t1_<index> %tc_<index>"}, SccCheck::NonZero},
+    {Recompile_S_XXX_B64_Sdst2Ssrc02Ssrc12, ShaderInstructionType::SAndB64,     ShaderInstructionFormat::Sdst2Ssrc02Ssrc12, {U"%tb_<index> = OpBitwiseAnd %uint %t0_<index> %t2_<index>",
+                                                                                                                             U"%td_<index> = OpBitwiseAnd %uint %t1_<index> %t3_<index>"}, SccCheck::NonZero},
     {Recompile_S_XXX_B64_Sdst2Ssrc02Ssrc12, ShaderInstructionType::SNorB64,     ShaderInstructionFormat::Sdst2Ssrc02Ssrc12, {U"%ta_<index> = OpBitwiseOr %uint %t0_<index> %t2_<index>",
                                                                                                                              U"%tb_<index> = OpNot %uint %ta_<index>",
                                                                                                                              U"%tc_<index> = OpBitwiseOr %uint %t1_<index> %t3_<index>",
                                                                                                                              U"%td_<index> = OpNot %uint %tc_<index>"}, SccCheck::NonZero},
+    {Recompile_S_XXX_B64_Sdst2Ssrc02Ssrc12, ShaderInstructionType::SNandB64,    ShaderInstructionFormat::Sdst2Ssrc02Ssrc12, {U"%ta_<index> = OpBitwiseAnd %uint %t0_<index> %t2_<index>",
+                                                                                                                             U"%tb_<index> = OpNot %uint %ta_<index>",
+                                                                                                                             U"%tc_<index> = OpBitwiseAnd %uint %t1_<index> %t3_<index>",
+                                                                                                                             U"%td_<index> = OpNot %uint %tc_<index>"}, SccCheck::NonZero},
+    {Recompile_S_XXX_B64_Sdst2Ssrc02Ssrc12, ShaderInstructionType::SXnorB64,    ShaderInstructionFormat::Sdst2Ssrc02Ssrc12, {U"%ta_<index> = OpBitwiseXor %uint %t0_<index> %t2_<index>",
+                                                                                                                             U"%tb_<index> = OpNot %uint %ta_<index>",
+                                                                                                                             U"%tc_<index> = OpBitwiseXor %uint %t1_<index> %t3_<index>",
+                                                                                                                             U"%td_<index> = OpNot %uint %tc_<index>"}, SccCheck::NonZero},
     {Recompile_S_XXX_B64_Sdst2Ssrc02Ssrc12, ShaderInstructionType::SOrB64,      ShaderInstructionFormat::Sdst2Ssrc02Ssrc12, {U"%tb_<index> = OpBitwiseOr %uint %t0_<index> %t2_<index>",
                                                                                                                              U"%td_<index> = OpBitwiseOr %uint %t1_<index> %t3_<index>"}, SccCheck::NonZero},
+    {Recompile_S_XXX_B64_Sdst2Ssrc02Ssrc12, ShaderInstructionType::SXorB64,     ShaderInstructionFormat::Sdst2Ssrc02Ssrc12, {U"%tb_<index> = OpBitwiseXor %uint %t0_<index> %t2_<index>",
+                                                                                                                             U"%td_<index> = OpBitwiseXor %uint %t1_<index> %t3_<index>"}, SccCheck::NonZero},
     {Recompile_S_XXX_B64_Sdst2Ssrc02Ssrc12, ShaderInstructionType::SCselectB64, ShaderInstructionFormat::Sdst2Ssrc02Ssrc12, {U"%ts_<index> = OpLoad %uint %scc",
                                                                                                                              U"%tsb_<index> = OpINotEqual %bool %ts_<index> %uint_0",
                                                                                                                              U"%tb_<index> = OpSelect %uint %tsb_<index> %t0_<index> %t2_<index>",
@@ -4531,6 +4615,7 @@ static RecompilerFunc g_recomp_func[] = {
 
 
     {Recompile_SMovB32_SVdstSVsrc0,            ShaderInstructionType::SMovB32,             ShaderInstructionFormat::SVdstSVsrc0, {U""}},
+	{Recompile_SMovB32_SVdstSVsrc0,            ShaderInstructionType::SMovkI32,            ShaderInstructionFormat::SVdstSVsrc0, {U""}},
 	{Recompile_V_XXX_B32_SVdstSVsrc0,          ShaderInstructionType::VBfrevB32,           ShaderInstructionFormat::SVdstSVsrc0, {U"%t_<index> = OpBitReverse %uint %t0_<index>"}},
     {Recompile_V_XXX_B32_SVdstSVsrc0,          ShaderInstructionType::VNotB32,             ShaderInstructionFormat::SVdstSVsrc0, {U"%t_<index> = OpNot %uint %t0_<index>"}},
     {Recompile_V_XXX_F32_SVdstSVsrc0,          ShaderInstructionType::VRcpF32,             ShaderInstructionFormat::SVdstSVsrc0, {U"%t_<index> = OpFDiv %float %float_1_000000 %t0_<index>"}},
@@ -4602,6 +4687,7 @@ static RecompilerFunc g_recomp_func[] = {
     {Recompile_VCmpx_XXX_I32_SmaskVsrc0Vsrc1, ShaderInstructionType::VCmpxEqU32,   ShaderInstructionFormat::SmaskVsrc0Vsrc1,      {U"OpIEqual"}},
     {Recompile_VCmpx_XXX_I32_SmaskVsrc0Vsrc1, ShaderInstructionType::VCmpxNeU32,   ShaderInstructionFormat::SmaskVsrc0Vsrc1,      {U"OpINotEqual"}},
     {Recompile_VCmpx_XXX_U32_SmaskVsrc0Vsrc1, ShaderInstructionType::VCmpxGtU32,   ShaderInstructionFormat::SmaskVsrc0Vsrc1,      {U"OpUGreaterThan"}},
+	{Recompile_VCmpx_XXX_U32_SmaskVsrc0Vsrc1, ShaderInstructionType::VCmpxGeU32,   ShaderInstructionFormat::SmaskVsrc0Vsrc1,      {U"OpUGreaterThanEqual"}},
 
 	{Recompile_SCmp_XXX_I32_Ssrc0Ssrc1,  ShaderInstructionType::SCmpEqI32,    ShaderInstructionFormat::Ssrc0Ssrc1,      {U"OpIEqual"}},
 	{Recompile_SCmp_XXX_I32_Ssrc0Ssrc1,  ShaderInstructionType::SCmpGeI32,    ShaderInstructionFormat::Ssrc0Ssrc1,      {U"OpSGreaterThanEqual"}},
@@ -4828,10 +4914,22 @@ void Spirv::GenerateSource()
 
 	switch (m_code.GetType())
 	{
-		case ShaderType::Pixel: m_bind = (m_ps_input_info != nullptr ? &m_ps_input_info->bind : nullptr); break;
-		case ShaderType::Vertex: m_bind = (m_vs_input_info != nullptr ? &m_vs_input_info->bind : nullptr); break;
-		case ShaderType::Compute: m_bind = (m_cs_input_info != nullptr ? &m_cs_input_info->bind : nullptr); break;
-		default: m_bind = nullptr; break;
+		case ShaderType::Pixel:
+			m_bind        = (m_ps_input_info != nullptr ? &m_ps_input_info->bind : nullptr);
+			m_bind_params = (m_ps_input_info != nullptr ? ShaderGetBindParametersPS(m_code, m_ps_input_info) : ShaderBindParameters());
+			break;
+		case ShaderType::Vertex:
+			m_bind        = (m_vs_input_info != nullptr ? &m_vs_input_info->bind : nullptr);
+			m_bind_params = (m_vs_input_info != nullptr ? ShaderGetBindParametersVS(m_code, m_vs_input_info) : ShaderBindParameters());
+			break;
+		case ShaderType::Compute:
+			m_bind        = (m_cs_input_info != nullptr ? &m_cs_input_info->bind : nullptr);
+			m_bind_params = (m_cs_input_info != nullptr ? ShaderGetBindParametersCS(m_code, m_cs_input_info) : ShaderBindParameters());
+			break;
+		default:
+			m_bind        = nullptr;
+			m_bind_params = ShaderBindParameters();
+			break;
 	}
 
 	WriteHeader();
@@ -5180,28 +5278,36 @@ void Spirv::WriteTypes()
 	}
 
 	static const char32_t* storage_buffers_types = UR"(	
-                        %buffers_runtimearr_float = OpTypeRuntimeArray %float
-                             %BufferObject = OpTypeStruct %buffers_runtimearr_float
-           %buffers_num_uint_<buffers_num> = OpConstant %uint <buffers_num>
-     %_arr_BufferObject_uint_<buffers_num> = OpTypeArray %BufferObject %buffers_num_uint_<buffers_num>
+                               %buffers_runtimearr_float = OpTypeRuntimeArray %float
+                                           %BufferObject = OpTypeStruct %buffers_runtimearr_float
+                         %buffers_num_uint_<buffers_num> = OpConstant %uint <buffers_num>
+                   %_arr_BufferObject_uint_<buffers_num> = OpTypeArray %BufferObject %buffers_num_uint_<buffers_num>
 %_ptr_StorageBuffer__arr_BufferObject_uint_<buffers_num> = OpTypePointer StorageBuffer %_arr_BufferObject_uint_<buffers_num>
 )";
 
-	static const char32_t* textures_types = UR"(
-                             %SampledImage = OpTypeImage %float 2D 0 0 0 1 Unknown
-              %textures2D_uint_<buffers_num> = OpConstant %uint <buffers_num>
-     %_arr_SampledImage_uint_<buffers_num> = OpTypeArray %SampledImage %textures2D_uint_<buffers_num>
-%_ptr_UniformConstant__arr_SampledImage_uint_<buffers_num> = OpTypePointer UniformConstant %_arr_SampledImage_uint_<buffers_num>
-        %_ptr_UniformConstant_SampledImage = OpTypePointer UniformConstant %SampledImage
-                                       %_SampledImage = OpTypeSampledImage %SampledImage	
+	static const char32_t* textures_sampled_types = UR"(
+                                             %Image = OpTypeImage %float 2D 0 0 0 1 Unknown
+                     %textures2D_uint_<buffers_num> = OpConstant %uint <buffers_num>
+                     %_arr_Image_uint_<buffers_num> = OpTypeArray %Image %textures2D_uint_<buffers_num>
+%_ptr_UniformConstant__arr_Image_uint_<buffers_num> = OpTypePointer UniformConstant %_arr_Image_uint_<buffers_num>
+                        %_ptr_UniformConstant_Image = OpTypePointer UniformConstant %Image
+                                      %SampledImage = OpTypeSampledImage %Image	
+)";
+
+	static const char32_t* textures_loaded_types = UR"(
+                                             %Image = OpTypeImage %float 2D 0 0 0 2 Rgba8
+                     %textures2D_uint_<buffers_num> = OpConstant %uint <buffers_num>
+                     %_arr_Image_uint_<buffers_num> = OpTypeArray %Image %textures2D_uint_<buffers_num>
+%_ptr_UniformConstant__arr_Image_uint_<buffers_num> = OpTypePointer UniformConstant %_arr_Image_uint_<buffers_num>
+                        %_ptr_UniformConstant_Image = OpTypePointer UniformConstant %Image	
 )";
 
 	static const char32_t* samplers_types = UR"(	
-                                  %Sampler = OpTypeSampler
-              %samplers_uint_<buffers_num> = OpConstant %uint <buffers_num>
-          %_arr_Sampler_uint_<buffers_num> = OpTypeArray %Sampler %samplers_uint_<buffers_num>
+                                             %Sampler = OpTypeSampler
+                         %samplers_uint_<buffers_num> = OpConstant %uint <buffers_num>
+                     %_arr_Sampler_uint_<buffers_num> = OpTypeArray %Sampler %samplers_uint_<buffers_num>
 %_ptr_UniformConstant__arr_Sampler_uint_<buffers_num> = OpTypePointer UniformConstant %_arr_Sampler_uint_<buffers_num>
-             %_ptr_UniformConstant_Sampler = OpTypePointer UniformConstant %Sampler
+                        %_ptr_UniformConstant_Sampler = OpTypePointer UniformConstant %Sampler
 )";
 
 	static const char32_t* gds_types = UR"(	
@@ -5211,13 +5317,13 @@ void Spirv::WriteTypes()
 )";
 
 	static const char32_t* vsharp_types = UR"(	
-           %vsharp_buffers_num_uint_<buffers_num> = OpConstant %uint <buffers_num>
-                        %vsharp_num_uint_4 = OpConstant %uint 4
-                   %vsharp_arr_uint_uint_4 = OpTypeArray %uint %vsharp_num_uint_4
+         %vsharp_buffers_num_uint_<buffers_num> = OpConstant %uint <buffers_num>
+                             %vsharp_num_uint_4 = OpConstant %uint 4
+                        %vsharp_arr_uint_uint_4 = OpTypeArray %uint %vsharp_num_uint_4
 %vsharp_arr__arr_uint_uint_4_uint_<buffers_num> = OpTypeArray %vsharp_arr_uint_uint_4 %vsharp_buffers_num_uint_<buffers_num>
-                           %BufferResource = OpTypeStruct %vsharp_arr__arr_uint_uint_4_uint_<buffers_num>           
-         %_ptr_PushConstant_BufferResource = OpTypePointer PushConstant %BufferResource
-                   %_ptr_PushConstant_uint = OpTypePointer PushConstant %uint
+                                %BufferResource = OpTypeStruct %vsharp_arr__arr_uint_uint_4_uint_<buffers_num>           
+              %_ptr_PushConstant_BufferResource = OpTypePointer PushConstant %BufferResource
+                        %_ptr_PushConstant_uint = OpTypePointer PushConstant %uint
 )";
 
 	if (m_bind != nullptr)
@@ -5229,7 +5335,8 @@ void Spirv::WriteTypes()
 		}
 		if (m_bind->textures2D.textures_num > 0)
 		{
-			m_source += String(textures_types).ReplaceStr(U"<buffers_num>", String::FromPrintf("%d", m_bind->textures2D.textures_num));
+			m_source += String(m_bind_params.textures2D_without_sampler ? textures_loaded_types : textures_sampled_types)
+			                .ReplaceStr(U"<buffers_num>", String::FromPrintf("%d", m_bind->textures2D.textures_num));
 		}
 		if (m_bind->samplers.samplers_num > 0)
 		{
@@ -5297,7 +5404,7 @@ void Spirv::WriteGlobalVariables()
 		}
 		if (m_bind->textures2D.textures_num > 0)
 		{
-			vars.Add(String::FromPrintf("%%textures2D = OpVariable %%_ptr_UniformConstant__arr_SampledImage_uint_%d UniformConstant",
+			vars.Add(String::FromPrintf("%%textures2D = OpVariable %%_ptr_UniformConstant__arr_Image_uint_%d UniformConstant",
 			                            m_bind->textures2D.textures_num));
 		}
 		if (m_bind->samplers.samplers_num > 0)

@@ -60,9 +60,12 @@ public:
 	void DrawIndex(uint32_t index_count, const void* index_addr, uint32_t flags, uint32_t type);
 	void DrawIndexAuto(uint32_t index_count, uint32_t flags);
 	void WriteAtEndOfPipe32(uint32_t cache_policy, uint32_t event_write_dest, uint32_t eop_event_type, uint32_t cache_action,
-	                        uint32_t event_index, uint32_t event_write_source, void* dst_gpu_addr, uint32_t value);
+	                        uint32_t event_index, uint32_t event_write_source, void* dst_gpu_addr, uint32_t value,
+	                        uint32_t interrupt_selector);
 	void WriteAtEndOfPipe64(uint32_t cache_policy, uint32_t event_write_dest, uint32_t eop_event_type, uint32_t cache_action,
-	                        uint32_t event_index, uint32_t event_write_source, void* dst_gpu_addr, uint64_t value);
+	                        uint32_t event_index, uint32_t event_write_source, void* dst_gpu_addr, uint64_t value,
+	                        uint32_t interrupt_selector);
+	void Flip(void* dst_gpu_addr, uint32_t value);
 	void FlipWithInterrupt(uint32_t eop_event_type, uint32_t cache_action, void* dst_gpu_addr, uint32_t value);
 	void WriteBack();
 	void MemoryBarrier();
@@ -140,6 +143,7 @@ public:
 	            int flip_mode, int64_t flip_arg);
 	void Done();
 	void WaitForIdle();
+	bool IsIdle();
 
 	void SetCp(CommandProcessor* cp)
 	{
@@ -197,6 +201,7 @@ public:
 	void DingDong(uint32_t offset_dw);
 	void Done();
 	void WaitForIdle();
+	bool IsIdle();
 
 	void SetCp(CommandProcessor* cp)
 	{
@@ -257,6 +262,7 @@ public:
 	void     Done();
 	void     Wait();
 	int      GetFrameNum();
+	bool     AreSubmitsAllowed();
 
 private:
 	void Init();
@@ -493,6 +499,27 @@ void Gpu::Done()
 	m_done_num++;
 }
 
+bool Gpu::AreSubmitsAllowed()
+{
+	Core::LockGuard lock(m_mutex);
+
+	if (m_gfx_ring->IsIdle())
+	{
+		for (auto& cr: m_compute_ring)
+		{
+			if (cr != nullptr)
+			{
+				if (!cr->IsIdle())
+				{
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+	return false;
+}
+
 int Gpu::GetFrameNum()
 {
 	Core::LockGuard lock(m_mutex);
@@ -583,6 +610,7 @@ void CommandProcessor::BufferInit()
 			EXIT_IF(buf != nullptr);
 
 			buf = new CommandBuffer;
+			buf->SetParent(this);
 			buf->SetQueue(m_queue);
 		}
 
@@ -777,6 +805,12 @@ void GraphicsRing::WaitForIdle()
 	}
 }
 
+bool GraphicsRing::IsIdle()
+{
+	Core::LockGuard lock(m_mutex);
+	return m_idle;
+}
+
 GraphicsRing::CmdBatch GraphicsRing::GetCmdBatch()
 {
 	Core::LockGuard lock(m_mutex);
@@ -956,6 +990,12 @@ void ComputeRing::WaitForIdle()
 	}
 }
 
+bool ComputeRing::IsIdle()
+{
+	Core::LockGuard lock(m_mutex);
+	return m_idle;
+}
+
 void ComputeRing::SetActive(bool flag)
 {
 	Core::LockGuard lock(m_mutex);
@@ -1078,7 +1118,8 @@ void CommandProcessor::WaitFlipDone(uint32_t video_out_handle, uint32_t display_
 }
 
 void CommandProcessor::WriteAtEndOfPipe32(uint32_t cache_policy, uint32_t event_write_dest, uint32_t eop_event_type, uint32_t cache_action,
-                                          uint32_t event_index, uint32_t event_write_source, void* dst_gpu_addr, uint32_t value)
+                                          uint32_t event_index, uint32_t event_write_source, void* dst_gpu_addr, uint32_t value,
+                                          uint32_t interrupt_selector)
 {
 	Core::LockGuard lock(m_mutex);
 
@@ -1091,12 +1132,13 @@ void CommandProcessor::WriteAtEndOfPipe32(uint32_t cache_policy, uint32_t event_
 	printf("\t cache_action        = 0x%08" PRIx32 "\n", cache_action);
 	printf("\t event_index         = 0x%08" PRIx32 "\n", event_index);
 	printf("\t event_write_source  = 0x%08" PRIx32 "\n", event_write_source);
+	printf("\t interrupt_selector  = 0x%08" PRIx32 "\n", interrupt_selector);
 	printf("\t dst_gpu_addr        = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(dst_gpu_addr));
 	printf("\t value               = 0x%08" PRIx32 "\n", value);
 
 	EXIT_NOT_IMPLEMENTED(cache_policy != 0x00000000);
 	EXIT_NOT_IMPLEMENTED(event_write_dest != 0x00000000);
-	// EXIT_NOT_IMPLEMENTED(event_write_source != 0x00000002);
+	EXIT_NOT_IMPLEMENTED(interrupt_selector != 0x0);
 
 	if (event_write_source == 0x00000002 && eop_event_type == 0x0000002f && cache_action == 0x00000000 && event_index == 0x00000006)
 	{
@@ -1111,7 +1153,8 @@ void CommandProcessor::WriteAtEndOfPipe32(uint32_t cache_policy, uint32_t event_
 }
 
 void CommandProcessor::WriteAtEndOfPipe64(uint32_t cache_policy, uint32_t event_write_dest, uint32_t eop_event_type, uint32_t cache_action,
-                                          uint32_t event_index, uint32_t event_write_source, void* dst_gpu_addr, uint64_t value)
+                                          uint32_t event_index, uint32_t event_write_source, void* dst_gpu_addr, uint64_t value,
+                                          uint32_t interrupt_selector)
 {
 	Core::LockGuard lock(m_mutex);
 
@@ -1124,28 +1167,38 @@ void CommandProcessor::WriteAtEndOfPipe64(uint32_t cache_policy, uint32_t event_
 	printf("\t cache_action        = 0x%08" PRIx32 "\n", cache_action);
 	printf("\t event_index         = 0x%08" PRIx32 "\n", event_index);
 	printf("\t event_write_source  = 0x%08" PRIx32 "\n", event_write_source);
+	printf("\t interrupt_selector  = 0x%08" PRIx32 "\n", interrupt_selector);
 	printf("\t dst_gpu_addr        = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(dst_gpu_addr));
 	printf("\t value               = 0x%016" PRIx64 "\n", value);
 
 	EXIT_NOT_IMPLEMENTED(cache_policy != 0x00000000);
 	EXIT_NOT_IMPLEMENTED(event_write_dest != 0x00000000);
-	// EXIT_NOT_IMPLEMENTED(event_write_source != 0x00000002);
 
-	if (eop_event_type == 0x00000004 && cache_action == 0x00000000 && event_index == 0x00000005 && event_write_source == 0x00000002)
+	if (eop_event_type == 0x04 && cache_action == 0x00 && event_index == 0x05 && event_write_source == 0x02 &&
+	    (interrupt_selector == 0x00 || interrupt_selector == 0x03))
 	{
 		GraphicsRenderWriteAtEndOfPipe(m_buffer[m_current_buffer], static_cast<uint64_t*>(dst_gpu_addr), value);
-	} else if (eop_event_type == 0x00000004 && cache_action == 0x00000000 && event_index == 0x00000005 && event_write_source == 0x00000001)
+	} else if (eop_event_type == 0x04 && cache_action == 0x00 && event_index == 0x05 && event_write_source == 0x01 &&
+	           (interrupt_selector == 0x00 || interrupt_selector == 0x03))
 	{
 		GraphicsRenderWriteAtEndOfPipe(m_buffer[m_current_buffer], static_cast<uint32_t*>(dst_gpu_addr), value);
-	} else if (((eop_event_type == 0x00000004 && event_index == 0x00000005) ||
-	            (eop_event_type == 0x00000028 && event_index == 0x00000005) ||
-	            (eop_event_type == 0x0000002f && event_index == 0x00000006)) &&
-	           cache_action == 0x00000038 && event_write_source == 0x00000002)
+	} else if (((eop_event_type == 0x04 && event_index == 0x05) || (eop_event_type == 0x28 && event_index == 0x05) ||
+	            (eop_event_type == 0x2f && event_index == 0x06)) &&
+	           cache_action == 0x38 && event_write_source == 0x02 && (interrupt_selector == 0x00 || interrupt_selector == 0x03))
 	{
 		GraphicsRenderWriteAtEndOfPipeWithWriteBack(m_buffer[m_current_buffer], static_cast<uint64_t*>(dst_gpu_addr), value);
-	} else if (eop_event_type == 0x00000004 && cache_action == 0x00000000 && event_index == 0x00000005 && event_write_source == 0x00000004)
+	} else if (eop_event_type == 0x04 && cache_action == 0x00 && event_index == 0x05 && event_write_source == 0x04 &&
+	           (interrupt_selector == 0x00 || interrupt_selector == 0x03))
 	{
 		GraphicsRenderWriteAtEndOfPipeClockCounter(m_buffer[m_current_buffer], static_cast<uint64_t*>(dst_gpu_addr));
+	} else if ((eop_event_type == 0x04 && event_index == 0x05) && cache_action == 0x00 && event_write_source == 0x02 &&
+	           interrupt_selector == 0x02)
+	{
+		GraphicsRenderWriteAtEndOfPipeWithInterrupt(m_buffer[m_current_buffer], static_cast<uint64_t*>(dst_gpu_addr), value);
+	} else if ((eop_event_type == 0x04 && event_index == 0x05) && cache_action == 0x3b && event_write_source == 0x02 &&
+	           interrupt_selector == 0x02)
+	{
+		GraphicsRenderWriteAtEndOfPipeWithInterruptWriteBack(m_buffer[m_current_buffer], static_cast<uint64_t*>(dst_gpu_addr), value);
 	} else
 	{
 		EXIT("unknown event type\n");
@@ -1178,6 +1231,20 @@ void CommandProcessor::TriggerEvent(uint32_t event_type, uint32_t event_index)
 	}
 }
 
+void CommandProcessor::Flip(void* dst_gpu_addr, uint32_t value)
+{
+	Core::LockGuard lock(m_mutex);
+
+	EXIT_IF(m_current_buffer < 0 || m_current_buffer >= VK_BUFFERS_NUM);
+
+	printf("CommandProcessor::Flip()\n");
+	printf("\t dst_gpu_addr = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(dst_gpu_addr));
+	printf("\t value        = 0x%08" PRIx32 "\n", value);
+
+	GraphicsRenderWriteAtEndOfPipeWithFlip(m_buffer[m_current_buffer], static_cast<uint32_t*>(dst_gpu_addr), value, m_flip.handle,
+	                                       m_flip.index, m_flip.flip_mode, m_flip.flip_arg);
+}
+
 void CommandProcessor::FlipWithInterrupt(uint32_t eop_event_type, uint32_t cache_action, void* dst_gpu_addr, uint32_t value)
 {
 	Core::LockGuard lock(m_mutex);
@@ -1205,6 +1272,13 @@ void CommandProcessor::WriteBack()
 	Core::LockGuard lock(m_mutex);
 
 	GraphicsRenderWriteBack();
+}
+
+void CommandBuffer::CommandProcessorWait()
+{
+	EXIT_IF(m_parent == nullptr);
+
+	m_parent->BufferWait();
 }
 
 void GraphicsRunSubmit(uint32_t* cmd_draw_buffer, uint32_t num_draw_dw, uint32_t* cmd_const_buffer, uint32_t num_const_dw)
@@ -1260,6 +1334,13 @@ void GraphicsRunDone()
 	EXIT_IF(g_gpu == nullptr);
 
 	g_gpu->Done();
+}
+
+bool GraphicsRunAreSubmitsAllowed()
+{
+	EXIT_IF(g_gpu == nullptr);
+
+	return g_gpu->AreSubmitsAllowed();
 }
 
 int GraphicsRunGetFrameNum()
@@ -1456,11 +1537,12 @@ KYTY_CP_OP_PARSER(cp_op_event_write_eop)
 	uint32_t cache_action       = (buffer[0] >> 12u) & 0x3fu;
 	uint32_t event_index        = (buffer[0] >> 8u) & 0x7u;
 	uint32_t event_write_source = ((buffer[2] >> 29u) & 0x7u);
+	uint32_t interrupt_selector = (buffer[2] >> 24u) & 0x7u;
 	auto*    dst_gpu_addr       = reinterpret_cast<void*>(buffer[1] | (static_cast<uint64_t>(buffer[2] & 0xffffu) << 32u));
 	uint64_t value              = (buffer[3] | (static_cast<uint64_t>(buffer[4]) << 32u));
 
 	cp->WriteAtEndOfPipe64(cache_policy, event_write_dest, eop_event_type, cache_action, event_index, event_write_source, dst_gpu_addr,
-	                       value);
+	                       value, interrupt_selector);
 
 	return 5;
 }
@@ -1477,12 +1559,13 @@ KYTY_CP_OP_PARSER(cp_op_event_write_eos)
 	uint32_t cache_action       = (buffer[0] >> 12u) & 0x3fu;
 	uint32_t event_index        = (buffer[0] >> 8u) & 0x7u;
 	uint32_t event_write_source = ((buffer[2] >> 29u) & 0x7u);
+	uint32_t interrupt_selector = (buffer[2] >> 24u) & 0x7u;
 
 	auto*    dst_gpu_addr = reinterpret_cast<void*>(buffer[1] | (static_cast<uint64_t>(buffer[2] & 0xffffu) << 32u));
 	uint32_t value        = buffer[3];
 
 	cp->WriteAtEndOfPipe32(cache_policy, event_write_dest, eop_event_type, cache_action, event_index, event_write_source, dst_gpu_addr,
-	                       value);
+	                       value, interrupt_selector);
 
 	return 4;
 }
@@ -1503,10 +1586,8 @@ KYTY_CP_OP_PARSER(cp_op_release_mem)
 	auto*    dst_gpu_addr       = reinterpret_cast<void*>(buffer[2] | (static_cast<uint64_t>(buffer[3]) << 32u));
 	uint64_t value              = (buffer[4] | (static_cast<uint64_t>(buffer[5]) << 32u));
 
-	EXIT_NOT_IMPLEMENTED(interrupt_selector != 0x3);
-
 	cp->WriteAtEndOfPipe64(cache_policy, event_write_dest, eop_event_type, cache_action, event_index, event_write_source, dst_gpu_addr,
-	                       value);
+	                       value, interrupt_selector);
 
 	return 6;
 }
@@ -1764,6 +1845,13 @@ KYTY_CP_OP_PARSER(cp_op_marker)
 		case 0x0: cp->SetEmbeddedDataMarker(buffer + 1, len_dw, align); break;
 		case 0x4: cp->SetUserDataMarker(UserSgprType::Vsharp); break;
 		case 0xd: cp->SetUserDataMarker(UserSgprType::Region); break;
+		case 0x778:
+		{
+			auto*    addr  = reinterpret_cast<void*>(buffer[1] | (static_cast<uint64_t>(buffer[2]) << 32u));
+			uint32_t value = buffer[3];
+			cp->Flip(addr, value);
+			break;
+		}
 		case 0x781:
 		{
 			auto*    addr           = reinterpret_cast<void*>(buffer[1] | (static_cast<uint64_t>(buffer[2]) << 32u));

@@ -21,6 +21,7 @@ LIB_DEFINE(InitGraphicsDriver_1)
 	LIB_FUNC("zwY0YV91TTI", Graphics::GraphicsSubmitCommandBuffers);
 	LIB_FUNC("xbxNatawohc", Graphics::GraphicsSubmitAndFlipCommandBuffers);
 	LIB_FUNC("yvZ73uQUqrk", Graphics::GraphicsSubmitDone);
+	LIB_FUNC("b08AgtPlHPg", Graphics::GraphicsAreSubmitsAllowed);
 	LIB_FUNC("iBt3Oe00Kvc", Graphics::GraphicsFlushMemory);
 	LIB_FUNC("b0xyllnVY-I", Graphics::GraphicsAddEqEvent);
 	LIB_FUNC("PVT+fuoS9gU", Graphics::GraphicsDeleteEqEvent);

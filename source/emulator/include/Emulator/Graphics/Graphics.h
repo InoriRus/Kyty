@@ -28,6 +28,7 @@ int KYTY_SYSV_ABI      GraphicsSubmitAndFlipCommandBuffers(uint32_t count, void*
                                                            void* ccb_gpu_addrs[], const uint32_t* ccb_sizes_in_bytes, int handle, int index,
                                                            int flip_mode, int64_t flip_arg);
 int KYTY_SYSV_ABI      GraphicsSubmitDone();
+int KYTY_SYSV_ABI      GraphicsAreSubmitsAllowed();
 void KYTY_SYSV_ABI     GraphicsFlushMemory();
 int KYTY_SYSV_ABI      GraphicsAddEqEvent(LibKernel::EventQueue::KernelEqueue eq, int id, void* udata);
 int KYTY_SYSV_ABI      GraphicsDeleteEqEvent(LibKernel::EventQueue::KernelEqueue eq, int id);

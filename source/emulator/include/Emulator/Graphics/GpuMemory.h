@@ -72,7 +72,7 @@ void* GpuMemoryGetObject(GraphicContext* ctx, uint64_t vaddr, uint64_t size, con
 void* GpuMemoryGetObject(GraphicContext* ctx, const uint64_t* vaddr, const uint64_t* size, int vaddr_num, const GpuObject& info);
 void  GpuMemoryResetHash(GraphicContext* ctx, uint64_t vaddr, uint64_t size, GpuMemoryObjectType type);
 void  GpuMemoryDbgDump();
-void  GpuMemoryFlush();
+void  GpuMemoryFlush(GraphicContext* ctx);
 void  GpuMemoryFrameDone();
 void  GpuMemoryWriteBack(GraphicContext* ctx);
 

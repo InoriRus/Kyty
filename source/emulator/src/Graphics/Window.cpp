@@ -387,10 +387,12 @@ void game_show_window(GameApi* game, const Core::Timer& timer)
 			printf("skip frame %d\n", p->skip_frames);
 		} else
 		{
-			if (VideoOut::FlipWindow(100000))
+			VideoOut::VideoOutBeginVblank();
+			if (VideoOut::VideoOutFlipWindow(100000))
 			{
 				CalcFrameTime(game, timer.GetTimeS());
 			}
+			VideoOut::VideoOutEndVblank();
 		}
 	}
 	p->mutex.Unlock();
@@ -1403,6 +1405,39 @@ static VkPhysicalDevice VulkanFindPhysicalDevice(VkInstance instance, VkSurfaceK
 			skip_device = true;
 		}
 
+		if (!skip_device &&
+		    !CheckFormat(device, VK_FORMAT_R8G8B8A8_SRGB, true, VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT))
+		{
+			printf("Format VK_FORMAT_R8G8B8A8_SRGB cannot be used as texture");
+			skip_device = true;
+		}
+
+		if (!skip_device &&
+		    !CheckFormat(device, VK_FORMAT_R8G8B8A8_SRGB, true, VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT))
+		{
+			printf("Format VK_FORMAT_R8G8B8A8_SRGB cannot be used as texture");
+
+			if (!skip_device && !CheckFormat(device, VK_FORMAT_R8G8B8A8_UNORM, true,
+			                                 VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT))
+			{
+				printf("Format VK_FORMAT_R8G8B8A8_UNORM cannot be used as texture");
+				skip_device = true;
+			}
+		}
+
+		if (!skip_device &&
+		    !CheckFormat(device, VK_FORMAT_B8G8R8A8_SRGB, true, VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT))
+		{
+			printf("Format VK_FORMAT_B8G8R8A8_SRGB cannot be used as texture");
+
+			if (!skip_device && !CheckFormat(device, VK_FORMAT_B8G8R8A8_UNORM, true,
+			                                 VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT))
+			{
+				printf("Format VK_FORMAT_B8G8R8A8_UNORM cannot be used as texture");
+				skip_device = true;
+			}
+		}
+
 		/*if (!skip_device && !CheckFormat(device, VK_FORMAT_S8_UINT, true, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT))
 		{
 		    printf("Format VK_FORMAT_S8_UINT cannot be used as depth buffer");
@@ -1483,7 +1518,7 @@ static VkDevice VulkanCreateDevice(VkPhysicalDevice physical_device, VkSurfaceKH
 	queue_create_info.queueCount       = queue_count;
 	queue_create_info.pQueuePriorities = queue_priority.GetDataConst();
 
-	VkPhysicalDeviceFeatures device_features {};
+	// VkPhysicalDeviceFeatures device_features {};
 
 	VkDeviceCreateInfo create_info {};
 	create_info.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -1495,7 +1530,7 @@ static VkDevice VulkanCreateDevice(VkPhysicalDevice physical_device, VkSurfaceKH
 	create_info.ppEnabledLayerNames     = (r->enable_validation_layers ? r->required_layers.GetDataConst() : nullptr);
 	create_info.enabledExtensionCount   = device_extensions.Size();
 	create_info.ppEnabledExtensionNames = device_extensions.GetDataConst();
-	create_info.pEnabledFeatures        = &device_features;
+	create_info.pEnabledFeatures        = nullptr; //&device_features;
 
 	VkDevice device = nullptr;
 

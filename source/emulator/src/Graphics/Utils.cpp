@@ -82,7 +82,7 @@ static void set_image_layout(VkCommandBuffer buffer, VkImage image, uint32_t lev
 	vkCmdPipelineBarrier(buffer, src_stages, dest_stages, 0, 0, nullptr, 0, nullptr, 1, &image_memory_barrier);
 }
 
-void UtilBufferToImage(CommandBuffer* buffer, VulkanBuffer* src_buffer, VideoOutVulkanImage* dst_image)
+void UtilBufferToImage(CommandBuffer* buffer, VulkanBuffer* src_buffer, uint32_t src_pitch, VideoOutVulkanImage* dst_image)
 {
 	EXIT_IF(src_buffer == nullptr);
 	EXIT_IF(src_buffer->buffer == nullptr);
@@ -96,7 +96,7 @@ void UtilBufferToImage(CommandBuffer* buffer, VulkanBuffer* src_buffer, VideoOut
 
 	VkBufferImageCopy region {};
 	region.bufferOffset      = 0;
-	region.bufferRowLength   = 0;
+	region.bufferRowLength   = (src_pitch != dst_image->extent.width ? src_pitch : 0);
 	region.bufferImageHeight = 0;
 
 	region.imageSubresource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -114,7 +114,7 @@ void UtilBufferToImage(CommandBuffer* buffer, VulkanBuffer* src_buffer, VideoOut
 }
 
 void UtilBufferToImage(CommandBuffer* buffer, VulkanBuffer* src_buffer, TextureVulkanImage* dst_image,
-                       const Vector<BufferImageCopy>& regions)
+                       const Vector<BufferImageCopy>& regions, uint64_t dst_layout)
 {
 	EXIT_IF(src_buffer == nullptr);
 	EXIT_IF(src_buffer->buffer == nullptr);
@@ -131,7 +131,7 @@ void UtilBufferToImage(CommandBuffer* buffer, VulkanBuffer* src_buffer, TextureV
 	for (const auto& r: regions)
 	{
 		region[index].bufferOffset                    = r.offset;
-		region[index].bufferRowLength                 = 0;
+		region[index].bufferRowLength                 = (r.width != r.pitch ? r.pitch : 0);
 		region[index].bufferImageHeight               = 0;
 		region[index].imageSubresource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
 		region[index].imageSubresource.mipLevel       = index;
@@ -148,7 +148,7 @@ void UtilBufferToImage(CommandBuffer* buffer, VulkanBuffer* src_buffer, TextureV
 	vkCmdCopyBufferToImage(vk_buffer, src_buffer->buffer, dst_image->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, index, region);
 
 	set_image_layout(vk_buffer, dst_image->image, index, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-	                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	                 /*VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL*/ static_cast<VkImageLayout>(dst_layout));
 }
 
 void UtilBlitImage(CommandBuffer* buffer, VideoOutVulkanImage* src_image, VulkanSwapchain* dst_swapchain)
@@ -231,7 +231,7 @@ void VulkanDeleteBuffer(GraphicContext* gctx, VulkanBuffer* buffer)
 	buffer->buffer = nullptr;
 }
 
-void UtilFillImage(GraphicContext* ctx, VideoOutVulkanImage* image, const void* src_data, uint64_t size)
+void UtilFillImage(GraphicContext* ctx, VideoOutVulkanImage* image, const void* src_data, uint64_t size, uint32_t src_pitch)
 {
 	KYTY_PROFILER_FUNCTION();
 
@@ -244,10 +244,8 @@ void UtilFillImage(GraphicContext* ctx, VideoOutVulkanImage* image, const void* 
 	VulkanCreateBuffer(ctx, size, &staging_buffer);
 
 	void* data = nullptr;
-	// vkMapMemory(ctx->device, staging_buffer.memory.memory, staging_buffer.memory.offset, size, 0, &data);
 	VulkanMapMemory(ctx, &staging_buffer.memory, &data);
 	std::memcpy(data, src_data, size);
-	// vkUnmapMemory(ctx->device, staging_buffer.memory.memory);
 	VulkanUnmapMemory(ctx, &staging_buffer.memory);
 
 	CommandBuffer buffer;
@@ -256,7 +254,7 @@ void UtilFillImage(GraphicContext* ctx, VideoOutVulkanImage* image, const void* 
 	EXIT_NOT_IMPLEMENTED(buffer.IsInvalid());
 
 	buffer.Begin();
-	UtilBufferToImage(&buffer, &staging_buffer, image);
+	UtilBufferToImage(&buffer, &staging_buffer, src_pitch, image);
 	buffer.End();
 	buffer.Execute();
 	buffer.WaitForFence();
@@ -310,7 +308,7 @@ void UtilSetImageLayoutOptimal(VideoOutVulkanImage* image)
 }
 
 void UtilFillImage(GraphicContext* ctx, TextureVulkanImage* image, const void* src_data, uint64_t size,
-                   const Vector<BufferImageCopy>& regions)
+                   const Vector<BufferImageCopy>& regions, uint64_t dst_layout)
 {
 	EXIT_IF(ctx == nullptr);
 	EXIT_IF(image == nullptr);
@@ -331,7 +329,7 @@ void UtilFillImage(GraphicContext* ctx, TextureVulkanImage* image, const void* s
 	EXIT_NOT_IMPLEMENTED(buffer.IsInvalid());
 
 	buffer.Begin();
-	UtilBufferToImage(&buffer, &staging_buffer, image, regions);
+	UtilBufferToImage(&buffer, &staging_buffer, image, regions, dst_layout);
 	buffer.End();
 	buffer.Execute();
 	buffer.WaitForFence();

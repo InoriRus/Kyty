@@ -14,11 +14,19 @@
 
 namespace Kyty::Libs::Graphics {
 
+enum LabelStatus
+{
+	New,
+	Active,
+	ActiveDeleted,
+	NotActive,
+};
+
 struct Label
 {
 	VkDevice                   device         = nullptr;
 	VkEvent                    event          = nullptr;
-	bool                       active         = false;
+	LabelStatus                status         = LabelStatus::New;
 	uint64_t*                  dst_gpu_addr64 = nullptr;
 	uint64_t                   value64        = 0;
 	uint32_t*                  dst_gpu_addr32 = nullptr;
@@ -26,6 +34,7 @@ struct Label
 	LabelGpuObject::callback_t callback_1     = nullptr;
 	LabelGpuObject::callback_t callback_2     = nullptr;
 	uint64_t                   args[4]        = {};
+	CommandBuffer*             buffer         = nullptr;
 };
 
 class LabelManager
@@ -67,15 +76,22 @@ void LabelManager::ThreadRun(void* data)
 
 		int active_count = 0;
 
+		Vector<Label*> deleted_labels;
+
 		for (auto& label: manager->m_labels)
 		{
-			if (label->active)
+			if (label->status == LabelStatus::Active || label->status == LabelStatus::ActiveDeleted)
 			{
 				active_count++;
 
 				if (vkGetEventStatus(label->device, label->event) == VK_EVENT_SET)
 				{
-					label->active = false;
+					if (label->status == LabelStatus::ActiveDeleted)
+					{
+						deleted_labels.Add(label);
+					}
+
+					label->status = LabelStatus::NotActive;
 
 					bool write = true;
 
@@ -108,6 +124,11 @@ void LabelManager::ThreadRun(void* data)
 			}
 		}
 
+		for (auto& label: deleted_labels)
+		{
+			manager->Delete(label);
+		}
+
 		if (active_count == 0)
 		{
 			manager->m_cond_var.Wait(&manager->m_mutex);
@@ -129,7 +150,7 @@ Label* LabelManager::Create(GraphicContext* ctx, uint64_t* dst_gpu_addr, uint64_
 
 	auto* label = new Label;
 
-	label->active         = false;
+	label->status         = LabelStatus::New;
 	label->dst_gpu_addr64 = dst_gpu_addr;
 	label->value64        = value;
 	label->dst_gpu_addr32 = nullptr;
@@ -142,6 +163,7 @@ Label* LabelManager::Create(GraphicContext* ctx, uint64_t* dst_gpu_addr, uint64_
 	label->args[1]        = args[1];
 	label->args[2]        = args[2];
 	label->args[3]        = args[3];
+	label->buffer         = nullptr;
 
 	VkEventCreateInfo create_info {};
 	create_info.sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO;
@@ -168,7 +190,7 @@ Label* LabelManager::Create(GraphicContext* ctx, uint32_t* dst_gpu_addr, uint32_
 
 	auto* label = new Label;
 
-	label->active         = false;
+	label->status         = LabelStatus::New;
 	label->dst_gpu_addr32 = dst_gpu_addr;
 	label->value32        = value;
 	label->dst_gpu_addr64 = nullptr;
@@ -208,13 +230,24 @@ void LabelManager::Delete(Label* label)
 
 	EXIT_NOT_IMPLEMENTED(!m_labels.IndexValid(index));
 
-	m_labels.RemoveAt(index);
+	EXIT_NOT_IMPLEMENTED(label->status != LabelStatus::NotActive && label->status != LabelStatus::Active);
 
-	EXIT_NOT_IMPLEMENTED(label->active);
+	if (label->status == LabelStatus::Active)
+	{
+		label->status = LabelStatus::ActiveDeleted;
+	} else
+	{
+		m_labels.RemoveAt(index);
 
-	vkDestroyEvent(label->device, label->event, nullptr);
+		EXIT_IF(label->buffer == nullptr);
 
-	delete label;
+		// All submitted commands that refer to event must have completed execution
+		label->buffer->CommandProcessorWait();
+
+		vkDestroyEvent(label->device, label->event, nullptr);
+
+		delete label;
+	}
 }
 
 void LabelManager::Set(CommandBuffer* buffer, Label* label)
@@ -231,11 +264,13 @@ void LabelManager::Set(CommandBuffer* buffer, Label* label)
 
 	EXIT_NOT_IMPLEMENTED(!m_labels.IndexValid(index));
 
-	EXIT_NOT_IMPLEMENTED(label->active);
+	EXIT_NOT_IMPLEMENTED(label->status != LabelStatus::New && label->status != LabelStatus::NotActive);
 
-	label->active = true;
+	label->status = LabelStatus::Active;
 
 	EXIT_IF(label->event == nullptr);
+
+	label->buffer = buffer;
 
 	auto* vk_buffer = buffer->GetPool()->buffers[buffer->GetIndex()];
 
