@@ -17,7 +17,8 @@ enum class SymbolType
 	Unknown,
 	Func,
 	Object,
-	TlsModule
+	TlsModule,
+	NoType,
 };
 
 struct SymbolRecord

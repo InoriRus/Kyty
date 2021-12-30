@@ -7,8 +7,36 @@
 
 namespace Kyty::Loader {
 
+static SelfHeader* load_self(Core::File& f)
+{
+	if (f.Remaining() < sizeof(SelfHeader))
+	{
+		return nullptr;
+	}
+
+	auto* self = new SelfHeader;
+
+	f.Read(self, sizeof(SelfHeader));
+
+	return self;
+}
+
+static SelfSegment* load_self_segments(Core::File& f, uint16_t num)
+{
+	auto* segs = new SelfSegment[num];
+
+	f.Read(segs, sizeof(SelfSegment) * num);
+
+	return segs;
+}
+
 static Elf64_Ehdr* load_ehdr_64(Core::File& f)
 {
+	if (f.Remaining() < sizeof(Elf64_Ehdr))
+	{
+		return nullptr;
+	}
+
 	auto* ehdr = new Elf64_Ehdr;
 
 	f.Read(ehdr, sizeof(Elf64_Ehdr));
@@ -41,12 +69,14 @@ static Elf64_Shdr* load_shdr_64(Core::File& f, uint64_t offset, Elf64_Half num)
 	return shdr;
 }
 
-static void* load_dynamic_64(Core::File& f, uint64_t offset, uint64_t size)
+static void* load_dynamic_64(Elf64* f, uint64_t offset, uint64_t size)
 {
 	void* dynamic_data = new uint8_t[size];
 
-	f.Seek(offset);
-	f.Read(dynamic_data, size);
+	// f.Seek(offset);
+	// f.Read(dynamic_data, size);
+
+	f->LoadSegment(reinterpret_cast<uint64_t>(dynamic_data), offset, size);
 
 	return dynamic_data;
 }
@@ -187,8 +217,51 @@ void Elf64::LoadSegment(uint64_t vaddr, uint64_t file_offset, uint64_t size)
 {
 	EXIT_IF(m_f == nullptr);
 
-	m_f->Seek(file_offset);
-	m_f->Read(reinterpret_cast<void*>(static_cast<uintptr_t>(vaddr)), size);
+	if (m_self != nullptr)
+	{
+		EXIT_IF(m_self_segments == nullptr);
+		EXIT_IF(m_phdr == nullptr);
+
+		for (uint16_t i = 0; i < m_self->segments_num; i++)
+		{
+			const auto& seg = m_self_segments[i];
+			if ((seg.type & 0x800u) != 0)
+			{
+				auto phdr_id = ((seg.type >> 20u) & 0xFFFu);
+
+				const auto& phdr = m_phdr[phdr_id];
+
+				if (file_offset >= phdr.p_offset && file_offset < phdr.p_offset + phdr.p_filesz)
+				{
+					EXIT_NOT_IMPLEMENTED(seg.decompressed_size != phdr.p_filesz);
+					EXIT_NOT_IMPLEMENTED(seg.compressed_size != seg.decompressed_size);
+
+					auto offset = file_offset - phdr.p_offset;
+
+					EXIT_NOT_IMPLEMENTED(offset + size > seg.decompressed_size);
+
+					m_f->Seek(offset + seg.offset);
+					m_f->Read(reinterpret_cast<void*>(static_cast<uintptr_t>(vaddr)), size);
+
+					return;
+				}
+			}
+		}
+
+		if (m_f->Size() - m_self->file_size == size)
+		{
+			m_f->Seek(m_self->file_size);
+			m_f->Read(reinterpret_cast<void*>(static_cast<uintptr_t>(vaddr)), size);
+
+			return;
+		}
+
+		EXIT("missing self segment\n");
+	} else
+	{
+		m_f->Seek(file_offset);
+		m_f->Read(reinterpret_cast<void*>(static_cast<uintptr_t>(vaddr)), size);
+	}
 }
 
 const Elf64_Dyn* Elf64::GetDynValue(Elf64_Sxword tag) const
@@ -233,19 +306,23 @@ void Elf64::Clear()
 		m_f->Close();
 		delete m_f;
 	}
+	delete m_self;
 	delete m_ehdr;
+	delete[] m_self_segments;
 	delete[] m_phdr;
 	delete[] m_shdr;
 	delete[] m_str_table;
 	delete[] static_cast<uint8_t*>(m_dynamic);
 	delete[] static_cast<uint8_t*>(m_dynamic_data);
 
-	m_ehdr         = nullptr;
-	m_phdr         = nullptr;
-	m_shdr         = nullptr;
-	m_str_table    = nullptr;
-	m_dynamic      = nullptr;
-	m_dynamic_data = nullptr;
+	m_self          = nullptr;
+	m_self_segments = nullptr;
+	m_ehdr          = nullptr;
+	m_phdr          = nullptr;
+	m_shdr          = nullptr;
+	m_str_table     = nullptr;
+	m_dynamic       = nullptr;
+	m_dynamic_data  = nullptr;
 }
 
 void Elf64::DbgDump(const String& folder)
@@ -269,8 +346,11 @@ void Elf64::DbgDump(const String& folder)
 
 		auto* buf = new char[static_cast<uint32_t>(m_phdr[i].p_filesz)];
 
-		m_f->Seek(m_phdr[i].p_offset);
-		m_f->Read(buf, static_cast<uint32_t>(m_phdr[i].p_filesz));
+		// m_f->Seek(m_phdr[i].p_offset);
+		// m_f->Read(buf, static_cast<uint32_t>(m_phdr[i].p_filesz));
+
+		LoadSegment(reinterpret_cast<uint64_t>(buf), m_phdr[i].p_offset, m_phdr[i].p_filesz);
+
 		fout.Write(buf, static_cast<uint32_t>(m_phdr[i].p_filesz));
 
 		delete[] buf;
@@ -337,10 +417,46 @@ uint64_t Elf64::GetEntry()
 	return m_ehdr->e_entry;
 }
 
+bool Elf64::IsSelf() const
+{
+	if (m_f == nullptr || m_f->IsInvalid())
+	{
+		return false;
+	}
+
+	if (m_self == nullptr)
+	{
+		return false;
+	}
+
+	if (m_self->ident[0] != 0x4f || m_self->ident[1] != 0x15 || m_self->ident[2] != 0x3d || m_self->ident[3] != 0x1d)
+	{
+		return false;
+	}
+
+	if (m_self->ident[4] != 0x00 || m_self->ident[5] != 0x01 || m_self->ident[6] != 0x01 || m_self->ident[7] != 0x12)
+	{
+		printf("Unknown SELF file\n");
+		return false;
+	}
+
+	if (m_self->ident[8] != 0x01 || m_self->ident[9] != 0x01 || m_self->ident[10] != 0x00 || m_self->ident[11] != 0x00)
+	{
+		printf("Unknown SELF file\n");
+		return false;
+	}
+
+	if (m_self->unknown != 0x22)
+	{
+		printf("Unknown SELF file\n");
+		return false;
+	}
+
+	return true;
+}
+
 bool Elf64::IsValid() const
 {
-	bool ret = true;
-
 	if (m_f == nullptr || m_f->IsInvalid())
 	{
 		return false;
@@ -418,7 +534,7 @@ bool Elf64::IsValid() const
 		return false;
 	}
 
-	return ret;
+	return true;
 }
 
 void Elf64::Open(const String& file_name)
@@ -433,25 +549,52 @@ void Elf64::Open(const String& file_name)
 		EXIT("Can't open %s\n", file_name.C_Str());
 	}
 
-	m_ehdr = load_ehdr_64(*m_f);
-	m_phdr = load_phdr_64(*m_f, m_ehdr->e_phoff, m_ehdr->e_phnum);
-	m_shdr = load_shdr_64(*m_f, m_ehdr->e_shoff, m_ehdr->e_shnum);
+	m_self = load_self(*m_f);
 
-	if (m_shdr != nullptr)
+	if (!IsSelf())
 	{
-		m_str_table = load_str_table(*m_f, m_shdr[m_ehdr->e_shstrndx].sh_offset, static_cast<uint32_t>(m_shdr[m_ehdr->e_shstrndx].sh_size));
+		delete m_self;
+		m_self = nullptr;
+		m_f->Seek(0);
+	} else
+	{
+		m_self_segments = load_self_segments(*m_f, m_self->segments_num);
 	}
 
-	for (Elf64_Half i = 0; i < m_ehdr->e_phnum; i++)
+	auto ehdr_pos = m_f->Tell();
+
+	m_ehdr = load_ehdr_64(*m_f);
+
+	if (!IsValid())
 	{
-		if (m_phdr[i].p_type == PT_DYNAMIC)
+		delete m_ehdr;
+		m_ehdr = nullptr;
+	}
+
+	if (m_ehdr != nullptr /*&& m_self == nullptr*/)
+	{
+		m_phdr = load_phdr_64(*m_f, ehdr_pos + m_ehdr->e_phoff, m_ehdr->e_phnum);
+		m_shdr = load_shdr_64(*m_f, ehdr_pos + m_ehdr->e_shoff, m_ehdr->e_shnum);
+
+		EXIT_NOT_IMPLEMENTED(m_shdr != nullptr && m_self != nullptr);
+
+		if (m_shdr != nullptr)
 		{
-			m_dynamic = load_dynamic_64(*m_f, m_phdr[i].p_offset, m_phdr[i].p_filesz);
+			m_str_table =
+			    load_str_table(*m_f, m_shdr[m_ehdr->e_shstrndx].sh_offset, static_cast<uint32_t>(m_shdr[m_ehdr->e_shstrndx].sh_size));
 		}
 
-		if (m_phdr[i].p_type == PT_OS_DYNLIBDATA)
+		for (Elf64_Half i = 0; i < m_ehdr->e_phnum; i++)
 		{
-			m_dynamic_data = load_dynamic_64(*m_f, m_phdr[i].p_offset, m_phdr[i].p_filesz);
+			if (m_phdr[i].p_type == PT_DYNAMIC)
+			{
+				m_dynamic = load_dynamic_64(this, m_phdr[i].p_offset, m_phdr[i].p_filesz);
+			}
+
+			if (m_phdr[i].p_type == PT_OS_DYNLIBDATA)
+			{
+				m_dynamic_data = load_dynamic_64(this, m_phdr[i].p_offset, m_phdr[i].p_filesz);
+			}
 		}
 	}
 }

@@ -130,27 +130,47 @@ constexpr uint8_t STB_LOCAL  = 0;
 constexpr uint8_t STB_GLOBAL = 1;
 constexpr uint8_t STB_WEAK   = 2;
 
+constexpr uint8_t STT_NOTYPE = 0;
 constexpr uint8_t STT_OBJECT = 1;
 constexpr uint8_t STT_FUNC   = 2;
 
 #pragma pack(1)
 
+struct SelfHeader
+{
+	uint8_t  ident[12];
+	uint16_t size1;
+	uint16_t size2;
+	uint64_t file_size;
+	uint16_t segments_num;
+	uint16_t unknown;
+	uint32_t pad;
+};
+
+struct SelfSegment
+{
+	uint64_t type;
+	uint64_t offset;
+	uint64_t compressed_size;
+	uint64_t decompressed_size;
+};
+
 struct Elf64_Ehdr // NOLINT(readability-identifier-naming)
 {
-	unsigned char e_ident[EI_NIDENT]; /* ELF identification */
-	Elf64_Half    e_type;             /* Object file type */
-	Elf64_Half    e_machine;          /* Machine type */
-	Elf64_Word    e_version;          /* Object file version */
-	Elf64_Addr    e_entry;            /* Entry point address */
-	Elf64_Off     e_phoff;            /* Program header offset */
-	Elf64_Off     e_shoff;            /* Section header offset */
-	Elf64_Word    e_flags;            /* Processor-specific flags */
-	Elf64_Half    e_ehsize;           /* ELF header size */
-	Elf64_Half    e_phentsize;        /* Size of program header entry */
-	Elf64_Half    e_phnum;            /* Number of program header entries */
-	Elf64_Half    e_shentsize;        /* Size of section header entry */
-	Elf64_Half    e_shnum;            /* Number of section header entries */
-	Elf64_Half    e_shstrndx;         /* Section name string table index */
+	uint8_t    e_ident[EI_NIDENT]; /* ELF identification */
+	Elf64_Half e_type;             /* Object file type */
+	Elf64_Half e_machine;          /* Machine type */
+	Elf64_Word e_version;          /* Object file version */
+	Elf64_Addr e_entry;            /* Entry point address */
+	Elf64_Off  e_phoff;            /* Program header offset */
+	Elf64_Off  e_shoff;            /* Section header offset */
+	Elf64_Word e_flags;            /* Processor-specific flags */
+	Elf64_Half e_ehsize;           /* ELF header size */
+	Elf64_Half e_phentsize;        /* Size of program header entry */
+	Elf64_Half e_phnum;            /* Number of program header entries */
+	Elf64_Half e_shentsize;        /* Size of section header entry */
+	Elf64_Half e_shnum;            /* Number of section header entries */
+	Elf64_Half e_shstrndx;         /* Section name string table index */
 };
 
 struct Elf64_Phdr // NOLINT(readability-identifier-naming)
@@ -239,6 +259,7 @@ public:
 
 	const char* GetSectionName(int index) { return m_str_table + m_shdr[index].sh_name; }
 
+	[[nodiscard]] bool IsSelf() const;
 	[[nodiscard]] bool IsValid() const;
 	[[nodiscard]] bool IsShared() const;
 	[[nodiscard]] bool IsNextGen() const;
@@ -268,13 +289,15 @@ public:
 private:
 	void Clear();
 
-	Core::File* m_f            = nullptr;
-	Elf64_Ehdr* m_ehdr         = nullptr;
-	Elf64_Phdr* m_phdr         = nullptr;
-	Elf64_Shdr* m_shdr         = nullptr;
-	void*       m_dynamic      = nullptr;
-	void*       m_dynamic_data = nullptr;
-	char*       m_str_table    = nullptr;
+	Core::File*  m_f             = nullptr;
+	SelfHeader*  m_self          = nullptr;
+	SelfSegment* m_self_segments = nullptr;
+	Elf64_Ehdr*  m_ehdr          = nullptr;
+	Elf64_Phdr*  m_phdr          = nullptr;
+	Elf64_Shdr*  m_shdr          = nullptr;
+	void*        m_dynamic       = nullptr;
+	void*        m_dynamic_data  = nullptr;
+	char*        m_str_table     = nullptr;
 	// uint64_t    m_base_vaddr   = 0;
 };
 

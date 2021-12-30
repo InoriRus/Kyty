@@ -4,6 +4,7 @@
 
 #include "Emulator/Common.h"
 #include "Emulator/Jit.h"
+#include "Emulator/Profiler.h"
 
 #include <new>
 
@@ -315,6 +316,8 @@ bool FlushInstructionCache(uint64_t address, uint64_t size)
 
 bool PatchReplace(uint64_t vaddr, uint64_t value)
 {
+	KYTY_PROFILER_FUNCTION();
+
 	VirtualMemory::Mode old_mode {};
 	VirtualMemory::Protect(vaddr, 8, VirtualMemory::Mode::ReadWrite, &old_mode);
 

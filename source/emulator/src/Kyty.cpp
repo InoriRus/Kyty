@@ -34,6 +34,8 @@ namespace LuaFunc {
 
 static void load_symbols(const String& id, Loader::RuntimeLinker* rt)
 {
+	KYTY_PROFILER_FUNCTION();
+
 	EXIT_IF(rt == nullptr);
 	if (!Libs::Init(id, rt->Symbols()))
 	{

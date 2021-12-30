@@ -126,10 +126,11 @@ static void dbg_dump_rela(const String& folder, Elf64_Rela* records, uint64_t si
 
 	for (auto* r = records; reinterpret_cast<uint8_t*>(r) < reinterpret_cast<uint8_t*>(records) + size; r++)
 	{
-		f.Printf("----\n");
-		f.Printf("r_offset = 0x%016" PRIx64 "\n", r->r_offset);
-		f.Printf("r_info = 0x%016" PRIx64 "\n", r->r_info);
-		f.Printf("r_addend = %" PRId64 "\n", r->r_addend);
+		f.Printf("----\n"
+		         "r_offset = 0x%016" PRIx64 "\n"
+		         "r_info = 0x%016" PRIx64 "\n"
+		         "r_addend = %" PRId64 "\n",
+		         r->r_offset, r->r_info, r->r_addend);
 	}
 
 	f.Close();
@@ -270,8 +271,16 @@ static void get_dyn_libs(Elf64* elf, T* out, const char* names, Elf64_Sxword tag
 
 static RelocationInfo GetRelocationInfo(Elf64_Rela* r, Program* program)
 {
+	KYTY_PROFILER_FUNCTION();
+
+	// KYTY_PROFILER_BLOCK("1");
+
 	RelocationInfo ret;
-	SymbolRecord   sr {};
+	// SymbolRecord   sr {};
+
+	// KYTY_PROFILER_END_BLOCK;
+
+	// KYTY_PROFILER_BLOCK("2");
 
 	auto         type    = r->GetType();
 	auto         symbol  = r->GetSymbol();
@@ -282,18 +291,24 @@ static RelocationInfo GetRelocationInfo(Elf64_Rela* r, Program* program)
 	ret.vaddr            = ret.base_vaddr + r->r_offset;
 	ret.bind_self        = false;
 
+	// KYTY_PROFILER_END_BLOCK;
+
+	// KYTY_PROFILER_BLOCK("3");
+
 	switch (type)
 	{
 		case R_X86_64_GLOB_DAT:
 		case R_X86_64_JUMP_SLOT: addend = 0; [[fallthrough]];
 		case R_X86_64_64:
 		{
-			auto     sym          = symbols[symbol];
-			auto     bind         = sym.GetBind();
-			auto     sym_type     = sym.GetType();
-			uint64_t symbol_vaddr = 0;
+			auto         sym          = symbols[symbol];
+			auto         bind         = sym.GetBind();
+			auto         sym_type     = sym.GetType();
+			uint64_t     symbol_vaddr = 0;
+			SymbolRecord sr {};
 			switch (sym_type)
 			{
+				case STT_NOTYPE: ret.type = SymbolType::NoType; break;
 				case STT_FUNC: ret.type = SymbolType::Func; break;
 				case STT_OBJECT: ret.type = SymbolType::Object; break;
 				default: EXIT("unknown symbol type: %d\n", (int)sym_type);
@@ -334,18 +349,21 @@ static RelocationInfo GetRelocationInfo(Elf64_Rela* r, Program* program)
 			break;
 		default: EXIT("unknown type: %d\n", (int)type);
 	}
+
+	// KYTY_PROFILER_END_BLOCK;
+
 	return ret;
 }
 
 static void relocate(uint32_t index, Elf64_Rela* r, Program* program, bool jmprela_table)
 {
+	KYTY_PROFILER_FUNCTION();
+
 	auto ri = GetRelocationInfo(r, program);
 
-	auto dbg_str = String::FromPrintf("[%016" PRIx64 "] <- %s%016" PRIx64 "%s, %s, %s, %s, %s", ri.vaddr,
-	                                  ri.value == 0 ? FG_BRIGHT_RED : FG_BRIGHT_GREEN, ri.value, DEFAULT, ri.name.C_Str(),
-	                                  Core::EnumName(ri.type).C_Str(), Core::EnumName(ri.bind).C_Str(), ri.dbg_name.C_Str());
-
 	[[maybe_unused]] bool patched = false;
+
+	// KYTY_PROFILER_BLOCK("patch");
 
 	if (ri.resolved)
 	{
@@ -367,7 +385,7 @@ static void relocate(uint32_t index, Elf64_Rela* r, Program* program, bool jmpre
 			{
 				value = RuntimeLinker::ReadFromElf(program, ri.vaddr) + ri.base_vaddr;
 			}
-		} else if (ri.type == SymbolType::Func && !jmprela_table && weak)
+		} else if ((ri.type == SymbolType::Func && !jmprela_table && weak) || (ri.type == SymbolType::NoType && weak))
 		{
 			value = RuntimeLinker::ReadFromElf(program, ri.vaddr) + ri.base_vaddr;
 		}
@@ -377,15 +395,25 @@ static void relocate(uint32_t index, Elf64_Rela* r, Program* program, bool jmpre
 			patched = VirtualMemory::PatchReplace(ri.vaddr, value);
 		} else
 		{
+			auto dbg_str = String::FromPrintf("[%016" PRIx64 "] <- %s%016" PRIx64 "%s, %s, %s, %s, %s", ri.vaddr,
+			                                  ri.value == 0 ? FG_BRIGHT_RED : FG_BRIGHT_GREEN, ri.value, DEFAULT, ri.name.C_Str(),
+			                                  Core::EnumName(ri.type).C_Str(), Core::EnumName(ri.bind).C_Str(), ri.dbg_name.C_Str());
+
 			EXIT("Can't resolve: %s\n", (Log::IsColoredPrintf() ? dbg_str : Log::RemoveColors(dbg_str)).C_Str());
 		}
 	}
+
+	// KYTY_PROFILER_END_BLOCK;
 
 	if (program->dbg_print_reloc)
 	{
 		if (/* !dbg_str.ContainsStr(U"libc_") && */ patched && !ri.bind_self &&
 		    (ri.bind == BindType::Global || ri.bind == BindType::Weak || ri.type == SymbolType::TlsModule))
 		{
+			auto dbg_str = String::FromPrintf("[%016" PRIx64 "] <- %s%016" PRIx64 "%s, %s, %s, %s, %s", ri.vaddr,
+			                                  ri.value == 0 ? FG_BRIGHT_RED : FG_BRIGHT_GREEN, ri.value, DEFAULT, ri.name.C_Str(),
+			                                  Core::EnumName(ri.type).C_Str(), Core::EnumName(ri.bind).C_Str(), ri.dbg_name.C_Str());
+
 			printf("Relocate: %s\n", dbg_str.C_Str());
 		}
 	}
@@ -393,6 +421,8 @@ static void relocate(uint32_t index, Elf64_Rela* r, Program* program, bool jmpre
 
 static void relocate_all(Elf64_Rela* records, uint64_t size, Program* program, bool jmprela_table)
 {
+	KYTY_PROFILER_FUNCTION();
+
 	uint32_t index = 0;
 	for (auto* r = records; reinterpret_cast<uint8_t*>(r) < reinterpret_cast<uint8_t*>(records) + size; r++, index++)
 	{
@@ -500,6 +530,8 @@ uint64_t RuntimeLinker::GetProcParam()
 
 void RuntimeLinker::DbgDump(const String& folder)
 {
+	KYTY_PROFILER_FUNCTION();
+
 	EXIT_NOT_IMPLEMENTED(!Core::Thread::IsMainThread());
 
 	Core::LockGuard lock(m_mutex);
@@ -598,7 +630,7 @@ RuntimeLinker::~RuntimeLinker()
 
 Program* RuntimeLinker::LoadProgram(const String& elf_name)
 {
-	// EXIT_NOT_IMPLEMENTED(!Core::Thread::IsMainThread());
+	KYTY_PROFILER_FUNCTION();
 
 	Core::LockGuard lock(m_mutex);
 
@@ -698,7 +730,7 @@ void RuntimeLinker::Execute()
 
 void RuntimeLinker::Resolve(const String& name, SymbolType type, Program* program, SymbolRecord* out_info, bool* bind_self)
 {
-	// EXIT_NOT_IMPLEMENTED(!Core::Thread::IsMainThread());
+	KYTY_PROFILER_FUNCTION();
 
 	Core::LockGuard lock(m_mutex);
 
@@ -770,8 +802,6 @@ void RuntimeLinker::Resolve(const String& name, SymbolType type, Program* progra
 
 uint64_t RuntimeLinker::ReadFromElf(Program* program, uint64_t vaddr)
 {
-	// EXIT_NOT_IMPLEMENTED(!Core::Thread::IsMainThread());
-
 	EXIT_IF(program == nullptr);
 	EXIT_IF(program->base_vaddr == 0 || program->base_size == 0);
 	EXIT_IF(program->elf == nullptr);
@@ -963,6 +993,8 @@ static uint64_t calc_base_size(const Elf64_Ehdr* ehdr, const Elf64_Phdr* phdr)
 
 void RuntimeLinker::LoadProgramToMemory(Program* program)
 {
+	KYTY_PROFILER_FUNCTION();
+
 	EXIT_IF(program == nullptr || program->base_vaddr != 0 || program->base_size != 0 || program->elf == nullptr ||
 	        program->exception_handler != nullptr);
 
@@ -981,16 +1013,16 @@ void RuntimeLinker::LoadProgramToMemory(Program* program)
 
 	uint64_t exception_handler_size = VirtualMemory::ExceptionHandler::GetSize();
 	uint64_t tls_handler_size       = is_shared ? 0 : Jit::SafeCall::GetSize();
+	uint64_t alloc_size             = program->base_size_aligned + exception_handler_size + tls_handler_size;
 
-	program->base_vaddr = VirtualMemory::Alloc(desired_base_addr, program->base_size_aligned + exception_handler_size + tls_handler_size,
-	                                           VirtualMemory::Mode::ExecuteReadWrite);
+	program->base_vaddr = VirtualMemory::Alloc(desired_base_addr, alloc_size, VirtualMemory::Mode::ExecuteReadWrite);
 
 	if (!is_shared)
 	{
 		program->tls.handler_vaddr = program->base_vaddr + program->base_size_aligned + exception_handler_size;
 	}
 
-	desired_base_addr += DESIRED_BASE_ADDR;
+	desired_base_addr += DESIRED_BASE_ADDR * (1 + alloc_size / DESIRED_BASE_ADDR);
 
 	EXIT_IF(program->base_vaddr == 0);
 	EXIT_IF(program->base_size_aligned < program->base_size);
@@ -1107,34 +1139,10 @@ void RuntimeLinker::DeleteProgram(Program* p)
 	delete p;
 }
 
-// void RuntimeLinker::Initialize() const
-//{
-//	EXIT_NOT_IMPLEMENTED(m_program.dynamic_info != nullptr && m_program.dynamic_info->init_array_size != 0);
-//	EXIT_NOT_IMPLEMENTED(m_program.dynamic_info != nullptr && m_program.dynamic_info->preinit_array_size != 0);
-//
-//	if (auto addr = GetInit(); addr != 0)
-//	{
-//		run_init(addr);
-//	}
-//}
-
-// static void KYTY_SYSV_ABI ProgramFunctionNotFoundHandler()
-//{
-//	EXIT("Function not found\n");
-//}
-
-// void RuntimeLinker::Terminate() const
-//{
-//	EXIT_NOT_IMPLEMENTED(m_program.dynamic_info != nullptr && m_program.dynamic_info->fini_array_size != 0);
-//
-//	if (auto addr = GetFini(); addr != 0)
-//	{
-//		run_fini(addr);
-//	}
-//}
-
 void RuntimeLinker::ParseProgramDynamicInfo(Program* program)
 {
+	KYTY_PROFILER_FUNCTION();
+
 	EXIT_IF(program == nullptr);
 	EXIT_IF(program->elf == nullptr);
 	EXIT_IF(program->dynamic_info != nullptr);
@@ -1236,6 +1244,8 @@ void RuntimeLinker::ParseProgramDynamicInfo(Program* program)
 
 static void InstallRelocateHandler(Program* program)
 {
+	KYTY_PROFILER_FUNCTION();
+
 	uint64_t pltgot_vaddr = program->dynamic_info->pltgot_vaddr + program->base_vaddr;
 	uint64_t pltgot_size  = 3 * 8;
 	void**   pltgot       = reinterpret_cast<void**>(pltgot_vaddr);
@@ -1268,6 +1278,8 @@ static void InstallRelocateHandler(Program* program)
 
 void RuntimeLinker::Relocate(Program* program)
 {
+	KYTY_PROFILER_FUNCTION();
+
 	EXIT_IF(program == nullptr);
 
 	printf("--- Relocate program: " FG_WHITE BOLD "%s" DEFAULT " ---\n", program->file_name.C_Str());
@@ -1344,6 +1356,8 @@ const LibraryId* RuntimeLinker::FindLibrary(const Program& program, const String
 
 void RuntimeLinker::CreateSymbolDatabase(Program* program)
 {
+	KYTY_PROFILER_FUNCTION();
+
 	EXIT_IF(program == nullptr);
 	EXIT_IF(program->export_symbols != nullptr);
 	EXIT_IF(program->import_symbols != nullptr);
@@ -1385,6 +1399,7 @@ void RuntimeLinker::CreateSymbolDatabase(Program* program)
 					sr.module_version_minor = m->version_minor;
 					switch (type)
 					{
+						case STT_NOTYPE: sr.type = SymbolType::NoType; break;
 						case STT_FUNC: sr.type = SymbolType::Func; break;
 						case STT_OBJECT: sr.type = SymbolType::Object; break;
 						default: sr.type = SymbolType::Unknown; break;
