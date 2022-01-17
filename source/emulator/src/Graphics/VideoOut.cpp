@@ -486,6 +486,8 @@ bool FlipQueue::Flip(uint32_t micros)
 
 	printf("Flip done: %d\n", r.index);
 
+	// m_mutex.Lock();
+
 	m_requests.Remove(first);
 	m_done_cond_var.Signal();
 
@@ -526,14 +528,14 @@ void VideoOutBeginVblank()
 {
 	EXIT_IF(g_video_out_context == nullptr);
 
-	g_video_out_context->VblankBegin();
+	// g_video_out_context->VblankBegin();
 }
 
 void VideoOutEndVblank()
 {
 	EXIT_IF(g_video_out_context == nullptr);
 
-	g_video_out_context->VblankEnd();
+	// g_video_out_context->VblankEnd();
 }
 
 KYTY_SYSV_ABI int VideoOutOpen(int user_id, int bus_type, int index, const void* param)

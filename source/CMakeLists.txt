@@ -98,11 +98,14 @@ configure_file(
   ${PROJECT_SOURCE_DIR}/cmake_config.h.in
   ${PROJECT_BINARY_DIR}/cmake_config.h
   )
+
+find_package(Git)
   
 add_custom_target( KytyGitVersion
     COMMAND ${CMAKE_COMMAND} 
 	-D INPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/KytyGitVersion.h.in
     -D OUTPUT_FILE=${CMAKE_CURRENT_BINARY_DIR}/KytyGitVersion.h
+	-D GIT_EXECUTABLE=${GIT_EXECUTABLE}
 	-P ${CMAKE_CURRENT_SOURCE_DIR}/generate_version.cmake
 	COMMENT "Generate KytyGitVersion.h"
 )
@@ -113,6 +116,7 @@ list(APPEND KYTY_IWYU
 	#math_obj
 	#scripts_obj
 	#sys_obj
+	launcher
 )
 
 list(APPEND KYTY_CLANG_TYDY 
@@ -122,6 +126,7 @@ list(APPEND KYTY_CLANG_TYDY
 	#math_obj
 	#scripts_obj
 	#sys_obj
+	launcher
 )
 
 set(KYTY_LIB_HEADERS ${PROJECT_SOURCE_DIR}/include)
@@ -130,6 +135,7 @@ config_compiler_and_linker()
   
 add_subdirectory(3rdparty)
 add_subdirectory(emulator)
+add_subdirectory(launcher)
 add_subdirectory(lib)
 
 add_executable(fc_script ${KYTY_SCRIPT_SRC}) 
@@ -167,9 +173,11 @@ if(MSVC)
 		LINK_FLAGS "/DYNAMICBASE:NO /MAP:fc_script_msvc_${KYTY_BITNESS}.map"
 	)
 	add_custom_command(TARGET fc_script POST_BUILD
-		COMMAND ${CMAKE_COMMAND} -E copy_if_different fc_script_msvc_${KYTY_BITNESS}.map $<TARGET_FILE_DIR:fc_script>/fc_script_msvc_${KYTY_LINKER_ID}_${KYTY_BITNESS}.map)
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different fc_script_msvc_${KYTY_BITNESS}.map $<TARGET_FILE_DIR:fc_script>/fc_script_${KYTY_COMPILER_ID}_${KYTY_LINKER_ID}_${KYTY_BITNESS}.map)
 	add_custom_command(TARGET fc_script POST_BUILD
-		COMMAND ${KYTY_SCRIPT_BIN} ${PROJECT_SOURCE_DIR}/map_to_csv.lua $<TARGET_FILE_DIR:fc_script>/fc_script msvc ${KYTY_BITNESS} ${KYTY_LINKER_ID})
+		COMMAND ${KYTY_SCRIPT_BIN} ${PROJECT_SOURCE_DIR}/map_to_csv.lua $<TARGET_FILE_DIR:fc_script>/fc_script ${KYTY_COMPILER_ID} ${KYTY_BITNESS} ${KYTY_LINKER_ID})
+	add_custom_command(TARGET fc_script POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PROJECT_SOURCE_DIR}/3rdparty/winpthread/bin/libwinpthread-1.dll" $<TARGET_FILE_DIR:fc_script>/libwinpthread-1.dll)
 endif()
 
 if(MINGW)
@@ -179,6 +187,13 @@ endif()
 
 add_dependencies(fc_script KytyGitVersion)  
 
+file(GLOB csv_files	${CMAKE_CURRENT_BINARY_DIR}/*.csv)
+
+install(TARGETS fc_script DESTINATION .)
+install(FILES ${csv_files} DESTINATION .)
+if(MSVC)
+	install(FILES "3rdparty/winpthread/bin/libwinpthread-1.dll" DESTINATION .)
+endif()
 		
 if(MSVC)
     set(CMAKE_USE_RELATIVE_PATHS ON)

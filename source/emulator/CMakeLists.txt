@@ -39,7 +39,6 @@ target_include_directories(emulator_obj PRIVATE ${inc_headers})
 list(APPEND check_headers
 	${CMAKE_CURRENT_SOURCE_DIR}/include
 	${CMAKE_SOURCE_DIR}/include
-	#${CMAKE_SOURCE_DIR}/3rdparty/affinity/include
 )
 
 clang_tidy_check(emulator_obj "" "${check_headers}" "${inc_headers}")

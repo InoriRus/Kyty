@@ -26,8 +26,12 @@ gcc (MinGW-W64 x86_64-posix-seh)|10.2.0
 ninja                           |1.10.1
 MinGW-w64                       |8.0.0
 Eclipse CDT                     |10.3.0
+Qt                              |5.15.0
+
+Define environment variable named Qt5_DIR pointing to the proper version of Qt
 
 MSVC compiler (cl.exe) is not supported!
 
 External dependencies:
 * Vulkan SDK 1.2.176.1
+* Qt 5.15.0

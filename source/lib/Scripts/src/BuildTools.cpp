@@ -247,9 +247,13 @@ KYTY_SCRIPT_FUNC(map_to_csv_func)
 		{
 			map.LoadMsvcLink(src, 32);
 			map.DumpMap(dst);
-		} else if (mode.EqualNoCase(U"msvc_link_64") || mode.EqualNoCase(U"msvc_lld_link_64"))
+		} else if (mode.EqualNoCase(U"msvc_link_64"))
 		{
 			map.LoadMsvcLink(src, 64);
+			map.DumpMap(dst);
+		} else if (mode.EqualNoCase(U"clang_lld_link_64"))
+		{
+			map.LoadMsvcLldLink(src, 64);
 			map.DumpMap(dst);
 		} else
 		{

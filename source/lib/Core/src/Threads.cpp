@@ -18,6 +18,8 @@
 #include <thread>
 #endif
 
+//#define KYTY_DEBUG_LOCKS
+
 namespace Kyty::Core {
 
 #ifdef THREADS_SDL
@@ -65,7 +67,11 @@ struct Mutex::MutexPrivate
 #ifdef THREADS_SDL
 	SDL_mutex* sdl;
 #else
-	std::recursive_mutex        m_mutex;
+#ifdef KYTY_DEBUG_LOCKS
+	std::recursive_timed_mutex  m_mutex;
+#else
+	std::recursive_mutex m_mutex;
+#endif
 #endif
 };
 
@@ -213,7 +219,14 @@ void Mutex::Lock()
 #ifdef THREADS_SDL
 	SDL_LockMutex(m_mutex->sdl);
 #else
+#ifdef KYTY_DEBUG_LOCKS
+	if (!m_mutex->m_mutex.try_lock_for(std::chrono::seconds(20)))
+	{
+		EXIT("lock timeout!");
+	}
+#else
 	m_mutex->m_mutex.lock();
+#endif
 #endif
 }
 
@@ -261,7 +274,11 @@ void CondVar::Wait(Mutex* mutex)
 #ifdef THREADS_SDL
 	SDL_CondWait(m_cond_var->sdl, mutex->m_mutex->sdl);
 #else
+#ifdef KYTY_DEBUG_LOCKS
+	std::unique_lock<std::recursive_timed_mutex> cpp_lock(mutex->m_mutex->m_mutex, std::adopt_lock_t());
+#else
 	std::unique_lock<std::recursive_mutex> cpp_lock(mutex->m_mutex->m_mutex, std::adopt_lock_t());
+#endif
 	m_cond_var->m_cv.wait(cpp_lock);
 	cpp_lock.release();
 #endif
@@ -272,7 +289,11 @@ void CondVar::WaitFor(Mutex* mutex, uint32_t micros)
 #ifdef THREADS_SDL
 	SDL_CondWaitTimeout(m_cond_var->sdl, mutex->m_mutex->sdl, (micros < 1000 ? 1 : micros / 1000));
 #else
+#ifdef KYTY_DEBUG_LOCKS
+	std::unique_lock<std::recursive_timed_mutex> cpp_lock(mutex->m_mutex->m_mutex, std::adopt_lock_t());
+#else
 	std::unique_lock<std::recursive_mutex> cpp_lock(mutex->m_mutex->m_mutex, std::adopt_lock_t());
+#endif
 	m_cond_var->m_cv.wait_for(cpp_lock, std::chrono::microseconds(micros));
 	cpp_lock.release();
 #endif

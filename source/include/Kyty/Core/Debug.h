@@ -33,6 +33,7 @@ public:
 	void LoadCsv();
 
 	void LoadMsvcLink(const String& name, int mode);
+	void LoadMsvcLldLink(const String& name, int mode);
 	void LoadGnuLd(const String& name, int bitness);
 	void LoadLlvmLld(const String& name, int bitness);
 	void LoadCsv(const String& name);

@@ -1,0 +1,10 @@
+<RCC>
+    <qresource prefix="/">
+        <file alias="delete">cross.png</file>
+        <file alias="save">diskette.png</file>
+        <file alias="add">layout_add.png</file>
+        <file alias="edit">pencil.png</file>
+        <file alias="application">layout.png</file>
+        <file alias="running">time_go.png</file>
+    </qresource>
+</RCC>

@@ -11,15 +11,20 @@
 
 // IWYU pragma: no_include <sec_api/string_s.h>
 
-#if 0 && (KYTY_COMPILER == KYTY_COMPILER_MSVC || KYTY_COMPILER == KYTY_COMPILER_MINGW)
-String unDName(const String &mangled,
-		void* (*memget)(size_t), void (*memfree)(void*),
-                      unsigned short int flags);
+#if 1 && (KYTY_COMPILER == KYTY_COMPILER_MSVC || KYTY_LINKER == KYTY_LINKER_LLD_LINK)
+#define KYTY_UNDECORATE
+#endif
+
+#ifdef KYTY_UNDECORATE
+//String unDName(const String &mangled,
+//		void* (*memget)(size_t), void (*memfree)(void*),
+//                      unsigned short int flags);
 #endif
 
 namespace Kyty::Core {
 
-#ifndef KYTY_FINAL
+//#ifndef KYTY_FINAL
+#if KYTY_PROJECT != KYTY_PROJECT_BUILD_TOOLS
 #define DEBUG_MAP_ENABLED
 #endif
 
@@ -105,9 +110,12 @@ void DebugMap::LoadMap()
 	if (linker == U"ld")
 	{
 		LoadGnuLd(map_file, KYTY_BITNESS);
-	} else if (linker == U"link" || linker == U"lld_link")
+	} else if (linker == U"link")
 	{
 		LoadMsvcLink(map_file, KYTY_BITNESS);
+	} else if (linker == U"lld_link")
+	{
+		LoadMsvcLldLink(map_file, KYTY_BITNESS);
 	} else if (linker == U"lld")
 	{
 		LoadLlvmLld(map_file, KYTY_BITNESS);
@@ -191,7 +199,7 @@ void DebugMap::LoadCsv()
 
 #endif
 
-	// EXIT("1");
+	//EXIT("1");
 
 #endif
 }
@@ -315,46 +323,102 @@ void DebugMap::LoadMsvcLink(const String& name, int mode)
 		}
 
 		// UNDNAME_COMPLETE
-#if 0 && (KYTY_COMPILER == KYTY_COMPILER_MSVC || KYTY_COMPILER == KYTY_COMPILER_MINGW)
-		if (String(data[i].name).ContainsStr("?"))
+#ifdef KYTY_UNDECORATE
+#endif
+	}
+}
+
+void DebugMap::LoadMsvcLldLink(const String& name, int mode)
+{
+	File pf(name, File::Mode::Read);
+	if (pf.IsInvalid())
+	{
+		return;
+	}
+
+	auto* buf = new uint8_t[pf.Size()];
+	pf.Read(buf, pf.Size());
+	File f;
+	f.OpenInMem(buf, pf.Size());
+	f.SetEncoding(File::Encoding::Utf8);
+
+	pf.Close();
+
+	for (;;)
+	{
+		if (f.IsEOF())
 		{
-			String n = String(data[i].name).Mid(String(data[i].name).FindIndex("?"));
-			//char name[1024*16];
-			//char name_all[1024*16];
-			//UnDecorateSymbolName(data[i].name.utf8_str().GetData(), name, sizeof(name) - 1, UNDNAME_COMPLETE | UNDNAME_32_BIT_DECODE | UNDNAME_TYPE_ONLY);
+			break;
+		}
 
-			String name = unDName(n, malloc, free, 0x1000);
-			String name_all = unDName(n, malloc, free, 0);
+		String s = f.ReadLine();
+		s        = s.RemoveChar(U'\n');
 
-			//UnDecorateSymbolName(n.utf8_str().GetData(), name, sizeof(name) - 1, 0x1000);
-			//UnDecorateSymbolName(n.utf8_str().GetData(), name_all, sizeof(name_all) - 1, 0);
+		StringList list = s.Split(U" ");
 
-			if (name.At(0) == '?' || name_all.At(0) == '?')
+		if (list.Size() == 4 && list[2].StartsWith(U'0'))
+		{
+			uintptr_t    addr = (mode == 32 ? list[2].ToUint32(16) : list[2].ToUint64(16));
+			const String func = list.At(1);
+			const String obj  = list[3];
+
+			if (DBG_PRINTF)
 			{
-				n = n.Left(n.FindLastIndex("$"));
-
-				name = unDName(n, malloc, free, 0x1000);
-				name_all = unDName(n, malloc, free, 0);
-
-				//UnDecorateSymbolName(n.utf8_str().GetData(), name, sizeof(name) - 1, 0x1000);
-				//UnDecorateSymbolName(n.utf8_str().GetData(), name_all, sizeof(name_all) - 1, 0);
+				printf("%016" PRIx64 "; %s; %s\n", static_cast<uint64_t>(addr), func.utf8_str().GetData(), obj.utf8_str().GetData());
+				fflush(stdout);
 			}
 
-			//String name_str = String(name);
-			//String name_all_str = String(name_all);
+			DebugFunctionInfo inf = {addr, 0, func.utf8_str(), obj.utf8_str()};
 
-			//if (name_all_str.Contains(name_str))
+			if (m_p->map.Contains(addr))
 			{
-				uint32_t first = name_all.FindIndex("(");
-				uint32_t last = name_all.FindLastIndex(")");
-				//printf("%08x, %u, %u, %s, %s, %s\n", (uint32_t)data[i].addr, first, last, name_str.utf8_str().GetData(), name_all_str.utf8_str().GetData(), n.utf8_str().GetData());
-				data[i].name = (name + name_all.Mid(first, last - first + 1)).utf8_str();
-			}// else
-			//{
-			//	data[i].name = String(name_all);
-			//}
+				String name1(m_p->data.At(m_p->map[addr]).name);
+				if (name1.StartsWith(U"_"))
+				{
+					name1 = name1.Mid(1);
+				}
+				// EXIT_IF(data.At(map[addr]).name != func_name);
+				if (name1 != func && !name1.ContainsStr(func) && !func.ContainsStr(name1))
+				{
+					if (DBG_PRINTF)
+					{
+						printf("warning: name1: %s, name2: %s\n", name1.utf8_str().GetData(), func.utf8_str().GetData());
+					}
+					// exit(1);
+				}
 
+				continue;
+			}
+
+			//			if (mem_alloc_obj.Contains(inf.obj, String::CASE_INSENSITIVE)
+			//				&& func.ContainsAny(mem_alloc_names))
+			//			{
+			//				inf.is_mem_alloc = true;
+			//			}
+
+			m_p->data.Add(inf);
+			m_p->map.Put(addr, m_p->data.Size() - 1);
+
+		} else
+		{
+			EXIT_IF(list.Size() >= 5 && list[0].ContainsStr(U":") && list[3] != U"f");
 		}
+	}
+
+	f.Close();
+
+	DeleteArray(buf);
+
+	m_p->data.Sort(DebugMapSortSwapFunc, &m_p->map);
+
+	for (uint32_t i = 0; i < m_p->data.Size(); i++)
+	{
+		if (i > 0)
+		{
+			m_p->data[i - 1].length = m_p->data[i].addr - m_p->data[i - 1].addr;
+		}
+			
+#ifdef KYTY_UNDECORATE
 #endif
 	}
 }

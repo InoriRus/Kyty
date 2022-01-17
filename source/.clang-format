@@ -92,8 +92,16 @@ IncludeCategories:
     Priority:        4
     SortPriority:    0
     CaseSensitive:   false
-  - Regex:           '^<'
+  - Regex:           '^<Q'
     Priority:        5
+    SortPriority:    0
+    CaseSensitive:   false
+  - Regex:           '"ui_'
+    Priority:        6
+    SortPriority:    0
+    CaseSensitive:   false
+  - Regex:           '^<'
+    Priority:        7
     SortPriority:    0
     CaseSensitive:   false
   - Regex:           '.*'
