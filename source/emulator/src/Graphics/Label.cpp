@@ -22,11 +22,8 @@ enum LabelStatus
 	NotActive,
 };
 
-struct Label
+struct LabelCallbacks
 {
-	VkDevice                   device         = nullptr;
-	VkEvent                    event          = nullptr;
-	LabelStatus                status         = LabelStatus::New;
 	uint64_t*                  dst_gpu_addr64 = nullptr;
 	uint64_t                   value64        = 0;
 	uint32_t*                  dst_gpu_addr32 = nullptr;
@@ -34,7 +31,15 @@ struct Label
 	LabelGpuObject::callback_t callback_1     = nullptr;
 	LabelGpuObject::callback_t callback_2     = nullptr;
 	uint64_t                   args[4]        = {};
-	CommandBuffer*             buffer         = nullptr;
+};
+
+struct Label
+{
+	VkDevice       device = nullptr;
+	VkEvent        event  = nullptr;
+	LabelStatus    status = LabelStatus::New;
+	LabelCallbacks callbacks;
+	CommandBuffer* buffer = nullptr;
 };
 
 class LabelManager
@@ -76,7 +81,8 @@ void LabelManager::ThreadRun(void* data)
 
 		int active_count = 0;
 
-		Vector<Label*> deleted_labels;
+		Vector<Label*>         deleted_labels;
+		Vector<LabelCallbacks> fired_labels;
 
 		for (auto& label: manager->m_labels)
 		{
@@ -93,33 +99,7 @@ void LabelManager::ThreadRun(void* data)
 
 					label->status = LabelStatus::NotActive;
 
-					bool write = true;
-
-					if (label->callback_1 != nullptr)
-					{
-						write = label->callback_1(label->args);
-					}
-
-					if (write && label->dst_gpu_addr64 != nullptr)
-					{
-						*label->dst_gpu_addr64 = label->value64;
-
-						printf(FG_BRIGHT_GREEN "EndOfPipe Signal!!! [0x%016" PRIx64 "] <- 0x%016" PRIx64 "\n" FG_DEFAULT,
-						       reinterpret_cast<uint64_t>(label->dst_gpu_addr64), label->value64);
-					}
-
-					if (write && label->dst_gpu_addr32 != nullptr)
-					{
-						*label->dst_gpu_addr32 = label->value32;
-
-						printf(FG_BRIGHT_GREEN "EndOfPipe Signal!!! [0x%016" PRIx64 "] <- 0x%08" PRIx32 "\n" FG_DEFAULT,
-						       reinterpret_cast<uint64_t>(label->dst_gpu_addr32), label->value32);
-					}
-
-					if (label->callback_2 != nullptr)
-					{
-						label->callback_2(label->args);
-					}
+					fired_labels.Add(label->callbacks);
 				}
 			}
 		}
@@ -136,6 +116,37 @@ void LabelManager::ThreadRun(void* data)
 
 		manager->m_mutex.Unlock();
 
+		for (auto& label: fired_labels)
+		{
+			bool write = true;
+
+			if (label.callback_1 != nullptr)
+			{
+				write = label.callback_1(label.args);
+			}
+
+			if (write && label.dst_gpu_addr64 != nullptr)
+			{
+				*label.dst_gpu_addr64 = label.value64;
+
+				printf(FG_BRIGHT_GREEN "EndOfPipe Signal!!! [0x%016" PRIx64 "] <- 0x%016" PRIx64 "\n" FG_DEFAULT,
+				       reinterpret_cast<uint64_t>(label.dst_gpu_addr64), label.value64);
+			}
+
+			if (write && label.dst_gpu_addr32 != nullptr)
+			{
+				*label.dst_gpu_addr32 = label.value32;
+
+				printf(FG_BRIGHT_GREEN "EndOfPipe Signal!!! [0x%016" PRIx64 "] <- 0x%08" PRIx32 "\n" FG_DEFAULT,
+				       reinterpret_cast<uint64_t>(label.dst_gpu_addr32), label.value32);
+			}
+
+			if (label.callback_2 != nullptr)
+			{
+				label.callback_2(label.args);
+			}
+		}
+
 		Core::Thread::SleepMicro(100);
 	}
 }
@@ -150,20 +161,20 @@ Label* LabelManager::Create(GraphicContext* ctx, uint64_t* dst_gpu_addr, uint64_
 
 	auto* label = new Label;
 
-	label->status         = LabelStatus::New;
-	label->dst_gpu_addr64 = dst_gpu_addr;
-	label->value64        = value;
-	label->dst_gpu_addr32 = nullptr;
-	label->value32        = 0;
-	label->event          = nullptr;
-	label->device         = ctx->device;
-	label->callback_1     = callback_1;
-	label->callback_2     = callback_2;
-	label->args[0]        = args[0];
-	label->args[1]        = args[1];
-	label->args[2]        = args[2];
-	label->args[3]        = args[3];
-	label->buffer         = nullptr;
+	label->status                   = LabelStatus::New;
+	label->callbacks.dst_gpu_addr64 = dst_gpu_addr;
+	label->callbacks.value64        = value;
+	label->callbacks.dst_gpu_addr32 = nullptr;
+	label->callbacks.value32        = 0;
+	label->event                    = nullptr;
+	label->device                   = ctx->device;
+	label->callbacks.callback_1     = callback_1;
+	label->callbacks.callback_2     = callback_2;
+	label->callbacks.args[0]        = args[0];
+	label->callbacks.args[1]        = args[1];
+	label->callbacks.args[2]        = args[2];
+	label->callbacks.args[3]        = args[3];
+	label->buffer                   = nullptr;
 
 	VkEventCreateInfo create_info {};
 	create_info.sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO;
@@ -190,19 +201,19 @@ Label* LabelManager::Create(GraphicContext* ctx, uint32_t* dst_gpu_addr, uint32_
 
 	auto* label = new Label;
 
-	label->status         = LabelStatus::New;
-	label->dst_gpu_addr32 = dst_gpu_addr;
-	label->value32        = value;
-	label->dst_gpu_addr64 = nullptr;
-	label->value64        = 0;
-	label->event          = nullptr;
-	label->device         = ctx->device;
-	label->callback_1     = callback_1;
-	label->callback_2     = callback_2;
-	label->args[0]        = args[0];
-	label->args[1]        = args[1];
-	label->args[2]        = args[2];
-	label->args[3]        = args[3];
+	label->status                   = LabelStatus::New;
+	label->callbacks.dst_gpu_addr32 = dst_gpu_addr;
+	label->callbacks.value32        = value;
+	label->callbacks.dst_gpu_addr64 = nullptr;
+	label->callbacks.value64        = 0;
+	label->event                    = nullptr;
+	label->device                   = ctx->device;
+	label->callbacks.callback_1     = callback_1;
+	label->callbacks.callback_2     = callback_2;
+	label->callbacks.args[0]        = args[0];
+	label->callbacks.args[1]        = args[1];
+	label->callbacks.args[2]        = args[2];
+	label->callbacks.args[3]        = args[3];
 
 	VkEventCreateInfo create_info {};
 	create_info.sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO;

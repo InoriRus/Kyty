@@ -10,7 +10,9 @@ KYTY_SUBSYSTEM_DEFINE(Threads);
 
 using thread_func_t = void (*)(void*);
 
-// struct ThreadPrivate;
+struct ThreadPrivate;
+struct MutexPrivate;
+struct CondVarPrivate;
 class String;
 
 class Thread
@@ -24,6 +26,9 @@ public:
 
 	// Once a thread has finished, the id may be reused by another thread.
 	[[nodiscard]] String GetId() const;
+
+	// The id is unique and can't be reused by another thread.
+	[[nodiscard]] int GetUniqueId() const;
 
 	static void Sleep(uint32_t millis);
 	static void SleepMicro(uint32_t micros);
@@ -41,7 +46,6 @@ public:
 	KYTY_CLASS_NO_COPY(Thread);
 
 private:
-	struct ThreadPrivate;
 	ThreadPrivate* m_thread;
 };
 
@@ -60,7 +64,6 @@ public:
 	KYTY_CLASS_NO_COPY(Mutex);
 
 private:
-	struct MutexPrivate;
 	MutexPrivate* m_mutex;
 };
 
@@ -97,7 +100,6 @@ public:
 	KYTY_CLASS_NO_COPY(CondVar);
 
 private:
-	struct CondVarPrivate;
 	CondVarPrivate* m_cond_var;
 };
 

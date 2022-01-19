@@ -79,7 +79,7 @@ if (KYTY_LINKER STREQUAL LD)
 	set(KYTY_LD_OPTIONS "-Wl,--image-base=0x100000000000")
 endif()
 
-project(Kyty${KYTY_PROJECT_NAME}${CMAKE_BUILD_TYPE}${KYTY_COMPILER} VERSION 0.0.6)
+project(Kyty${KYTY_PROJECT_NAME}${CMAKE_BUILD_TYPE}${KYTY_COMPILER} VERSION 0.0.7)
 
 include(src_script.cmake)
 
@@ -112,7 +112,7 @@ add_custom_target( KytyGitVersion
 
 list(APPEND KYTY_IWYU 
 	emulator_obj
-	#core_obj
+	core_obj
 	#math_obj
 	#scripts_obj
 	#sys_obj
@@ -121,7 +121,7 @@ list(APPEND KYTY_IWYU
 
 list(APPEND KYTY_CLANG_TYDY 
 	emulator_obj
-	#core_obj
+	core_obj
 	#core
 	#math_obj
 	#scripts_obj
