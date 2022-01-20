@@ -135,7 +135,9 @@ config_compiler_and_linker()
   
 add_subdirectory(3rdparty)
 add_subdirectory(emulator)
-add_subdirectory(launcher)
+if(NOT ${KYTY_PROJECT_NAME} MATCHES "Build_Tools")
+	add_subdirectory(launcher)
+endif()
 add_subdirectory(lib)
 
 add_executable(fc_script ${KYTY_SCRIPT_SRC}) 
@@ -187,17 +189,16 @@ endif()
 
 add_dependencies(fc_script KytyGitVersion)  
 
-file(GLOB csv_files	${CMAKE_CURRENT_BINARY_DIR}/*.csv)
-
 install(TARGETS fc_script DESTINATION .)
-install(FILES ${csv_files} DESTINATION .)
-if(MSVC)
-	install(FILES "3rdparty/winpthread/bin/libwinpthread-1.dll" DESTINATION .)
+if(NOT ${KYTY_PROJECT_NAME} MATCHES "Build_Tools")
+	install(FILES ${CMAKE_CURRENT_BINARY_DIR}/fc_script_${KYTY_COMPILER_ID}_${KYTY_LINKER_ID}_${KYTY_BITNESS}.csv DESTINATION .)
+	if(MSVC)
+		install(FILES "3rdparty/winpthread/bin/libwinpthread-1.dll" DESTINATION .)
+	endif()
 endif()
 		
 if(MSVC)
     set(CMAKE_USE_RELATIVE_PATHS ON)
-	
 endif()
 
 

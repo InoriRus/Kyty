@@ -33,8 +33,13 @@ rem @ECHO ON
 GOTO choice-%CH%
 
 :choice-1
+if !%2==! (
 mkdir _DebugMsvc2019NinjaClang
 cd _DebugMsvc2019NinjaClang
+) else (
+mkdir %2
+cd %2
+)
 set >env.txt
 echo call %VCVARSALL% x64 >_build.bat
 echo ninja >>_build.bat
@@ -44,8 +49,13 @@ cmake -G "Ninja" -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -D CM
 GOTO End
 
 :choice-2
+if !%2==! (
 mkdir _DebugFinalMsvc2019NinjaClang
 cd _DebugFinalMsvc2019NinjaClang
+) else (
+mkdir %2
+cd %2
+)
 set >env.txt
 echo call %VCVARSALL% x64 >_build.bat
 echo ninja >>_build.bat
@@ -55,8 +65,13 @@ cmake -G "Ninja" -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -D CM
 GOTO End
 
 :choice-3
+if !%2==! (
 mkdir _ReleaseMsvc2019NinjaClang
 cd _ReleaseMsvc2019NinjaClang
+) else (
+mkdir %2
+cd %2
+)
 set >env.txt
 echo call %VCVARSALL% x64 >_build.bat
 echo ninja >>_build.bat
@@ -66,8 +81,13 @@ cmake -G "Ninja" -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -D CM
 GOTO End
 
 :choice-4
+if !%2==! (
 mkdir _ReleaseFinalMsvc2019NinjaClang
 cd _ReleaseFinalMsvc2019NinjaClang
+) else (
+mkdir %2
+cd %2
+)
 set >env.txt
 echo call %VCVARSALL% x64 >_build.bat
 echo ninja >>_build.bat

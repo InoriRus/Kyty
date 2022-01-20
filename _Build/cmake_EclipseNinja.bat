@@ -21,40 +21,60 @@ goto :Start
 set CH=%errorlevel%
 :Start
 
-@ECHO ON
+rem @ECHO ON
 
 GOTO choice-%CH%
 
 :choice-1
+if !%2==! (
 mkdir _DebugEclipseNinja
 cd _DebugEclipseNinja
+) else (
+mkdir %2
+cd %2
+)
 echo ninja >_build.bat
 echo ninja install/strip >>_build.bat
-cmake -G "Eclipse CDT4 - Ninja" -DCMAKE_ECLIPSE_GENERATE_LINKED_RESOURCES=FALSE -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -D CMAKE_BUILD_TYPE=Debug ../../source
+cmake -G "Eclipse CDT4 - Ninja" -DCMAKE_ECLIPSE_GENERATE_LINKED_RESOURCES=FALSE -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -D CMAKE_BUILD_TYPE=Debug -D CMAKE_INSTALL_PREFIX=_bin ../../source
 GOTO End
 
 :choice-2
+if !%2==! (
 mkdir _DebugFinalEclipseNinja
 cd _DebugFinalEclipseNinja
+) else (
+mkdir %2
+cd %2
+)
 echo ninja >_build.bat
 echo ninja install/strip >>_build.bat
-cmake -G "Eclipse CDT4 - Ninja" -DCMAKE_ECLIPSE_GENERATE_LINKED_RESOURCES=FALSE -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -D CMAKE_BUILD_TYPE=Debug -D KYTY_FINAL=1 ../../source
+cmake -G "Eclipse CDT4 - Ninja" -DCMAKE_ECLIPSE_GENERATE_LINKED_RESOURCES=FALSE -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -D CMAKE_BUILD_TYPE=Debug -D KYTY_FINAL=1 -D CMAKE_INSTALL_PREFIX=_bin ../../source
 GOTO End
 
 :choice-3
+if !%2==! (
 mkdir _ReleaseEclipseNinja
 cd _ReleaseEclipseNinja
+) else (
+mkdir %2
+cd %2
+)
 echo ninja >_build.bat
 echo ninja install/strip >>_build.bat
-cmake -G "Eclipse CDT4 - Ninja" -DCMAKE_ECLIPSE_GENERATE_LINKED_RESOURCES=FALSE -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -D CMAKE_BUILD_TYPE=Release ../../source
+cmake -G "Eclipse CDT4 - Ninja" -DCMAKE_ECLIPSE_GENERATE_LINKED_RESOURCES=FALSE -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX=_bin ../../source
 GOTO End
 
 :choice-4
+if !%2==! (
 mkdir _ReleaseFinalEclipseNinja
 cd _ReleaseFinalEclipseNinja
+) else (
+mkdir %2
+cd %2
+)
 echo ninja >_build.bat
 echo ninja install/strip >>_build.bat
-cmake -G "Eclipse CDT4 - Ninja" -DCMAKE_ECLIPSE_GENERATE_LINKED_RESOURCES=FALSE -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -D CMAKE_BUILD_TYPE=Release -D KYTY_FINAL=1 ../../source
+cmake -G "Eclipse CDT4 - Ninja" -DCMAKE_ECLIPSE_GENERATE_LINKED_RESOURCES=FALSE -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -D CMAKE_BUILD_TYPE=Release -D KYTY_FINAL=1 -D CMAKE_INSTALL_PREFIX=_bin ../../source
 GOTO End
 
 :choice-5
