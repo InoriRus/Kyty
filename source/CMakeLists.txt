@@ -50,6 +50,9 @@ if(MINGW)
 		set(CLANG 1)
 		set(KYTY_COMPILER CLANG)
 		set(KYTY_LINKER LLD)
+		if ((CMAKE_AR MATCHES "llvm") AND (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 12.0.0) AND (CMAKE_CXX_COMPILER MATCHES "winlibs"))
+			string(REPLACE "llvm-ar.exe" "ar.exe" CMAKE_AR ${CMAKE_AR}) # llvm-ar.exe 11.0.0 from winlibs is broken
+		endif()
 	else()
 		set(KYTY_COMPILER MINGW)
 		set(KYTY_LINKER LD)
@@ -110,24 +113,25 @@ add_custom_target( KytyGitVersion
 	COMMENT "Generate KytyGitVersion.h"
 )
 
-list(APPEND KYTY_IWYU 
-	emulator_obj
-	core_obj
-	#math_obj
-	#scripts_obj
-	#sys_obj
-	launcher
-)
-
-list(APPEND KYTY_CLANG_TYDY 
-	emulator_obj
-	core_obj
-	#core
-	#math_obj
-	#scripts_obj
-	#sys_obj
-	launcher
-)
+if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 12.0.0)
+	list(APPEND KYTY_IWYU 
+		emulator_obj
+		core_obj
+		#math_obj
+		#scripts_obj
+		#sys_obj
+		launcher
+	)
+	list(APPEND KYTY_CLANG_TYDY 
+		emulator_obj
+		core_obj
+		#core
+		#math_obj
+		#scripts_obj
+		#sys_obj
+		launcher
+	)
+endif()
 
 set(KYTY_LIB_HEADERS ${PROJECT_SOURCE_DIR}/include)
   
