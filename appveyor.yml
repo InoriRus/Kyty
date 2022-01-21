@@ -1,0 +1,38 @@
+version: 0.0.7.build-{build}
+image: Visual Studio 2019
+environment:
+  matrix:
+  - Qt5_DIR: C:\Qt\5.15.2\mingw81_64
+    BUILD_DIR: _Clang
+    BUILD_SCRIPT: cmake_EclipseNinja_Clang.bat
+    BUILD_CFG: 4
+    BUILD_PATH: C:\ProgramData\chocolatey\lib\winlibs\tools\mingw64\bin
+    BUILD_INSTALL: choco install winlibs -y
+  - Qt5_DIR: C:\Qt\5.15.2\msvc2019_64
+    BUILD_DIR: _Msvc2019
+    BUILD_SCRIPT: cmake_Msvc2019_Ninja_Clang.bat
+    BUILD_CFG: 4
+  - Qt5_DIR: C:\Qt\5.15.2\mingw81_64
+    BUILD_DIR: _Gcc
+    BUILD_SCRIPT: cmake_EclipseMinGW.bat
+    BUILD_CFG: 4
+    BUILD_PATH: C:\ProgramData\chocolatey\lib\winlibs\tools\mingw64\bin
+    BUILD_INSTALL: choco install winlibs -y
+install:
+- cmd: '%BUILD_INSTALL%'
+build_script:
+- cmd: >-
+    set PATH=%BUILD_PATH%;%PATH%;
+
+    clang --version
+
+    cd %APPVEYOR_BUILD_FOLDER%/_Build
+
+    %BUILD_SCRIPT% %BUILD_CFG% %BUILD_DIR%
+
+    cd %APPVEYOR_BUILD_FOLDER%/_Build/%BUILD_DIR%
+
+    _build.bat
+artifacts:
+- path: _Build/%BUILD_DIR%/_bin
+  name: Kyty
