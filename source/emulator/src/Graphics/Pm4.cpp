@@ -136,7 +136,7 @@ void DumpPm4PacketStream(Core::File* file, uint32_t* cmd_buffer, uint32_t start_
 			}
 		} else
 		{
-			printf("?????\n");
+			file->Printf("?????\n");
 		}
 
 		cmd += len;

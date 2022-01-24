@@ -18,6 +18,8 @@
 #include "Emulator/Libs/Errno.h"
 #include "Emulator/Libs/Libs.h"
 
+#include <atomic>
+
 #ifdef KYTY_EMU_ENABLED
 
 namespace Kyty::Libs::Graphics {
@@ -250,11 +252,11 @@ uint32_t KYTY_SYSV_ABI GraphicsDispatchInitDefaultHardwareState(uint32_t* cmd, u
 	return 2;
 }
 
-static void dbg_dump_dcb(const char* type, uint32_t num_dw, uint32_t* cmd_buffer)
+void GraphicsDbgDumpDcb(const char* type, uint32_t num_dw, uint32_t* cmd_buffer)
 {
 	EXIT_IF(type == nullptr);
 
-	static int id = 0;
+	static std::atomic_int id = 0;
 
 	if (Config::CommandBufferDumpEnabled() && num_dw > 0 && cmd_buffer != nullptr)
 	{
@@ -285,8 +287,8 @@ int KYTY_SYSV_ABI GraphicsSubmitCommandBuffers(uint32_t count, void* dcb_gpu_add
 	auto* ccb      = (ccb_gpu_addrs == nullptr ? nullptr : static_cast<uint32_t*>(ccb_gpu_addrs[0]));
 	auto  ccb_size = (ccb_sizes_in_bytes == nullptr ? 0 : ccb_sizes_in_bytes[0] / 4);
 
-	dbg_dump_dcb("d", dcb_size, dcb);
-	dbg_dump_dcb("c", ccb_size, ccb);
+	GraphicsDbgDumpDcb("d", dcb_size, dcb);
+	GraphicsDbgDumpDcb("c", ccb_size, ccb);
 
 	GraphicsRunSubmit(dcb, dcb_size, ccb, ccb_size);
 
@@ -306,8 +308,8 @@ int KYTY_SYSV_ABI GraphicsSubmitAndFlipCommandBuffers(uint32_t count, void* dcb_
 	auto* ccb      = (ccb_gpu_addrs == nullptr ? nullptr : static_cast<uint32_t*>(ccb_gpu_addrs[0]));
 	auto  ccb_size = (ccb_sizes_in_bytes == nullptr ? 0 : ccb_sizes_in_bytes[0] / 4);
 
-	dbg_dump_dcb("d", dcb_size, dcb);
-	dbg_dump_dcb("c", ccb_size, ccb);
+	GraphicsDbgDumpDcb("d", dcb_size, dcb);
+	GraphicsDbgDumpDcb("c", ccb_size, ccb);
 
 	printf("\t handle    = %" PRId32 "\n", handle);
 	printf("\t index     = %" PRId32 "\n", index);
