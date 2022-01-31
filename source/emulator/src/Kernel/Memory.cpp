@@ -35,6 +35,7 @@ public:
 		int                     prot;
 		VirtualMemory::Mode     mode;
 		Graphics::GpuMemoryMode gpu_mode;
+		int                     memory_type;
 	};
 
 	PhysicalMemory() { EXIT_NOT_IMPLEMENTED(!Core::Thread::IsMainThread()); }
@@ -44,11 +45,12 @@ public:
 
 	static uint64_t Size() { return static_cast<uint64_t>(5376) * 1024 * 1024; }
 
-	bool Alloc(uint64_t search_start, uint64_t search_end, size_t len, size_t alignment, uint64_t* phys_addr_out);
+	bool Alloc(uint64_t search_start, uint64_t search_end, size_t len, size_t alignment, uint64_t* phys_addr_out, int memory_type);
 	bool Release(uint64_t start, size_t len, uint64_t* vaddr, uint64_t* size, Graphics::GpuMemoryMode* gpu_mode);
 	bool Map(uint64_t vaddr, uint64_t phys_addr, size_t len, int prot, VirtualMemory::Mode mode, Graphics::GpuMemoryMode gpu_mode);
 	bool Unmap(uint64_t vaddr, uint64_t size, Graphics::GpuMemoryMode* gpu_mode);
 	bool Find(uint64_t vaddr, uint64_t* base_addr, size_t* len, int* prot, VirtualMemory::Mode* mode, Graphics::GpuMemoryMode* gpu_mode);
+	bool Find(uint64_t phys_addr, bool next, PhysicalMemory::AllocatedBlock* out);
 
 private:
 	Vector<AllocatedBlock> m_allocated;
@@ -99,7 +101,8 @@ static uint64_t get_aligned_pos(uint64_t pos, size_t align)
 	return (align != 0 ? (pos + (align - 1)) & ~(align - 1) : pos);
 }
 
-bool PhysicalMemory::Alloc(uint64_t search_start, uint64_t search_end, size_t len, size_t alignment, uint64_t* phys_addr_out)
+bool PhysicalMemory::Alloc(uint64_t search_start, uint64_t search_end, size_t len, size_t alignment, uint64_t* phys_addr_out,
+                           int memory_type)
 {
 	if (phys_addr_out == nullptr)
 	{
@@ -124,13 +127,14 @@ bool PhysicalMemory::Alloc(uint64_t search_start, uint64_t search_end, size_t le
 	if (free_pos >= search_start && free_pos + len <= search_end)
 	{
 		AllocatedBlock b {};
-		b.size       = len;
-		b.start_addr = free_pos;
-		b.gpu_mode   = Graphics::GpuMemoryMode::NoAccess;
-		b.map_size   = 0;
-		b.map_vaddr  = 0;
-		b.prot       = 0;
-		b.mode       = VirtualMemory::Mode::NoAccess;
+		b.size        = len;
+		b.start_addr  = free_pos;
+		b.gpu_mode    = Graphics::GpuMemoryMode::NoAccess;
+		b.map_size    = 0;
+		b.map_vaddr   = 0;
+		b.prot        = 0;
+		b.mode        = VirtualMemory::Mode::NoAccess;
+		b.memory_type = memory_type;
 
 		m_allocated.Add(b);
 
@@ -212,6 +216,43 @@ bool PhysicalMemory::Unmap(uint64_t vaddr, uint64_t size, Graphics::GpuMemoryMod
 			b.prot      = 0;
 			b.mode      = VirtualMemory::Mode::NoAccess;
 
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool PhysicalMemory::Find(uint64_t phys_addr, bool next, AllocatedBlock* out)
+{
+	EXIT_IF(out == nullptr);
+
+	Core::LockGuard lock(m_mutex);
+
+	for (auto& b: m_allocated)
+	{
+		if (phys_addr >= b.start_addr && phys_addr < b.start_addr + b.size)
+		{
+			*out = b;
+			return true;
+		}
+	}
+
+	if (next)
+	{
+		uint64_t        min_start_addr = UINT64_MAX;
+		AllocatedBlock* next           = nullptr;
+		for (auto& b: m_allocated)
+		{
+			if (b.start_addr > phys_addr && b.start_addr < min_start_addr)
+			{
+				min_start_addr = b.start_addr;
+				next           = &b;
+			}
+		}
+		if (next != nullptr)
+		{
+			*out = *next;
 			return true;
 		}
 	}
@@ -428,6 +469,49 @@ size_t KYTY_SYSV_ABI KernelGetDirectMemorySize()
 	return PhysicalMemory::Size();
 }
 
+int KYTY_SYSV_ABI KernelDirectMemoryQuery(int64_t offset, int flags, void* info, size_t info_size)
+{
+	PRINT_NAME();
+
+	EXIT_IF(g_physical_memory == nullptr);
+
+	printf("\t offset    = 0x%016" PRIx64 "\n", offset);
+	printf("\t flags     = 0x%08" PRIx32 "\n", flags);
+	printf("\t info_size = 0x%016" PRIx64 "\n", info_size);
+
+	struct QueryInfo
+	{
+		int64_t start;
+		int64_t end;
+		int     memory_type;
+	};
+
+	if (offset < 0 || info_size != sizeof(QueryInfo) || info == nullptr)
+	{
+		return KERNEL_ERROR_EINVAL;
+	}
+
+	PhysicalMemory::AllocatedBlock block {};
+	if (!g_physical_memory->Find(offset, flags != 0, &block))
+	{
+		printf(FG_RED "\t[Fail]\n" FG_DEFAULT);
+		return KERNEL_ERROR_EACCES;
+	}
+
+	auto* query_info = static_cast<QueryInfo*>(info);
+
+	query_info->start       = static_cast<int64_t>(block.start_addr);
+	query_info->end         = static_cast<int64_t>(block.start_addr + block.size);
+	query_info->memory_type = block.memory_type;
+
+	printf("\t start       = %016" PRIx64 "\n", query_info->start);
+	printf("\t end         = %016" PRIx64 "\n", query_info->end);
+	printf("\t memory_type = %d\n", query_info->memory_type);
+	printf(FG_GREEN "\t[Ok]\n" FG_DEFAULT);
+
+	return OK;
+}
+
 int KYTY_SYSV_ABI KernelAllocateDirectMemory(int64_t search_start, int64_t search_end, size_t len, size_t alignment, int memory_type,
                                              int64_t* phys_addr_out)
 {
@@ -447,7 +531,7 @@ int KYTY_SYSV_ABI KernelAllocateDirectMemory(int64_t search_start, int64_t searc
 	}
 
 	uint64_t addr = 0;
-	if (!g_physical_memory->Alloc(search_start, search_end, len, alignment, &addr))
+	if (!g_physical_memory->Alloc(search_start, search_end, len, alignment, &addr, memory_type))
 	{
 		printf(FG_RED "\t[Fail]\n" FG_DEFAULT);
 		return KERNEL_ERROR_EAGAIN;

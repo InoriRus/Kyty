@@ -1,5 +1,6 @@
 #include "Kyty/Core/MemoryAlloc.h"
 
+#include "Kyty/Core/ArrayWrapper.h"
 #include "Kyty/Core/Common.h"
 #include "Kyty/Core/DateTime.h" // IWYU pragma: keep
 #include "Kyty/Core/Debug.h"    // IWYU pragma: keep

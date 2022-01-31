@@ -15,6 +15,7 @@ LIB_DEFINE(InitSysmodule_1);
 LIB_DEFINE(InitDiscMap_1);
 LIB_DEFINE(InitDebug_1);
 LIB_DEFINE(InitGraphicsDriver_1);
+LIB_DEFINE(InitSystemService_1);
 LIB_DEFINE(InitUserService_1);
 LIB_DEFINE(InitPad_1);
 
@@ -29,6 +30,7 @@ bool Init(const String& id, Loader::SymbolDatabase* s)
 	LIB_CHECK(U"libDebug_1", InitDebug_1);
 	LIB_CHECK(U"libGraphicsDriver_1", InitGraphicsDriver_1);
 	LIB_CHECK(U"libUserService_1", InitUserService_1);
+	LIB_CHECK(U"libSystemService_1", InitSystemService_1);
 	LIB_CHECK(U"libPad_1", InitPad_1);
 
 	return false;

@@ -81,6 +81,9 @@ constexpr uint32_t R_DISPATCH_WAIT_MEM = 0x0A;
 constexpr uint32_t R_PUSH_MARKER       = 0x0B;
 constexpr uint32_t R_POP_MARKER        = 0x0C;
 constexpr uint32_t R_VS_EMBEDDED       = 0x0D;
+constexpr uint32_t R_PS_EMBEDDED       = 0x0E;
+constexpr uint32_t R_VS_UPDATE         = 0x0F;
+constexpr uint32_t R_PS_UPDATE         = 0x10;
 
 constexpr uint32_t DB_RENDER_CONTROL                                = 0x0;
 constexpr uint32_t DB_RENDER_CONTROL_DEPTH_CLEAR_ENABLE_SHIFT       = 0;
@@ -173,6 +176,11 @@ constexpr uint32_t DB_DEPTH_SLICE_SLICE_TILE_MAX_MASK  = 0x3FFFFF;
 
 constexpr uint32_t PA_SC_VPORT_ZMIN_0 = 0xB4;
 
+constexpr uint32_t CB_BLEND_RED   = 0x105;
+constexpr uint32_t CB_BLEND_GREEN = 0x106;
+constexpr uint32_t CB_BLEND_BLUE  = 0x107;
+constexpr uint32_t CB_BLEND_ALPHA = 0x108;
+
 constexpr uint32_t PA_CL_VPORT_XSCALE = 0x10F;
 
 constexpr uint32_t SPI_PS_INPUT_CNTL_0 = 0x191;
@@ -212,6 +220,24 @@ constexpr uint32_t DB_DEPTH_CONTROL_STENCILFUNC_SHIFT         = 8;
 constexpr uint32_t DB_DEPTH_CONTROL_STENCILFUNC_MASK          = 0x7;
 constexpr uint32_t DB_DEPTH_CONTROL_STENCILFUNC_BF_SHIFT      = 20;
 constexpr uint32_t DB_DEPTH_CONTROL_STENCILFUNC_BF_MASK       = 0x7;
+
+constexpr uint32_t DB_EQAA                                  = 0x201;
+constexpr uint32_t DB_EQAA_MAX_ANCHOR_SAMPLES_SHIFT         = 0;
+constexpr uint32_t DB_EQAA_MAX_ANCHOR_SAMPLES_MASK          = 0x7;
+constexpr uint32_t DB_EQAA_PS_ITER_SAMPLES_SHIFT            = 4;
+constexpr uint32_t DB_EQAA_PS_ITER_SAMPLES_MASK             = 0x7;
+constexpr uint32_t DB_EQAA_MASK_EXPORT_NUM_SAMPLES_SHIFT    = 8;
+constexpr uint32_t DB_EQAA_MASK_EXPORT_NUM_SAMPLES_MASK     = 0x7;
+constexpr uint32_t DB_EQAA_ALPHA_TO_MASK_NUM_SAMPLES_SHIFT  = 12;
+constexpr uint32_t DB_EQAA_ALPHA_TO_MASK_NUM_SAMPLES_MASK   = 0x7;
+constexpr uint32_t DB_EQAA_HIGH_QUALITY_INTERSECTIONS_SHIFT = 16;
+constexpr uint32_t DB_EQAA_HIGH_QUALITY_INTERSECTIONS_MASK  = 0x1;
+constexpr uint32_t DB_EQAA_INCOHERENT_EQAA_READS_SHIFT      = 17;
+constexpr uint32_t DB_EQAA_INCOHERENT_EQAA_READS_MASK       = 0x1;
+constexpr uint32_t DB_EQAA_INTERPOLATE_COMP_Z_SHIFT         = 18;
+constexpr uint32_t DB_EQAA_INTERPOLATE_COMP_Z_MASK          = 0x1;
+constexpr uint32_t DB_EQAA_STATIC_ANCHOR_ASSOCIATIONS_SHIFT = 20;
+constexpr uint32_t DB_EQAA_STATIC_ANCHOR_ASSOCIATIONS_MASK  = 0x1;
 
 constexpr uint32_t PA_SU_SC_MODE_CNTL                                = 0x205;
 constexpr uint32_t PA_SU_SC_MODE_CNTL_CULL_FRONT_SHIFT               = 0;

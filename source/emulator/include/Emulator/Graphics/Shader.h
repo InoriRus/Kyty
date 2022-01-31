@@ -588,6 +588,7 @@ struct ShaderTextureResources
 	static constexpr int RES_MAX = 16;
 
 	ShaderTextureResource textures[RES_MAX];
+	int                   slots[RES_MAX]          = {0};
 	int                   start_register[RES_MAX] = {0};
 	bool                  extended[RES_MAX]       = {};
 	int                   textures_num            = 0;
@@ -599,6 +600,7 @@ struct ShaderSamplerResources
 	static constexpr int RES_MAX = 16;
 
 	ShaderSamplerResource samplers[RES_MAX];
+	int                   slots[RES_MAX]          = {0};
 	int                   start_register[RES_MAX] = {0};
 	bool                  extended[RES_MAX]       = {};
 	int                   samplers_num            = 0;

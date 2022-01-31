@@ -1455,6 +1455,27 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_depth_control)
 	return 1;
 }
 
+KYTY_HW_CTX_PARSER(hw_ctx_set_eqaa_control)
+{
+	EXIT_NOT_IMPLEMENTED(cmd_id != 0xC0016900);
+	EXIT_NOT_IMPLEMENTED(cmd_offset != Pm4::DB_EQAA);
+
+	EqaaControl r;
+
+	r.max_anchor_samples         = KYTY_PM4_GET(buffer[0], DB_EQAA, MAX_ANCHOR_SAMPLES);
+	r.ps_iter_samples            = KYTY_PM4_GET(buffer[0], DB_EQAA, PS_ITER_SAMPLES);
+	r.mask_export_num_samples    = KYTY_PM4_GET(buffer[0], DB_EQAA, MASK_EXPORT_NUM_SAMPLES);
+	r.alpha_to_mask_num_samples  = KYTY_PM4_GET(buffer[0], DB_EQAA, ALPHA_TO_MASK_NUM_SAMPLES);
+	r.high_quality_intersections = KYTY_PM4_GET(buffer[0], DB_EQAA, HIGH_QUALITY_INTERSECTIONS) != 0;
+	r.incoherent_eqaa_reads      = KYTY_PM4_GET(buffer[0], DB_EQAA, INCOHERENT_EQAA_READS) != 0;
+	r.interpolate_comp_z         = KYTY_PM4_GET(buffer[0], DB_EQAA, INTERPOLATE_COMP_Z) != 0;
+	r.static_anchor_associations = KYTY_PM4_GET(buffer[0], DB_EQAA, STATIC_ANCHOR_ASSOCIATIONS) != 0;
+
+	cp->GetCtx()->SetEqaaControl(r);
+
+	return 1;
+}
+
 KYTY_HW_CTX_PARSER(hw_ctx_set_depth_clear)
 {
 	EXIT_NOT_IMPLEMENTED(cmd_id != 0xC0016900);
@@ -1667,6 +1688,23 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_guard_bands)
 	auto horz_discard = *reinterpret_cast<const float*>(&buffer[3]);
 
 	cp->GetCtx()->SetGuardBands(horz_clip, vert_clip, horz_discard, vert_discard);
+
+	return 4;
+}
+
+KYTY_HW_CTX_PARSER(hw_ctx_set_blend_color)
+{
+	EXIT_NOT_IMPLEMENTED(cmd_id != 0xc0046900);
+	EXIT_NOT_IMPLEMENTED(cmd_offset != Pm4::CB_BLEND_RED);
+
+	BlendColor r;
+
+	r.red   = *reinterpret_cast<const float*>(&buffer[0]);
+	r.green = *reinterpret_cast<const float*>(&buffer[1]);
+	r.blue  = *reinterpret_cast<const float*>(&buffer[2]);
+	r.alpha = *reinterpret_cast<const float*>(&buffer[3]);
+
+	cp->GetCtx()->SetBlendColor(r);
 
 	return 4;
 }
@@ -2350,8 +2388,10 @@ static void graphics_init_jmp_tables()
 	g_hw_ctx_func[Pm4::DB_STENCIL_INFO]      = hw_ctx_set_stencil_info;
 	g_hw_ctx_func[0x08d]                     = hw_ctx_hardware_screen_offset;
 	g_hw_ctx_func[0x08e]                     = hw_ctx_set_render_target_mask;
+	g_hw_ctx_func[Pm4::CB_BLEND_RED]         = hw_ctx_set_blend_color;
 	g_hw_ctx_func[Pm4::SPI_PS_INPUT_CNTL_0]  = hw_ctx_set_ps_input;
 	g_hw_ctx_func[Pm4::DB_DEPTH_CONTROL]     = hw_ctx_set_depth_control;
+	g_hw_ctx_func[Pm4::DB_EQAA]              = hw_ctx_set_eqaa_control;
 	g_hw_ctx_func[0x204]                     = hw_ctx_set_clip_control;
 	g_hw_ctx_func[Pm4::PA_SU_SC_MODE_CNTL]   = hw_ctx_set_mode_control;
 	g_hw_ctx_func[0x206]                     = hw_ctx_set_viewport_transform_control;

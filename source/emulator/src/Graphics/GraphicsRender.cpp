@@ -70,6 +70,10 @@ struct PipelineParameters
 	uint8_t             alpha_destblend          = 0;
 	bool                separate_alpha_blend     = false;
 	bool                blend_enable             = false;
+	float               blend_color_red          = 0.0f;
+	float               blend_color_green        = 0.0f;
+	float               blend_color_blue         = 0.0f;
+	float               blend_color_alpha        = 0.0f;
 
 	bool operator==(const PipelineParameters& other) const;
 };
@@ -99,7 +103,8 @@ public:
 	VulkanPipeline* CreatePipeline(VulkanFramebuffer* framebuffer, RenderColorInfo* color, RenderDepthInfo* depth,
 	                               const ShaderVertexInputInfo* vs_input_info, const VertexShaderInfo* vs_regs,
 	                               const ShaderPixelInputInfo* ps_input_info, const PixelShaderInfo* ps_regs, VkPrimitiveTopology topology,
-	                               uint32_t color_mask, const ModeControl& mc, const BlendControl& bc, const ScreenViewport& vp);
+	                               uint32_t color_mask, const ModeControl& mc, const BlendControl& bc, const BlendColor& bclr,
+	                               const ScreenViewport& vp);
 	VulkanPipeline* CreatePipeline(const ShaderComputeInputInfo* input_info, const ComputeShaderInfo* cs_regs);
 	void            DeletePipeline(VulkanPipeline* pipeline);
 	void            DeletePipelines(VulkanFramebuffer* framebuffer);
@@ -446,6 +451,7 @@ static void rt_check(const RenderTarget& rt)
 {
 	if (rt.base_addr != 0)
 	{
+		bool render_to_texture = (rt.tile_mode == 0x0d);
 		// EXIT_NOT_IMPLEMENTED(rt.base_addr == 0);
 		// EXIT_NOT_IMPLEMENTED(rt.pitch_div8_minus1 != 0x000000ef);
 		// EXIT_NOT_IMPLEMENTED(rt.fmask_pitch_div8_minus1 != 0x000000ef);
@@ -456,7 +462,7 @@ static void rt_check(const RenderTarget& rt)
 		EXIT_NOT_IMPLEMENTED(rt.fmask_compression_mode != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(rt.cmask_fast_clear_enable != false);
 		EXIT_NOT_IMPLEMENTED(rt.dcc_compression_enable != false);
-		EXIT_NOT_IMPLEMENTED(rt.neo_mode != Config::IsNeo());
+		EXIT_NOT_IMPLEMENTED(!render_to_texture && rt.neo_mode != Config::IsNeo());
 		EXIT_NOT_IMPLEMENTED(rt.cmask_tile_mode != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(rt.cmask_tile_mode_neo != 0x00000000);
 		//		 EXIT_NOT_IMPLEMENTED(rt.format != 0x0000000a);
@@ -686,7 +692,7 @@ static void mc_check(const ModeControl& c)
 	EXIT_NOT_IMPLEMENTED(c.persp_corr_dis != false);
 }
 
-static void bc_print(const char* func, const BlendControl& c)
+static void bc_print(const char* func, const BlendControl& c, const BlendColor& color)
 {
 	printf("%s\n", func);
 
@@ -698,9 +704,13 @@ static void bc_print(const char* func, const BlendControl& c)
 	printf("\t alpha_destblend      = %" PRIu8 "\n", c.alpha_destblend);
 	printf("\t separate_alpha_blend = %s\n", c.separate_alpha_blend ? "true" : "false");
 	printf("\t enable               = %s\n", c.enable ? "true" : "false");
+	printf("\t red                  = %f\n", color.red);
+	printf("\t green                = %f\n", color.green);
+	printf("\t blue                 = %f\n", color.blue);
+	printf("\t alpha                = %f\n", color.alpha);
 }
 
-static void bc_check(const BlendControl& c)
+static void bc_check(const BlendControl& c, const BlendColor& color)
 {
 	// EXIT_NOT_IMPLEMENTED(c.color_srcblend != 0);
 	EXIT_NOT_IMPLEMENTED(c.color_comb_fcn != 0);
@@ -710,6 +720,10 @@ static void bc_check(const BlendControl& c)
 	EXIT_NOT_IMPLEMENTED(c.alpha_destblend != 0);
 	EXIT_NOT_IMPLEMENTED(c.separate_alpha_blend != false);
 	// EXIT_NOT_IMPLEMENTED(c.enable != false);
+	EXIT_NOT_IMPLEMENTED(color.red != 0.0f);
+	EXIT_NOT_IMPLEMENTED(color.green != 0.0f);
+	EXIT_NOT_IMPLEMENTED(color.blue != 0.0f);
+	EXIT_NOT_IMPLEMENTED(color.alpha != 0.0f);
 }
 
 static void d_print(const char* func, const DepthControl& c)
@@ -736,6 +750,32 @@ static void d_check(const DepthControl& c)
 	EXIT_NOT_IMPLEMENTED(c.backface_enable != false);
 	EXIT_NOT_IMPLEMENTED(c.stencilfunc != 0);
 	EXIT_NOT_IMPLEMENTED(c.stencilfunc_bf != 0);
+}
+
+static void eqaa_print(const char* func, const EqaaControl& c)
+{
+	printf("%s\n", func);
+
+	printf("\t max_anchor_samples         = %" PRIu8 "\n", c.max_anchor_samples);
+	printf("\t ps_iter_samples            = %" PRIu8 "\n", c.ps_iter_samples);
+	printf("\t mask_export_num_samples    = %" PRIu8 "\n", c.mask_export_num_samples);
+	printf("\t alpha_to_mask_num_samples  = %" PRIu8 "\n", c.alpha_to_mask_num_samples);
+	printf("\t high_quality_intersections = %s\n", c.high_quality_intersections ? "true" : "false");
+	printf("\t incoherent_eqaa_reads      = %s\n", c.incoherent_eqaa_reads ? "true" : "false");
+	printf("\t interpolate_comp_z         = %s\n", c.interpolate_comp_z ? "true" : "false");
+	printf("\t static_anchor_associations = %s\n", c.static_anchor_associations ? "true" : "false");
+}
+
+static void eqaa_check(const EqaaControl& c)
+{
+	EXIT_NOT_IMPLEMENTED(c.max_anchor_samples != 0);
+	EXIT_NOT_IMPLEMENTED(c.ps_iter_samples != 0);
+	EXIT_NOT_IMPLEMENTED(c.mask_export_num_samples != 0);
+	EXIT_NOT_IMPLEMENTED(c.alpha_to_mask_num_samples != 0);
+	EXIT_NOT_IMPLEMENTED(c.high_quality_intersections != false);
+	EXIT_NOT_IMPLEMENTED(c.incoherent_eqaa_reads != false);
+	EXIT_NOT_IMPLEMENTED(c.interpolate_comp_z != false);
+	EXIT_NOT_IMPLEMENTED(c.static_anchor_associations != false);
 }
 
 static void vp_print(const char* func, const ScreenViewport& vp)
@@ -788,14 +828,16 @@ static void vp_check(const ScreenViewport& vp)
 
 static void hw_check(const HardwareContext& hw)
 {
-	const auto& rt = hw.GetRenderTargets(0);
-	const auto& bc = hw.GetBlendControl(0);
-	const auto& vp = hw.GetScreenViewport();
-	const auto& z  = hw.GetDepthRenderTarget();
-	const auto& c  = hw.GetClipControl();
-	const auto& rc = hw.GetRenderControl();
-	const auto& d  = hw.GetDepthControl();
-	const auto& mc = hw.GetModeControl();
+	const auto& rt   = hw.GetRenderTargets(0);
+	const auto& bc   = hw.GetBlendControl(0);
+	const auto& bclr = hw.GetBlendColor();
+	const auto& vp   = hw.GetScreenViewport();
+	const auto& z    = hw.GetDepthRenderTarget();
+	const auto& c    = hw.GetClipControl();
+	const auto& rc   = hw.GetRenderControl();
+	const auto& d    = hw.GetDepthControl();
+	const auto& mc   = hw.GetModeControl();
+	const auto& eqaa = hw.GetEqaaControl();
 
 	rt_check(rt);
 	vp_check(vp);
@@ -804,7 +846,8 @@ static void hw_check(const HardwareContext& hw)
 	rc_check(rc);
 	d_check(d);
 	mc_check(mc);
-	bc_check(bc);
+	bc_check(bc, bclr);
+	eqaa_check(eqaa);
 
 	EXIT_NOT_IMPLEMENTED(hw.GetRenderTargetMask() != 0xF && hw.GetRenderTargetMask() != 0x0);
 	EXIT_NOT_IMPLEMENTED(hw.GetDepthClearValue() != 0.0f && hw.GetDepthClearValue() != 1.0f);
@@ -812,14 +855,16 @@ static void hw_check(const HardwareContext& hw)
 
 static void hw_print(const HardwareContext& hw)
 {
-	const auto& rt = hw.GetRenderTargets(0);
-	const auto& bc = hw.GetBlendControl(0);
-	const auto& vp = hw.GetScreenViewport();
-	const auto& z  = hw.GetDepthRenderTarget();
-	const auto& c  = hw.GetClipControl();
-	const auto& rc = hw.GetRenderControl();
-	const auto& d  = hw.GetDepthControl();
-	const auto& mc = hw.GetModeControl();
+	const auto& rt   = hw.GetRenderTargets(0);
+	const auto& bc   = hw.GetBlendControl(0);
+	const auto& bclr = hw.GetBlendColor();
+	const auto& vp   = hw.GetScreenViewport();
+	const auto& z    = hw.GetDepthRenderTarget();
+	const auto& c    = hw.GetClipControl();
+	const auto& rc   = hw.GetRenderControl();
+	const auto& d    = hw.GetDepthControl();
+	const auto& mc   = hw.GetModeControl();
+	const auto& eqaa = hw.GetEqaaControl();
 
 	printf("HardwareContext\n");
 	printf("\t GetRenderTargetMask() = 0x%08" PRIx32 "\n", hw.GetRenderTargetMask());
@@ -832,7 +877,8 @@ static void hw_print(const HardwareContext& hw)
 	rc_print("RenderControl:", rc);
 	d_print("DepthControl:", d);
 	mc_print("ModeControl:", mc);
-	bc_print("BlendControl:", bc);
+	bc_print("BlendControl:", bc, bclr);
+	eqaa_print("EqaaControl:", eqaa);
 }
 
 void GraphicsRenderInit()
@@ -1749,10 +1795,10 @@ static VulkanPipeline* CreatePipelineInternal(VkRenderPass render_pass, const Sh
 	color_blending.logicOp           = VK_LOGIC_OP_COPY;
 	color_blending.attachmentCount   = 1;
 	color_blending.pAttachments      = &color_blend_attachment;
-	color_blending.blendConstants[0] = 0.0f;
-	color_blending.blendConstants[1] = 0.0f;
-	color_blending.blendConstants[2] = 0.0f;
-	color_blending.blendConstants[3] = 0.0f;
+	color_blending.blendConstants[0] = params->blend_color_red;
+	color_blending.blendConstants[1] = params->blend_color_green;
+	color_blending.blendConstants[2] = params->blend_color_blue;
+	color_blending.blendConstants[3] = params->blend_color_alpha;
 
 	VkDescriptorSetLayout set_layouts[2]  = {};
 	uint32_t              set_layouts_num = 0;
@@ -1957,7 +2003,7 @@ VulkanPipeline* PipelineCache::CreatePipeline(VulkanFramebuffer* framebuffer, Re
                                               const ShaderVertexInputInfo* vs_input_info, const VertexShaderInfo* vs_regs,
                                               const ShaderPixelInputInfo* ps_input_info, const PixelShaderInfo* ps_regs,
                                               VkPrimitiveTopology topology, uint32_t color_mask, const ModeControl& mc,
-                                              const BlendControl& bc, const ScreenViewport& vp)
+                                              const BlendControl& bc, const BlendColor& bclr, const ScreenViewport& vp)
 {
 	KYTY_PROFILER_BLOCK("PipelineCache::CreatePipeline(Gfx)", profiler::colors::DeepOrangeA200);
 
@@ -2012,6 +2058,10 @@ VulkanPipeline* PipelineCache::CreatePipeline(VulkanFramebuffer* framebuffer, Re
 	p.params->alpha_destblend          = bc.alpha_destblend;
 	p.params->separate_alpha_blend     = bc.separate_alpha_blend;
 	p.params->blend_enable             = bc.enable;
+	p.params->blend_color_red          = bclr.red;
+	p.params->blend_color_green        = bclr.green;
+	p.params->blend_color_blue         = bclr.blue;
+	p.params->blend_color_alpha        = bclr.alpha;
 
 	auto* found = Find(p);
 
@@ -2869,12 +2919,13 @@ static void FindRenderColorInfo(const HardwareContext& hw, RenderColorInfo* r)
 
 	if (rt.base_addr != 0)
 	{
-		auto     width  = rt.width;
-		auto     height = rt.height;
-		auto     pitch  = (rt.pitch_div8_minus1 + 1) * 8;
-		auto     size   = (rt.slice_div64_minus1 + 1) * 64 * 4;
-		bool     tile   = false;
-		uint32_t format = 0;
+		auto     width             = rt.width;
+		auto     height            = rt.height;
+		auto     pitch             = (rt.pitch_div8_minus1 + 1) * 8;
+		auto     size              = (rt.slice_div64_minus1 + 1) * 64 * 4;
+		bool     tile              = false;
+		uint32_t format            = 0;
+		bool     render_to_texture = false;
 
 		if (rt.tile_mode == 0x8)
 		{
@@ -2882,38 +2933,48 @@ static void FindRenderColorInfo(const HardwareContext& hw, RenderColorInfo* r)
 		} else if (rt.tile_mode == 0xa)
 		{
 			tile = true;
+		} else if (rt.tile_mode == 0xd)
+		{
+			tile              = true;
+			render_to_texture = true;
 		} else
 		{
 			EXIT("unknown tile mode: %u\n", rt.tile_mode);
 		}
 
-		if (rt.format == 0xa && rt.channel_type == 0x6 && rt.channel_order == 0x1)
+		if (render_to_texture)
 		{
-			format = 0x80000000;
+			EXIT("not implemented");
 		} else
 		{
-			EXIT("unknown format");
-		}
+			if (rt.format == 0xa && rt.channel_type == 0x6 && rt.channel_order == 0x1)
+			{
+				format = 0x80000000;
+			} else
+			{
+				EXIT("unknown format");
+			}
 
-		auto video_image = VideoOut::VideoOutGetImage(rt.base_addr);
-		if (video_image.image == nullptr)
-		{
-			// Offscreen buffer
-			VideoOutBufferObject vulkan_buffer_info(format, width, height, tile, Config::IsNeo(), pitch);
-			auto*                buffer_vulkan = static_cast<Graphics::VideoOutVulkanImage*>(
-                Graphics::GpuMemoryGetObject(g_render_ctx->GetGraphicCtx(), rt.base_addr, size, vulkan_buffer_info));
-			EXIT_NOT_IMPLEMENTED(buffer_vulkan == nullptr);
-			r->base_addr     = rt.base_addr;
-			r->vulkan_buffer = buffer_vulkan;
-			r->buffer_size   = size;
-		} else
-		{
-			// Display buffer
-			EXIT_NOT_IMPLEMENTED(video_image.buffer_size != size);
-			EXIT_NOT_IMPLEMENTED(video_image.buffer_pitch != pitch);
-			r->base_addr     = rt.base_addr;
-			r->vulkan_buffer = video_image.image;
-			r->buffer_size   = video_image.buffer_size;
+			auto video_image = VideoOut::VideoOutGetImage(rt.base_addr);
+			if (video_image.image == nullptr)
+			{
+				// Offscreen buffer
+				VideoOutBufferObject vulkan_buffer_info(format, width, height, tile, Config::IsNeo(), pitch);
+				auto*                buffer_vulkan = static_cast<Graphics::VideoOutVulkanImage*>(
+                    Graphics::GpuMemoryGetObject(g_render_ctx->GetGraphicCtx(), rt.base_addr, size, vulkan_buffer_info));
+				EXIT_NOT_IMPLEMENTED(buffer_vulkan == nullptr);
+				r->base_addr     = rt.base_addr;
+				r->vulkan_buffer = buffer_vulkan;
+				r->buffer_size   = size;
+			} else
+			{
+				// Display buffer
+				EXIT_NOT_IMPLEMENTED(video_image.buffer_size != size);
+				EXIT_NOT_IMPLEMENTED(video_image.buffer_pitch != pitch);
+				r->base_addr     = rt.base_addr;
+				r->vulkan_buffer = video_image.image;
+				r->buffer_size   = video_image.buffer_size;
+			}
 		}
 	} else
 	{
@@ -3269,9 +3330,10 @@ void GraphicsRenderDrawIndex(CommandBuffer* buffer, HardwareContext* ctx, UserCo
 
 	EXIT_NOT_IMPLEMENTED(vs_input_info.buffers_num > 1);
 
-	auto* pipeline = g_render_ctx->GetPipelineCache()->CreatePipeline(
-	    framebuffer, &color_info, &depth_info, &vs_input_info, &ctx->GetVs(), &ps_input_info, &ctx->GetPs(),
-	    VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, ctx->GetRenderTargetMask(), ctx->GetModeControl(), bc, ctx->GetScreenViewport());
+	auto* pipeline = g_render_ctx->GetPipelineCache()->CreatePipeline(framebuffer, &color_info, &depth_info, &vs_input_info, &ctx->GetVs(),
+	                                                                  &ps_input_info, &ctx->GetPs(), VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+	                                                                  ctx->GetRenderTargetMask(), ctx->GetModeControl(), bc,
+	                                                                  ctx->GetBlendColor(), ctx->GetScreenViewport());
 
 	vkCmdBindPipeline(vk_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
 
@@ -3376,7 +3438,7 @@ void GraphicsRenderDrawIndexAuto(CommandBuffer* buffer, HardwareContext* ctx, Us
 
 	auto* pipeline = g_render_ctx->GetPipelineCache()->CreatePipeline(
 	    framebuffer, &color_info, &depth_info, &vs_input_info, &vertex_shader_info, &ps_input_info, &pixel_shader_info, topology,
-	    ctx->GetRenderTargetMask(), ctx->GetModeControl(), bc, ctx->GetScreenViewport());
+	    ctx->GetRenderTargetMask(), ctx->GetModeControl(), bc, ctx->GetBlendColor(), ctx->GetScreenViewport());
 
 	vkCmdBindPipeline(vk_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
 

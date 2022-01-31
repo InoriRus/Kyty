@@ -11,6 +11,7 @@
 #include "Emulator/Kernel/FileSystem.h"
 #include "Emulator/Kernel/Memory.h"
 #include "Emulator/Kernel/Pthread.h"
+#include "Emulator/Kernel/Semaphore.h"
 #include "Emulator/Libs/Errno.h"
 #include "Emulator/Libs/Libs.h"
 #include "Emulator/RuntimeLinker.h"
@@ -102,23 +103,16 @@ static const char* g_progname                            = g_progname_buf;
 static get_thread_atexit_count_func_t g_get_thread_atexit_count_func = nullptr;
 static thread_atexit_report_func_t    g_thread_atexit_report_func    = nullptr;
 
-static thread_local int g_errno = 0;
-
 void SetProgName(const String& name)
 {
 	strncpy(g_progname_buf, name.C_Str(), PROGNAME_MAX_SIZE);
 }
 
-// struct KernelContext
-//{
-//	Vector<Loader::Program*> programs;
-//};
-
 static KYTY_SYSV_ABI int* get_error_addr()
 {
 	PRINT_NAME();
 
-	return &g_errno;
+	return Posix::GetErrorAddr();
 }
 
 static KYTY_SYSV_ABI void stack_chk_fail()
@@ -415,17 +409,22 @@ int KYTY_SYSV_ABI clock_gettime(int clock_id, LibKernel::KernelTimespec* time)
 {
 	PRINT_NAME();
 
-	if (LibKernel::KernelClockGettime(clock_id, time) < 0)
-	{
-		return -1;
-	}
-
-	return 0;
+	return POSIX_CALL(LibKernel::KernelClockGettime(clock_id, time));
 }
 
 LIB_DEFINE(InitLibKernel_1_Posix)
 {
 	LIB_FUNC("lLMT9vJAck0", clock_gettime);
+
+	LIB_FUNC("7H0iTOciTLo", Posix::pthread_mutex_lock);
+	LIB_FUNC("2Z+PpY6CaJg", Posix::pthread_mutex_unlock);
+	LIB_FUNC("ttHNfU+qDBU", Posix::pthread_mutex_init);
+	LIB_FUNC("ltCfaGr2JGE", Posix::pthread_mutex_destroy);
+	LIB_FUNC("mkx2fVhNMsg", Posix::pthread_cond_broadcast);
+	LIB_FUNC("Op8TBGY5KHg", Posix::pthread_cond_wait);
+	LIB_FUNC("mqULNdimTn0", Posix::pthread_key_create);
+	LIB_FUNC("6BpEZuDT7YI", Posix::pthread_key_delete);
+	LIB_FUNC("WrOLvHU0yQM", Posix::pthread_setspecific);
 }
 
 } // namespace Posix
@@ -434,6 +433,7 @@ namespace FileSystem = LibKernel::FileSystem;
 namespace Memory     = LibKernel::Memory;
 namespace EventQueue = LibKernel::EventQueue;
 namespace EventFlag  = LibKernel::EventFlag;
+namespace Semaphore  = LibKernel::Semaphore;
 
 LIB_DEFINE(InitLibKernel_1_FS)
 {
@@ -459,6 +459,7 @@ LIB_DEFINE(InitLibKernel_1_Mem)
 	LIB_FUNC("L-Q3LEjIbgA", Memory::KernelMapDirectMemory);
 	LIB_FUNC("MBuItvba6z8", Memory::KernelReleaseDirectMemory);
 	LIB_FUNC("WFcfL2lzido", Memory::KernelQueryMemoryProtection);
+	LIB_FUNC("BHouLQzh0X0", Memory::KernelDirectMemoryQuery);
 }
 
 LIB_DEFINE(InitLibKernel_1_Equeue)
@@ -473,6 +474,14 @@ LIB_DEFINE(InitLibKernel_1_EventFlag)
 {
 	LIB_FUNC("BpFoboUJoZU", EventFlag::KernelCreateEventFlag);
 	LIB_FUNC("JTvBflhYazQ", EventFlag::KernelWaitEventFlag);
+}
+
+LIB_DEFINE(InitLibKernel_1_Semaphore)
+{
+	LIB_FUNC("188x57JYp0g", Semaphore::KernelCreateSema);
+	LIB_FUNC("R1Jvn8bSCW8", Semaphore::KernelDeleteSema);
+	LIB_FUNC("Zxa0VhQVTsk", Semaphore::KernelWaitSema);
+	LIB_FUNC("4czppHBiriw", Semaphore::KernelSignalSema);
 }
 
 LIB_DEFINE(InitLibKernel_1_Pthread)
@@ -493,6 +502,9 @@ LIB_DEFINE(InitLibKernel_1_Pthread)
 	LIB_FUNC("onNY9Byn-W8", LibKernel::PthreadJoin);
 	LIB_FUNC("4qGrR6eoP9Y", LibKernel::PthreadDetach);
 	LIB_FUNC("How7B8Oet6k", LibKernel::PthreadGetname);
+	LIB_FUNC("bt3CTBKmGyI", LibKernel::PthreadSetaffinity);
+	LIB_FUNC("1tKyG7RlMJo", LibKernel::PthreadGetprio);
+	LIB_FUNC("W0Hpm2X0uPE", LibKernel::PthreadSetprio);
 
 	LIB_FUNC("62KCwEMmzcM", LibKernel::PthreadAttrDestroy);
 	LIB_FUNC("x1X76arYMxU", LibKernel::PthreadAttrGet);
@@ -504,6 +516,7 @@ LIB_DEFINE(InitLibKernel_1_Pthread)
 	LIB_FUNC("eXbUSpEaTsA", LibKernel::PthreadAttrSetinheritsched);
 	LIB_FUNC("DzES9hQF4f4", LibKernel::PthreadAttrSetschedparam);
 	LIB_FUNC("4+h9EzwKF4I", LibKernel::PthreadAttrSetschedpolicy);
+	LIB_FUNC("3qxgM4ezETA", LibKernel::PthreadAttrSetaffinity);
 
 	LIB_FUNC("6ULAa0fq4jA", LibKernel::PthreadRwlockInit);
 	LIB_FUNC("BB+kb08Tl9A", LibKernel::PthreadRwlockDestroy);
@@ -522,10 +535,10 @@ LIB_DEFINE(InitLibKernel_1_Pthread)
 	LIB_FUNC("1j3S3n-tTW4", LibKernel::KernelGetTscFrequency);
 	LIB_FUNC("4J2sUJmuHZQ", LibKernel::KernelGetProcessTime);
 
-	LIB_FUNC("7H0iTOciTLo", LibKernel::pthread_mutex_lock_s);
-	LIB_FUNC("2Z+PpY6CaJg", LibKernel::pthread_mutex_unlock_s);
-	LIB_FUNC("mkx2fVhNMsg", LibKernel::pthread_cond_broadcast_s);
-	LIB_FUNC("Op8TBGY5KHg", LibKernel::pthread_cond_wait_s);
+	LIB_FUNC("7H0iTOciTLo", Posix::pthread_mutex_lock);
+	LIB_FUNC("2Z+PpY6CaJg", Posix::pthread_mutex_unlock);
+	LIB_FUNC("mkx2fVhNMsg", Posix::pthread_cond_broadcast);
+	LIB_FUNC("Op8TBGY5KHg", Posix::pthread_cond_wait);
 }
 
 LIB_DEFINE(InitLibKernel_1)
@@ -534,6 +547,7 @@ LIB_DEFINE(InitLibKernel_1)
 	InitLibKernel_1_Mem(s);
 	InitLibKernel_1_Equeue(s);
 	InitLibKernel_1_EventFlag(s);
+	InitLibKernel_1_Semaphore(s);
 	InitLibKernel_1_Pthread(s);
 	Posix::InitLibKernel_1_Posix(s);
 

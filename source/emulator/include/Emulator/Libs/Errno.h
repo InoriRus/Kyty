@@ -7,7 +7,166 @@
 
 constexpr int OK = 0;
 
-namespace Kyty::Libs::LibKernel {
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
+#define POSIX_CALL(func)                                                                                                                   \
+	[&]()                                                                                                                                  \
+	{                                                                                                                                      \
+		auto result = func;                                                                                                                \
+		if (result != OK)                                                                                                                  \
+		{                                                                                                                                  \
+			*GetErrorAddr() = LibKernel::KernelToPosix(result);                                                                            \
+			return -1;                                                                                                                     \
+		}                                                                                                                                  \
+		return 0;                                                                                                                          \
+	}()
+
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
+#define POSIX_PTHREAD_CALL(func)                                                                                                           \
+	[&]()                                                                                                                                  \
+	{                                                                                                                                      \
+		auto result = func;                                                                                                                \
+		if (result != OK)                                                                                                                  \
+		{                                                                                                                                  \
+			return LibKernel::KernelToPosix(result);                                                                                       \
+		}                                                                                                                                  \
+		return 0;                                                                                                                          \
+	}()
+
+namespace Kyty::Libs {
+
+namespace Posix {
+
+KYTY_SYSV_ABI int* GetErrorAddr();
+
+constexpr int POSIX_EPERM             = 1;
+constexpr int POSIX_ENOENT            = 2;
+constexpr int POSIX_ESRCH             = 3;
+constexpr int POSIX_EINTR             = 4;
+constexpr int POSIX_EIO               = 5;
+constexpr int POSIX_ENXIO             = 6;
+constexpr int POSIX_E2BIG             = 7;
+constexpr int POSIX_ENOEXEC           = 8;
+constexpr int POSIX_EBADF             = 9;
+constexpr int POSIX_ECHILD            = 10;
+constexpr int POSIX_EDEADLK           = 11;
+constexpr int POSIX_ENOMEM            = 12;
+constexpr int POSIX_EACCES            = 13;
+constexpr int POSIX_EFAULT            = 14;
+constexpr int POSIX_ENOTBLK           = 15;
+constexpr int POSIX_EBUSY             = 16;
+constexpr int POSIX_EEXIST            = 17;
+constexpr int POSIX_EXDEV             = 18;
+constexpr int POSIX_ENODEV            = 19;
+constexpr int POSIX_ENOTDIR           = 20;
+constexpr int POSIX_EISDIR            = 21;
+constexpr int POSIX_EINVAL            = 22;
+constexpr int POSIX_ENFILE            = 23;
+constexpr int POSIX_EMFILE            = 24;
+constexpr int POSIX_ENOTTY            = 25;
+constexpr int POSIX_ETXTBSY           = 26;
+constexpr int POSIX_EFBIG             = 27;
+constexpr int POSIX_ENOSPC            = 28;
+constexpr int POSIX_ESPIPE            = 29;
+constexpr int POSIX_EROFS             = 30;
+constexpr int POSIX_EMLINK            = 31;
+constexpr int POSIX_EPIPE             = 32;
+constexpr int POSIX_EDOM              = 33;
+constexpr int POSIX_ERANGE            = 34;
+constexpr int POSIX_EAGAIN            = 35;
+constexpr int POSIX_EWOULDBLOCK       = 35;
+constexpr int POSIX_EINPROGRESS       = 36;
+constexpr int POSIX_EALREADY          = 37;
+constexpr int POSIX_ENOTSOCK          = 38;
+constexpr int POSIX_EDESTADDRREQ      = 39;
+constexpr int POSIX_EMSGSIZE          = 40;
+constexpr int POSIX_EPROTOTYPE        = 41;
+constexpr int POSIX_ENOPROTOOPT       = 42;
+constexpr int POSIX_EPROTONOSUPPORT   = 43;
+constexpr int POSIX_ESOCKTNOSUPPORT   = 44;
+constexpr int POSIX_EOPNOTSUPP        = 45;
+constexpr int POSIX_ENOTSUP           = 45;
+constexpr int POSIX_EPFNOSUPPORT      = 46;
+constexpr int POSIX_EAFNOSUPPORT      = 47;
+constexpr int POSIX_EADDRINUSE        = 48;
+constexpr int POSIX_EADDRNOTAVAIL     = 49;
+constexpr int POSIX_ENETDOWN          = 50;
+constexpr int POSIX_ENETUNREACH       = 51;
+constexpr int POSIX_ENETRESET         = 52;
+constexpr int POSIX_ECONNABORTED      = 53;
+constexpr int POSIX_ECONNRESET        = 54;
+constexpr int POSIX_ENOBUFS           = 55;
+constexpr int POSIX_EISCONN           = 56;
+constexpr int POSIX_ENOTCONN          = 57;
+constexpr int POSIX_ESHUTDOWN         = 58;
+constexpr int POSIX_ETOOMANYREFS      = 59;
+constexpr int POSIX_ETIMEDOUT         = 60;
+constexpr int POSIX_ECONNREFUSED      = 61;
+constexpr int POSIX_ELOOP             = 62;
+constexpr int POSIX_ENAMETOOLONG      = 63;
+constexpr int POSIX_EHOSTDOWN         = 64;
+constexpr int POSIX_EHOSTUNREACH      = 65;
+constexpr int POSIX_ENOTEMPTY         = 66;
+constexpr int POSIX_EPROCLIM          = 67;
+constexpr int POSIX_EUSERS            = 68;
+constexpr int POSIX_EDQUOT            = 69;
+constexpr int POSIX_ESTALE            = 70;
+constexpr int POSIX_EREMOTE           = 71;
+constexpr int POSIX_EBADRPC           = 72;
+constexpr int POSIX_ERPCMISMATCH      = 73;
+constexpr int POSIX_EPROGUNAVAIL      = 74;
+constexpr int POSIX_EPROGMISMATCH     = 75;
+constexpr int POSIX_EPROCUNAVAIL      = 76;
+constexpr int POSIX_ENOLCK            = 77;
+constexpr int POSIX_ENOSYS            = 78;
+constexpr int POSIX_EFTYPE            = 79;
+constexpr int POSIX_EAUTH             = 80;
+constexpr int POSIX_ENEEDAUTH         = 81;
+constexpr int POSIX_EIDRM             = 82;
+constexpr int POSIX_ENOMSG            = 83;
+constexpr int POSIX_EOVERFLOW         = 84;
+constexpr int POSIX_ECANCELED         = 85;
+constexpr int POSIX_EILSEQ            = 86;
+constexpr int POSIX_ENOATTR           = 87;
+constexpr int POSIX_EDOOFUS           = 88;
+constexpr int POSIX_EBADMSG           = 89;
+constexpr int POSIX_EMULTIHOP         = 90;
+constexpr int POSIX_ENOLINK           = 91;
+constexpr int POSIX_EPROTO            = 92;
+constexpr int POSIX_ENOTCAPABLE       = 93;
+constexpr int POSIX_ECAPMODE          = 94;
+constexpr int POSIX_ENOBLK            = 95;
+constexpr int POSIX_EICV              = 96;
+constexpr int POSIX_ENOPLAYGOENT      = 97;
+constexpr int POSIX_EREVOKE           = 98;
+constexpr int POSIX_ESDKVERSION       = 99;
+constexpr int POSIX_ESTART            = 100;
+constexpr int POSIX_ESTOP             = 101;
+constexpr int POSIX_EINVALID2MB       = 102;
+constexpr int POSIX_ELAST             = 102;
+constexpr int POSIX_EADHOC            = 160;
+constexpr int POSIX_EINACTIVEDISABLED = 163;
+constexpr int POSIX_ENETNODATA        = 164;
+constexpr int POSIX_ENETDESC          = 165;
+constexpr int POSIX_ENETDESCTIMEDOUT  = 166;
+constexpr int POSIX_ENETINTR          = 167;
+constexpr int POSIX_ERETURN           = 205;
+constexpr int POSIX_EFPOS             = 152;
+constexpr int POSIX_ENODATA           = 1040;
+constexpr int POSIX_ENOSR             = 1050;
+constexpr int POSIX_ENOSTR            = 1051;
+constexpr int POSIX_ENOTRECOVERABLE   = 1056;
+constexpr int POSIX_EOTHER            = 1062;
+constexpr int POSIX_EOWNERDEAD        = 1064;
+constexpr int POSIX_ETIME             = 1074;
+
+} // namespace Posix
+
+namespace LibKernel {
+
+inline int KernelToPosix(int kernel_errno)
+{
+	return kernel_errno > -2147352576 && kernel_errno <= -2147352475 ? kernel_errno + 2147352576 : 1062;
+}
 
 constexpr int KERNEL_ERROR_UNKNOWN         = -2147352576; /* 0x80020000 */
 constexpr int KERNEL_ERROR_EPERM           = -2147352575; /* 0x80020001 */
@@ -114,9 +273,9 @@ constexpr int KERNEL_ERROR_ESDKVERSION     = -2147352477; /* 0x80020063 */
 constexpr int KERNEL_ERROR_ESTART          = -2147352476; /* 0x80020064 */
 constexpr int KERNEL_ERROR_ESTOP           = -2147352475; /* 0x80020065 */
 
-} // namespace Kyty::Libs::LibKernel
+} // namespace LibKernel
 
-namespace Kyty::Libs::VideoOut {
+namespace VideoOut {
 
 constexpr int VIDEO_OUT_ERROR_INVALID_VALUE                    = -2144796671; /* 0x80290001 */
 constexpr int VIDEO_OUT_ERROR_INVALID_ADDRESS                  = -2144796670; /* 0x80290002 */
@@ -148,7 +307,24 @@ constexpr int VIDEO_OUT_ERROR_FATAL                            = -2144796417; /*
 constexpr int VIDEO_OUT_ERROR_UNKNOWN                          = -2144796418; /* 0x802900FE */
 constexpr int VIDEO_OUT_ERROR_ENOMEM                           = -2144792564; /* 0x8029100C */
 
-} // namespace Kyty::Libs::VideoOut
+} // namespace VideoOut
+
+namespace SystemService {
+
+constexpr int SYSTEM_SERVICE_ERROR_INTERNAL                        = -2136932351; /* 0x80A10001 */
+constexpr int SYSTEM_SERVICE_ERROR_UNAVAILABLE                     = -2136932350; /* 0x80A10002 */
+constexpr int SYSTEM_SERVICE_ERROR_PARAMETER                       = -2136932349; /* 0x80A10003 */
+constexpr int SYSTEM_SERVICE_ERROR_NO_EVENT                        = -2136932348; /* 0x80A10004 */
+constexpr int SYSTEM_SERVICE_ERROR_REJECTED                        = -2136932347; /* 0x80A10005 */
+constexpr int SYSTEM_SERVICE_ERROR_NEED_DISPLAY_SAFE_AREA_SETTINGS = -2136932346; /* 0x80A10006 */
+constexpr int SYSTEM_SERVICE_ERROR_INVALID_URI_LEN                 = -2136932345; /* 0x80A10007 */
+constexpr int SYSTEM_SERVICE_ERROR_INVALID_URI_SCHEME              = -2136932344; /* 0x80A10008 */
+constexpr int SYSTEM_SERVICE_ERROR_NO_APP_INFO                     = -2136932343; /* 0x80A10009 */
+constexpr int SYSTEM_SERVICE_ERROR_NOT_FLAG_IN_PARAM_SFO           = -2136932342; /* 0x80A1000A */
+
+} // namespace SystemService
+
+} // namespace Kyty::Libs
 
 #endif // KYTY_EMU_ENABLED
 

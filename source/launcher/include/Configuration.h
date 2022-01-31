@@ -20,7 +20,7 @@
 #define KYTY_LIBS                                                                                                                          \
 	{                                                                                                                                      \
 		"libc_internal_1", "libkernel_1", "libVideoOut_1", "libSysmodule_1", "libDiscMap_1", "libDebug_1", "libGraphicsDriver_1",          \
-		    "libUserService_1", "libPad_1"                                                                                                 \
+		    "libUserService_1", "libSystemService_1", "libPad_1"                                                                           \
 	}
 
 template <class T>

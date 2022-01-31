@@ -182,6 +182,26 @@ struct BlendControl
 	bool    enable               = false;
 };
 
+struct BlendColor
+{
+	float red   = 0.0f;
+	float green = 0.0f;
+	float blue  = 0.0f;
+	float alpha = 0.0f;
+};
+
+struct EqaaControl
+{
+	uint8_t max_anchor_samples         = 0;
+	uint8_t ps_iter_samples            = 0;
+	uint8_t mask_export_num_samples    = 0;
+	uint8_t alpha_to_mask_num_samples  = 0;
+	bool    high_quality_intersections = false;
+	bool    incoherent_eqaa_reads      = false;
+	bool    interpolate_comp_z         = false;
+	bool    static_anchor_associations = false;
+};
+
 struct Viewport
 {
 	float zmin    = 0.0f;
@@ -302,6 +322,8 @@ struct PixelShaderInfo
 	uint32_t         ps_interpolator_settings[32] = {0};
 	uint32_t         ps_input_num                 = 0;
 	UserSgprInfo     ps_user_sgpr;
+	uint32_t         ps_embedded_id = 0;
+	bool             ps_embedded    = false;
 };
 
 struct ComputeShaderInfo
@@ -397,6 +419,8 @@ public:
 		m_cs.cs_shader_modifier = shader_modifier;
 	}
 
+	[[nodiscard]] const BlendColor&    GetBlendColor() const { return m_blend_color; }
+	void                               SetBlendColor(const BlendColor& color) { m_blend_color = color; }
 	[[nodiscard]] const ClipControl&   GetClipControl() const { return m_clip_control; }
 	void                               SetClipControl(const ClipControl& control) { m_clip_control = control; }
 	[[nodiscard]] const RenderControl& GetRenderControl() const { return m_render_control; }
@@ -405,6 +429,8 @@ public:
 	void                               SetDepthControl(const DepthControl& control) { m_depth_control = control; }
 	[[nodiscard]] const ModeControl&   GetModeControl() const { return m_mode_control; }
 	void                               SetModeControl(const ModeControl& control) { m_mode_control = control; }
+	[[nodiscard]] const EqaaControl&   GetEqaaControl() const { return m_eqaa_control; }
+	void                               SetEqaaControl(const EqaaControl& control) { m_eqaa_control = control; }
 
 	void SetVsUserSgpr(uint32_t id, uint32_t value, UserSgprType type)
 	{
@@ -439,6 +465,7 @@ public:
 
 private:
 	BlendControl   m_blend_control[8];
+	BlendColor     m_blend_color;
 	RenderTarget   m_render_targets[8];
 	uint32_t       m_render_target_mask = 0;
 	ScreenViewport m_screen_viewport;
@@ -455,6 +482,7 @@ private:
 	float             m_depth_clear_value = 0.0f;
 
 	ModeControl m_mode_control;
+	EqaaControl m_eqaa_control;
 };
 
 class UserConfig

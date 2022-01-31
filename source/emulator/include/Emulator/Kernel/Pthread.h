@@ -18,7 +18,9 @@ namespace Kyty::Loader {
 struct Program;
 } // namespace Kyty::Loader
 
-namespace Kyty::Libs::LibKernel {
+namespace Kyty::Libs {
+
+namespace LibKernel {
 
 KYTY_SUBSYSTEM_DEFINE(Pthread);
 
@@ -55,9 +57,11 @@ using KernelUseconds    = unsigned int;
 using PthreadCondattr   = PthreadCondattrPrivate*;
 using PthreadCond       = PthreadCondPrivate*;
 using KernelClockid     = int32_t;
+using PthreadKey        = int;
 
-using pthread_entry_func_t = KYTY_SYSV_ABI void* (*)(void*);
-using thread_dtors_func_t  = KYTY_SYSV_ABI void (*)();
+using pthread_entry_func_t          = KYTY_SYSV_ABI void* (*)(void*);
+using thread_dtors_func_t           = KYTY_SYSV_ABI void (*)();
+using pthread_key_destructor_func_t = KYTY_SYSV_ABI void (*)(void*);
 
 void PthreadInitSelfForMainThread();
 void PthreadDeleteStaticObjects(Loader::Program* program);
@@ -79,13 +83,21 @@ int KYTY_SYSV_ABI          PthreadJoin(Pthread thread, void** value);
 int KYTY_SYSV_ABI          PthreadCancel(Pthread thread);
 int KYTY_SYSV_ABI          PthreadSetcancelstate(int state, int* old_state);
 int KYTY_SYSV_ABI          PthreadSetcanceltype(int type, int* old_type);
+int KYTY_SYSV_ABI          PthreadGetprio(Pthread thread, int* prio);
+int KYTY_SYSV_ABI          PthreadSetprio(Pthread thread, int prio);
 void KYTY_SYSV_ABI         PthreadTestcancel();
+int KYTY_SYSV_ABI          PthreadSetaffinity(Pthread thread, KernelCpumask mask);
 void KYTY_SYSV_ABI         PthreadExit(void* value);
 int KYTY_SYSV_ABI          PthreadEqual(Pthread thread1, Pthread thread2);
 int KYTY_SYSV_ABI          PthreadGetname(Pthread thread, char* name);
 int KYTY_SYSV_ABI          KernelUsleep(KernelUseconds microseconds);
 unsigned int KYTY_SYSV_ABI KernelSleep(unsigned int seconds);
 int KYTY_SYSV_ABI          KernelNanosleep(const KernelTimespec* rqtp, KernelTimespec* rmtp);
+
+int KYTY_SYSV_ABI   PthreadKeyCreate(PthreadKey* key, pthread_key_destructor_func_t destructor);
+int KYTY_SYSV_ABI   PthreadKeyDelete(PthreadKey key);
+int KYTY_SYSV_ABI   PthreadSetspecific(PthreadKey key, void* value);
+void* KYTY_SYSV_ABI PthreadGetspecific(PthreadKey key);
 
 void KYTY_SYSV_ABI KernelSetThreadDtors(thread_dtors_func_t dtors);
 
@@ -144,15 +156,26 @@ uint64_t KYTY_SYSV_ABI KernelGetProcessTime();
 uint64_t KYTY_SYSV_ABI KernelGetProcessTimeCounter();
 uint64_t KYTY_SYSV_ABI KernelGetProcessTimeCounterFrequency();
 
-int KYTY_SYSV_ABI pthread_cond_broadcast_s(PthreadCond* cond);
-int KYTY_SYSV_ABI pthread_cond_wait_s(PthreadCond* cond, PthreadMutex* mutex);
-int KYTY_SYSV_ABI pthread_mutex_lock_s(PthreadMutex* mutex);
-int KYTY_SYSV_ABI pthread_mutex_unlock_s(PthreadMutex* mutex);
-int KYTY_SYSV_ABI pthread_rwlock_rdlock_s(PthreadRwlock* rwlock);
-int KYTY_SYSV_ABI pthread_rwlock_unlock_s(PthreadRwlock* rwlock);
-int KYTY_SYSV_ABI pthread_rwlock_wrlock_s(PthreadRwlock* rwlock);
+} // namespace LibKernel
 
-} // namespace Kyty::Libs::LibKernel
+namespace Posix {
+
+int KYTY_SYSV_ABI pthread_cond_broadcast(LibKernel::PthreadCond* cond);
+int KYTY_SYSV_ABI pthread_cond_wait(LibKernel::PthreadCond* cond, LibKernel::PthreadMutex* mutex);
+int KYTY_SYSV_ABI pthread_mutex_lock(LibKernel::PthreadMutex* mutex);
+int KYTY_SYSV_ABI pthread_mutex_unlock(LibKernel::PthreadMutex* mutex);
+int KYTY_SYSV_ABI pthread_rwlock_rdlock(LibKernel::PthreadRwlock* rwlock);
+int KYTY_SYSV_ABI pthread_rwlock_unlock(LibKernel::PthreadRwlock* rwlock);
+int KYTY_SYSV_ABI pthread_rwlock_wrlock(LibKernel::PthreadRwlock* rwlock);
+int KYTY_SYSV_ABI pthread_key_create(LibKernel::PthreadKey* key, LibKernel::pthread_key_destructor_func_t destructor);
+int KYTY_SYSV_ABI pthread_key_delete(LibKernel::PthreadKey key);
+int KYTY_SYSV_ABI pthread_setspecific(LibKernel::PthreadKey key, void* value);
+int KYTY_SYSV_ABI pthread_mutex_destroy(LibKernel::PthreadMutex* mutex);
+int KYTY_SYSV_ABI pthread_mutex_init(LibKernel::PthreadMutex* mutex, const LibKernel::PthreadMutexattr* attr);
+
+} // namespace Posix
+
+} // namespace Kyty::Libs
 
 #endif // KYTY_EMU_ENABLED
 

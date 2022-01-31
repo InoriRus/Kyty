@@ -39,6 +39,9 @@ static void init_names()
 		g_r_names[R_PUSH_MARKER]       = "R_PUSH_MARKER";
 		g_r_names[R_POP_MARKER]        = "R_POP_MARKER";
 		g_r_names[R_VS_EMBEDDED]       = "R_VS_EMBEDDED";
+		g_r_names[R_PS_EMBEDDED]       = "R_PS_EMBEDDED";
+		g_r_names[R_VS_UPDATE]         = "R_VS_UPDATE";
+		g_r_names[R_PS_UPDATE]         = "R_PS_UPDATE";
 
 		g_names[IT_NOP]                       = "IT_NOP";
 		g_names[IT_SET_BASE]                  = "IT_SET_BASE";

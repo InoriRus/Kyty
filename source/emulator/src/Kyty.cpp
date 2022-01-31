@@ -104,6 +104,20 @@ static void Init(const Scripts::ScriptVar& cfg)
 	slist->InitAll(true);
 }
 
+KYTY_SCRIPT_FUNC(kyty_load_cfg_func)
+{
+	if (Scripts::ArgGetVarCount() != 1)
+	{
+		EXIT("invalid args\n");
+	}
+
+	Scripts::ScriptVar cfg = Scripts::ArgGetVar(0);
+
+	Config::Load(cfg);
+
+	return 0;
+}
+
 KYTY_SCRIPT_FUNC(kyty_init_func)
 {
 	if (Scripts::ArgGetVarCount() != 1)
@@ -326,6 +340,7 @@ void kyty_help() {}
 void kyty_reg()
 {
 	Scripts::RegisterFunc("kyty_init", LuaFunc::kyty_init_func, LuaFunc::kyty_help);
+	Scripts::RegisterFunc("kyty_load_cfg", LuaFunc::kyty_load_cfg_func, LuaFunc::kyty_help);
 	Scripts::RegisterFunc("kyty_load_elf", LuaFunc::kyty_load_elf_func, LuaFunc::kyty_help);
 	Scripts::RegisterFunc("kyty_load_symbols", LuaFunc::kyty_load_symbols_func, LuaFunc::kyty_help);
 	Scripts::RegisterFunc("kyty_dbg_dump", LuaFunc::kyty_dbg_dump_func, LuaFunc::kyty_help);

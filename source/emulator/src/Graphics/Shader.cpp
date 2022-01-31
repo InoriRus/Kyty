@@ -2205,7 +2205,7 @@ static void ShaderGetTextureBuffer(ShaderTextureResources* info, int start_index
 	EXIT_IF(info == nullptr);
 
 	EXIT_NOT_IMPLEMENTED(info->textures_num < 0 || info->textures_num >= ShaderTextureResources::RES_MAX);
-	EXIT_NOT_IMPLEMENTED(info->textures_num != slot);
+	// EXIT_NOT_IMPLEMENTED(info->textures_num != slot);
 
 	int  index    = info->textures_num;
 	bool extended = (extended_buffer != nullptr);
@@ -2215,6 +2215,7 @@ static void ShaderGetTextureBuffer(ShaderTextureResources* info, int start_index
 
 	info->start_register[index] = start_index;
 	info->extended[index]       = extended;
+	info->slots[index]          = slot;
 
 	if (!extended)
 	{
@@ -2243,7 +2244,7 @@ static void ShaderGetSampler(ShaderSamplerResources* info, int start_index, int 
 	EXIT_IF(info == nullptr);
 
 	EXIT_NOT_IMPLEMENTED(info->samplers_num < 0 || info->samplers_num >= ShaderSamplerResources::RES_MAX);
-	EXIT_NOT_IMPLEMENTED(info->samplers_num != slot);
+	// EXIT_NOT_IMPLEMENTED(info->samplers_num != slot);
 
 	int  index    = info->samplers_num;
 	bool extended = (extended_buffer != nullptr);
@@ -2253,6 +2254,7 @@ static void ShaderGetSampler(ShaderSamplerResources* info, int start_index, int 
 
 	info->start_register[index] = start_index;
 	info->extended[index]       = extended;
+	info->slots[index]          = slot;
 
 	if (!extended)
 	{
@@ -2277,7 +2279,7 @@ static void ShaderGetGdsPointer(ShaderGdsResources* info, int start_index, int s
 	EXIT_IF(info == nullptr);
 
 	EXIT_NOT_IMPLEMENTED(info->pointers_num < 0 || info->pointers_num >= ShaderGdsResources::POINTERS_MAX);
-	EXIT_NOT_IMPLEMENTED(info->pointers_num != slot);
+	// EXIT_NOT_IMPLEMENTED(info->pointers_num != slot);
 
 	int  index    = info->pointers_num;
 	bool extended = (extended_buffer != nullptr);
@@ -2287,6 +2289,7 @@ static void ShaderGetGdsPointer(ShaderGdsResources* info, int start_index, int s
 
 	info->start_register[index] = start_index;
 	info->extended[index]       = extended;
+	info->slots[index]          = slot;
 
 	if (!extended)
 	{
@@ -2514,9 +2517,16 @@ void ShaderGetInputInfoCS(const ComputeShaderInfo* regs, ShaderComputeInputInfo*
 		switch (usage.type)
 		{
 			case 0x00:
-				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
-				ShaderGetStorageBuffer(&info->bind.storage_buffers, usage.start_register, usage.slot, ShaderStorageUsage::ReadOnly,
-				                       regs->cs_user_sgpr, extended_buffer);
+				EXIT_NOT_IMPLEMENTED(usage.flags != 0 && usage.flags != 3);
+				if (usage.flags == 0)
+				{
+					ShaderGetStorageBuffer(&info->bind.storage_buffers, usage.start_register, usage.slot, ShaderStorageUsage::ReadOnly,
+					                       regs->cs_user_sgpr, extended_buffer);
+				} else if (usage.flags == 3)
+				{
+					ShaderGetTextureBuffer(&info->bind.textures2D, usage.start_register, usage.slot, regs->cs_user_sgpr, extended_buffer);
+					EXIT_NOT_IMPLEMENTED(info->bind.textures2D.textures[info->bind.textures2D.textures_num - 1].Type() != 9);
+				}
 				break;
 			case 0x02:
 				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
@@ -2627,6 +2637,7 @@ static void ShaderDbgDumpResources(const ShaderBindResources& bind)
 		printf("\t\t MinLodWarn()    = %" PRIu16 "\n", r.MinLodWarn());
 		printf("\t\t CounterBankId() = %" PRIu8 "\n", r.CounterBankId());
 		printf("\t\t LodHdwCntEn()   = %s\n", r.LodHdwCntEn() ? "true" : "false");
+		printf("\t\t slot            = %d\n", bind.textures2D.slots[i]);
 		printf("\t\t start_register  = %d\n", bind.textures2D.start_register[i]);
 		printf("\t\t extended        = %s\n", (bind.textures2D.extended[i] ? "true" : "false"));
 	}
@@ -2664,6 +2675,7 @@ static void ShaderDbgDumpResources(const ShaderBindResources& bind)
 		printf("\t\t MipFilter()        = %" PRIu8 "\n", r.MipFilter());
 		printf("\t\t BorderColorPtr()   = %" PRIu16 "\n", r.BorderColorPtr());
 		printf("\t\t BorderColorType()  = %" PRIu8 "\n", r.BorderColorType());
+		printf("\t\t slot               = %d\n", bind.samplers.slots[i]);
 		printf("\t\t start_register     = %d\n", bind.samplers.start_register[i]);
 		printf("\t\t extended           = %s\n", (bind.samplers.extended[i] ? "true" : "false"));
 	}
@@ -3208,6 +3220,7 @@ static void ShaderGetBindIds(ShaderId* ret, const ShaderBindResources& bind)
 		ret->ids.Add(r.MinLodWarn());
 		ret->ids.Add(r.CounterBankId());
 		ret->ids.Add(static_cast<uint32_t>(r.LodHdwCntEn()));
+		ret->ids.Add(bind.textures2D.slots[i]);
 		ret->ids.Add(bind.textures2D.start_register[i]);
 		ret->ids.Add(static_cast<uint32_t>(bind.textures2D.extended[i]));
 	}
@@ -3243,6 +3256,7 @@ static void ShaderGetBindIds(ShaderId* ret, const ShaderBindResources& bind)
 		ret->ids.Add(r.MipFilter());
 		ret->ids.Add(r.BorderColorPtr());
 		ret->ids.Add(r.BorderColorType());
+		ret->ids.Add(bind.samplers.slots[i]);
 		ret->ids.Add(bind.samplers.start_register[i]);
 		ret->ids.Add(static_cast<uint32_t>(bind.samplers.extended[i]));
 	}

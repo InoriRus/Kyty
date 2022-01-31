@@ -20,6 +20,7 @@ int KYTY_SYSV_ABI    KernelAllocateDirectMemory(int64_t search_start, int64_t se
 int KYTY_SYSV_ABI    KernelReleaseDirectMemory(int64_t start, size_t len);
 int KYTY_SYSV_ABI    KernelMapDirectMemory(void** addr, size_t len, int prot, int flags, int64_t direct_memory_start, size_t alignment);
 int KYTY_SYSV_ABI    KernelQueryMemoryProtection(void* addr, void** start, void** end, int* prot);
+int KYTY_SYSV_ABI    KernelDirectMemoryQuery(int64_t offset, int flags, void* info, size_t info_size);
 
 } // namespace Kyty::Libs::LibKernel::Memory
 

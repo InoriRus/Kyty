@@ -18,7 +18,10 @@ KYTY_SUBSYSTEM_DEFINE(Graphics);
 void GraphicsDbgDumpDcb(const char* type, uint32_t num_dw, uint32_t* cmd_buffer);
 
 int KYTY_SYSV_ABI      GraphicsSetVsShader(uint32_t* cmd, uint64_t size, const VsStageRegisters* vs_regs, uint32_t shader_modifier);
+int KYTY_SYSV_ABI      GraphicsUpdateVsShader(uint32_t* cmd, uint64_t size, const VsStageRegisters* vs_regs, uint32_t shader_modifier);
+int KYTY_SYSV_ABI      GraphicsSetPsShader(uint32_t* cmd, uint64_t size, const uint32_t* ps_regs);
 int KYTY_SYSV_ABI      GraphicsSetPsShader350(uint32_t* cmd, uint64_t size, const uint32_t* ps_regs);
+int KYTY_SYSV_ABI      GraphicsUpdatePsShader(uint32_t* cmd, uint64_t size, const uint32_t* ps_regs);
 int KYTY_SYSV_ABI      GraphicsSetCsShaderWithModifier(uint32_t* cmd, uint64_t size, const uint32_t* cs_regs, uint32_t shader_modifier);
 int KYTY_SYSV_ABI      GraphicsSetEmbeddedVsShader(uint32_t* cmd, uint64_t size, uint32_t id, uint32_t shader_modifier);
 int KYTY_SYSV_ABI      GraphicsDrawIndex(uint32_t* cmd, uint64_t size, uint32_t index_count, const void* index_addr, uint32_t flags,
@@ -34,6 +37,9 @@ int KYTY_SYSV_ABI      GraphicsAreSubmitsAllowed();
 void KYTY_SYSV_ABI     GraphicsFlushMemory();
 int KYTY_SYSV_ABI      GraphicsAddEqEvent(LibKernel::EventQueue::KernelEqueue eq, int id, void* udata);
 int KYTY_SYSV_ABI      GraphicsDeleteEqEvent(LibKernel::EventQueue::KernelEqueue eq, int id);
+uint32_t KYTY_SYSV_ABI GraphicsDrawInitDefaultHardwareState(uint32_t* cmd, uint64_t size);
+uint32_t KYTY_SYSV_ABI GraphicsDrawInitDefaultHardwareState175(uint32_t* cmd, uint64_t size);
+uint32_t KYTY_SYSV_ABI GraphicsDrawInitDefaultHardwareState200(uint32_t* cmd, uint64_t size);
 uint32_t KYTY_SYSV_ABI GraphicsDrawInitDefaultHardwareState350(uint32_t* cmd, uint64_t size);
 uint32_t KYTY_SYSV_ABI GraphicsDispatchInitDefaultHardwareState(uint32_t* cmd, uint64_t size);
 int KYTY_SYSV_ABI      GraphicsInsertWaitFlipDone(uint32_t* cmd, uint64_t size, uint32_t video_out_handle, uint32_t display_buffer_index);
@@ -48,6 +54,7 @@ void KYTY_SYSV_ABI     GraphicsUnmapComputeQueue(uint32_t id);
 int KYTY_SYSV_ABI      GraphicsInsertPushMarker(uint32_t* cmd, uint64_t size, const char* str);
 int KYTY_SYSV_ABI      GraphicsInsertPopMarker(uint32_t* cmd, uint64_t size);
 uint64_t KYTY_SYSV_ABI GraphicsGetGpuCoreClockFrequency();
+int KYTY_SYSV_ABI      GraphicsIsUserPaEnabled();
 
 int KYTY_SYSV_ABI GraphicsRegisterOwner(uint32_t* owner_handle, const char* name);
 int KYTY_SYSV_ABI GraphicsRegisterResource(uint32_t* resource_handle, uint32_t owner_handle, const void* memory, size_t size,
