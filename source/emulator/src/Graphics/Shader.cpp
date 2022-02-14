@@ -3012,7 +3012,7 @@ ShaderCode ShaderParsePS(const PixelShaderInfo* regs)
 	ps_print("ShaderParsePS()", regs->ps_regs);
 	ps_check(regs->ps_regs);
 
-	EXIT_NOT_IMPLEMENTED(regs->ps_regs.user_sgpr != regs->ps_user_sgpr.count);
+	EXIT_NOT_IMPLEMENTED(regs->ps_regs.user_sgpr > regs->ps_user_sgpr.count);
 
 	const auto* header = GetBinaryInfo(src);
 

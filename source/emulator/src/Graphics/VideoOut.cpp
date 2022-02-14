@@ -9,10 +9,10 @@
 
 #include "Emulator/Common.h"
 #include "Emulator/Config.h"
-#include "Emulator/Graphics/GpuMemory.h"
 #include "Emulator/Graphics/GraphicsRender.h"
+#include "Emulator/Graphics/Objects/GpuMemory.h"
+#include "Emulator/Graphics/Objects/VideoOutBuffer.h"
 #include "Emulator/Graphics/Tile.h"
-#include "Emulator/Graphics/VideoOutBuffer.h"
 #include "Emulator/Graphics/Window.h"
 #include "Emulator/Kernel/Pthread.h"
 #include "Emulator/Libs/Errno.h"
@@ -845,7 +845,7 @@ KYTY_SYSV_ABI int VideoOutRegisterBuffers(int handle, int start_index, void* con
 		ctx->buffers[i + start_index].buffer        = addresses[i];
 		ctx->buffers[i + start_index].buffer_size   = buffer_size;
 		ctx->buffers[i + start_index].buffer_pitch  = buffer_pitch;
-		ctx->buffers[i + start_index].buffer_vulkan = static_cast<Graphics::VideoOutVulkanImage*>(Graphics::GpuMemoryGetObject(
+		ctx->buffers[i + start_index].buffer_vulkan = static_cast<Graphics::VideoOutVulkanImage*>(Graphics::GpuMemoryCreateObject(
 		    g_video_out_context->GetGraphicCtx(), reinterpret_cast<uint64_t>(addresses[i]), buffer_size, vulkan_buffer_info));
 
 		EXIT_NOT_IMPLEMENTED(ctx->buffers[i + start_index].buffer_vulkan == nullptr);

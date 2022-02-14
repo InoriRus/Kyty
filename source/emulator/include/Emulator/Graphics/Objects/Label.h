@@ -1,10 +1,10 @@
-#ifndef EMULATOR_INCLUDE_EMULATOR_GRAPHICS_LABEL_H_
-#define EMULATOR_INCLUDE_EMULATOR_GRAPHICS_LABEL_H_
+#ifndef EMULATOR_INCLUDE_EMULATOR_GRAPHICS_OBJECTS_LABEL_H_
+#define EMULATOR_INCLUDE_EMULATOR_GRAPHICS_OBJECTS_LABEL_H_
 
 #include "Kyty/Core/Common.h"
 
 #include "Emulator/Common.h"
-#include "Emulator/Graphics/GpuMemory.h"
+#include "Emulator/Graphics/Objects/GpuMemory.h"
 
 #ifdef KYTY_EMU_ENABLED
 
@@ -60,4 +60,4 @@ void LabelSet(CommandBuffer* buffer, Label* label);
 
 #endif // KYTY_EMU_ENABLED
 
-#endif /* EMULATOR_INCLUDE_EMULATOR_GRAPHICS_LABEL_H_ */
+#endif /* EMULATOR_INCLUDE_EMULATOR_GRAPHICS_OBJECTS_LABEL_H_ */

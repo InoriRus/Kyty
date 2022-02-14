@@ -5,11 +5,11 @@
 #include "Kyty/Core/String.h"
 
 #include "Emulator/Config.h"
-#include "Emulator/Graphics/GpuMemory.h"
 #include "Emulator/Graphics/GraphicsRender.h"
 #include "Emulator/Graphics/GraphicsRun.h"
 #include "Emulator/Graphics/HardwareContext.h"
-#include "Emulator/Graphics/Label.h"
+#include "Emulator/Graphics/Objects/GpuMemory.h"
+#include "Emulator/Graphics/Objects/Label.h"
 #include "Emulator/Graphics/Pm4.h"
 #include "Emulator/Graphics/Tile.h"
 #include "Emulator/Graphics/VideoOut.h"

@@ -65,31 +65,30 @@ struct VulkanMemory
 	uint64_t              unique_id    = 0;
 };
 
-struct VideoOutVulkanImage
+struct VulkanImage
 {
 	VkFormat               format     = VK_FORMAT_UNDEFINED;
 	VkExtent2D             extent     = {};
 	VkImage                image      = nullptr;
 	VkImageView            image_view = nullptr;
+	VkImageLayout          layout     = VK_IMAGE_LAYOUT_UNDEFINED;
 	Graphics::VulkanMemory memory;
 };
 
-struct DepthStencilVulkanImage
+struct VideoOutVulkanImage: public VulkanImage
 {
-	VkFormat               format     = VK_FORMAT_UNDEFINED;
-	VkExtent2D             extent     = {};
-	VkImage                image      = nullptr;
-	VkImageView            image_view = nullptr;
-	Graphics::VulkanMemory memory;
 };
 
-struct TextureVulkanImage
+struct DepthStencilVulkanImage: public VulkanImage
 {
-	VkFormat               format     = VK_FORMAT_UNDEFINED;
-	VkExtent2D             extent     = {};
-	VkImage                image      = nullptr;
-	VkImageView            image_view = nullptr;
-	Graphics::VulkanMemory memory;
+};
+
+struct TextureVulkanImage: public VulkanImage
+{
+};
+
+struct RenderTextureVulkanImage: public VulkanImage
+{
 };
 
 struct VulkanBuffer

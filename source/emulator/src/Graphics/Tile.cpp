@@ -423,7 +423,7 @@ void TileConvertTiledToLinear(void* dst, const void* src, TileMode mode, uint32_
 	uint32_t padded_height[16] = {0};
 	uint32_t level_sizes[16]   = {0};
 
-	TileGetTextureSize(dfmt, nfmt, width, height, width, levels, true, neo, nullptr, level_sizes, padded_width, padded_height);
+	TileGetTextureSize(dfmt, nfmt, width, height, width, levels, 13, neo, nullptr, level_sizes, padded_width, padded_height);
 
 	uint32_t mip_width  = width;
 	uint32_t mip_height = height;
@@ -611,8 +611,8 @@ void TileGetVideoOutSize(uint32_t width, uint32_t height, bool tile, bool neo, u
 	*pitch = ret_pitch;
 }
 
-void TileGetTextureSize(uint32_t dfmt, uint32_t nfmt, uint32_t width, uint32_t height, uint32_t pitch, uint32_t levels, bool tile, bool neo,
-                        uint32_t* total_size, uint32_t* level_sizes, uint32_t* padded_width, uint32_t* padded_height)
+void TileGetTextureSize(uint32_t dfmt, uint32_t nfmt, uint32_t width, uint32_t height, uint32_t pitch, uint32_t levels, uint32_t tile,
+                        bool neo, uint32_t* total_size, uint32_t* level_sizes, uint32_t* padded_width, uint32_t* padded_height)
 {
 	struct Padded
 	{
@@ -627,7 +627,7 @@ void TileGetTextureSize(uint32_t dfmt, uint32_t nfmt, uint32_t width, uint32_t h
 		uint32_t width;
 		uint32_t height;
 		uint32_t levels;
-		bool     tile;
+		uint32_t tile;
 		bool     neo;
 		uint32_t size[16];
 		Padded   padded[16];
@@ -635,22 +635,28 @@ void TileGetTextureSize(uint32_t dfmt, uint32_t nfmt, uint32_t width, uint32_t h
 
 	static const TextureInfo infos[] = {
 	    // clang-format off
-			{ 10, 9, 512, 512, 10, false, false, {1048576, 262144, 65536, 16384, 4096, 1024, 512, 256, 256, 256, },
+
+			{ 10, 9, 512, 512, 10, 8, false, {1048576, 262144, 65536, 16384, 4096, 1024, 512, 256, 256, 256, },
 			{ {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},  } },
-			{ 10, 9, 512, 512, 10, false, true, {1048576, 262144, 65536, 16384, 4096, 1024, 512, 256, 256, 256, },
+			{ 10, 9, 512, 512, 10, 8, true, {1048576, 262144, 65536, 16384, 4096, 1024, 512, 256, 256, 256, },
 			{ {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},  } },
-			{ 10, 9, 512, 512, 10, true, false, {1048576, 262144, 65536, 16384, 4096, 1024, 256, 256, 256, 256, },
+			{ 10, 9, 512, 512, 10, 13, false, {1048576, 262144, 65536, 16384, 4096, 1024, 256, 256, 256, 256, },
 			{ {512, 512}, {256, 256}, {128, 128}, {64, 64}, {32, 32}, {16, 16}, {8, 8}, {8, 8}, {8, 8}, {8, 8},  } },
-			{ 10, 9, 512, 512, 10, true, true, {1048576, 262144, 65536, 16384, 4096, 1024, 256, 256, 256, 256, },
+			{ 10, 9, 512, 512, 10, 13, true, {1048576, 262144, 65536, 16384, 4096, 1024, 256, 256, 256, 256, },
 			{ {512, 512}, {256, 256}, {128, 128}, {64, 64}, {32, 32}, {16, 16}, {8, 8}, {8, 8}, {8, 8}, {8, 8},  } },
-			{ 37, 9, 512, 512, 10, false, false, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+			{ 37, 9, 512, 512, 10, 8, false, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
 			{ {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},  } },
-			{ 37, 9, 512, 512, 10, false, true, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+			{ 37, 9, 512, 512, 10, 8, true, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
 			{ {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},  } },
-			{ 37, 9, 512, 512, 10, true, false, {262144, 65536, 16384, 4096, 1024, 1024, 1024, 1024, 1024, 1024, },
+			{ 37, 9, 512, 512, 10, 13, false, {262144, 65536, 16384, 4096, 1024, 1024, 1024, 1024, 1024, 1024, },
 			{ {128, 128}, {64, 64}, {32, 32}, {16, 16}, {8, 8}, {8, 8}, {8, 8}, {8, 8}, {8, 8}, {8, 8},  } },
-			{ 37, 9, 512, 512, 10, true, true, {262144, 65536, 16384, 4096, 1024, 1024, 1024, 1024, 1024, 1024, },
+			{ 37, 9, 512, 512, 10, 13, true, {262144, 65536, 16384, 4096, 1024, 1024, 1024, 1024, 1024, 1024, },
 			{ {128, 128}, {64, 64}, {32, 32}, {16, 16}, {8, 8}, {8, 8}, {8, 8}, {8, 8}, {8, 8}, {8, 8},  } },
+
+			{ 10, 0, 256, 256, 9, 14, false, {262144, 65536, 16384, 4096, 1024, 256, 256, 256, 256, },
+			{ {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},  } },
+			{ 10, 0, 256, 256, 9, 14, true, {262144, 65536, 16384, 4096, 1024, 256, 256, 256, 256, },
+			{ {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},  } },
 	    // clang-format on
 	};
 
@@ -684,7 +690,7 @@ void TileGetTextureSize(uint32_t dfmt, uint32_t nfmt, uint32_t width, uint32_t h
 		}
 	}
 
-	if (!tile && levels == 1 && dfmt == 10 && nfmt == 9)
+	if (tile == 8 && levels == 1 && dfmt == 10 && nfmt == 9)
 	{
 		uint32_t size = pitch * height * 4;
 		if (total_size != nullptr)

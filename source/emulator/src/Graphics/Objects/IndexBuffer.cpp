@@ -1,4 +1,4 @@
-#include "Emulator/Graphics/IndexBuffer.h"
+#include "Emulator/Graphics/Objects/IndexBuffer.h"
 
 #include "Kyty/Core/DbgAssert.h"
 

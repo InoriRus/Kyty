@@ -1,4 +1,4 @@
-#include "Emulator/Graphics/Label.h"
+#include "Emulator/Graphics/Objects/Label.h"
 
 #include "Kyty/Core/DbgAssert.h"
 #include "Kyty/Core/Threads.h"

@@ -6,8 +6,8 @@
 #include "Kyty/Core/Threads.h"
 #include "Kyty/Core/Vector.h"
 
-#include "Emulator/Graphics/GpuMemory.h"
 #include "Emulator/Graphics/GraphicsRun.h"
+#include "Emulator/Graphics/Objects/GpuMemory.h"
 #include "Emulator/Graphics/Window.h"
 #include "Emulator/Libs/Errno.h"
 #include "Emulator/Libs/Libs.h"

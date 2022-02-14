@@ -1,10 +1,10 @@
-#ifndef EMULATOR_INCLUDE_EMULATOR_GRAPHICS_VIDEOOUTBUFFER_H_
-#define EMULATOR_INCLUDE_EMULATOR_GRAPHICS_VIDEOOUTBUFFER_H_
+#ifndef EMULATOR_INCLUDE_EMULATOR_GRAPHICS_OBJECTS_RENDERTEXTURE_H_
+#define EMULATOR_INCLUDE_EMULATOR_GRAPHICS_OBJECTS_RENDERTEXTURE_H_
 
 #include "Kyty/Core/Common.h"
 
 #include "Emulator/Common.h"
-#include "Emulator/Graphics/GpuMemory.h"
+#include "Emulator/Graphics/Objects/GpuMemory.h"
 
 #ifdef KYTY_EMU_ENABLED
 
@@ -13,7 +13,12 @@ namespace Kyty::Libs::Graphics {
 struct GraphicContext;
 struct VulkanMemory;
 
-class VideoOutBufferObject: public GpuObject
+enum class RenderTextureFormat : uint64_t
+{
+	R8G8B8A8Unorm
+};
+
+class RenderTextureObject: public GpuObject
 {
 public:
 	static constexpr int PARAM_FORMAT = 0;
@@ -23,16 +28,16 @@ public:
 	static constexpr int PARAM_NEO    = 4;
 	static constexpr int PARAM_PITCH  = 5;
 
-	explicit VideoOutBufferObject(uint32_t pixel_format, uint32_t width, uint32_t height, bool tiled, bool neo, uint32_t pitch)
+	explicit RenderTextureObject(RenderTextureFormat pixel_format, uint32_t width, uint32_t height, bool tiled, bool neo, uint32_t pitch)
 	{
-		params[PARAM_FORMAT] = pixel_format;
+		params[PARAM_FORMAT] = static_cast<uint64_t>(pixel_format);
 		params[PARAM_WIDTH]  = width;
 		params[PARAM_HEIGHT] = height;
 		params[PARAM_TILED]  = tiled ? 1 : 0;
 		params[PARAM_NEO]    = neo ? 1 : 0;
 		params[PARAM_PITCH]  = pitch;
 		check_hash           = true;
-		type                 = Graphics::GpuMemoryObjectType::VideoOutBuffer;
+		type                 = Graphics::GpuMemoryObjectType::RenderTexture;
 	}
 
 	void* Create(GraphicContext* ctx, const uint64_t* vaddr, const uint64_t* size, int vaddr_num, VulkanMemory* mem) const override;
@@ -47,4 +52,4 @@ public:
 
 #endif // KYTY_EMU_ENABLED
 
-#endif /* EMULATOR_INCLUDE_EMULATOR_GRAPHICS_VIDEOOUTBUFFER_H_ */
+#endif /* EMULATOR_INCLUDE_EMULATOR_GRAPHICS_OBJECTS_RENDERTEXTURE_H_ */

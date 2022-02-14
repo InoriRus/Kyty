@@ -1,10 +1,10 @@
-#ifndef EMULATOR_INCLUDE_EMULATOR_GRAPHICS_INDEXBUFFER_H_
-#define EMULATOR_INCLUDE_EMULATOR_GRAPHICS_INDEXBUFFER_H_
+#ifndef EMULATOR_INCLUDE_EMULATOR_GRAPHICS_OBJECTS_VERTEXBUFFER_H_
+#define EMULATOR_INCLUDE_EMULATOR_GRAPHICS_OBJECTS_VERTEXBUFFER_H_
 
 #include "Kyty/Core/Common.h"
 
 #include "Emulator/Common.h"
-#include "Emulator/Graphics/GpuMemory.h"
+#include "Emulator/Graphics/Objects/GpuMemory.h"
 
 #ifdef KYTY_EMU_ENABLED
 
@@ -13,13 +13,13 @@ namespace Kyty::Libs::Graphics {
 struct GraphicContext;
 struct VulkanMemory;
 
-class IndexBufferGpuObject: public GpuObject
+class VertexBufferGpuObject: public GpuObject
 {
 public:
-	IndexBufferGpuObject()
+	VertexBufferGpuObject()
 	{
 		check_hash = true;
-		type       = Graphics::GpuMemoryObjectType::IndexBuffer;
+		type       = Graphics::GpuMemoryObjectType::VertexBuffer;
 	}
 
 	void* Create(GraphicContext* ctx, const uint64_t* vaddr, const uint64_t* size, int vaddr_num, VulkanMemory* mem) const override;
@@ -34,4 +34,4 @@ public:
 
 #endif // KYTY_EMU_ENABLED
 
-#endif /* EMULATOR_INCLUDE_EMULATOR_GRAPHICS_INDEXBUFFER_H_ */
+#endif /* EMULATOR_INCLUDE_EMULATOR_GRAPHICS_OBJECTS_VERTEXBUFFER_H_ */

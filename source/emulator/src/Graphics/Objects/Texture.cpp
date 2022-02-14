@@ -1,4 +1,4 @@
-#include "Emulator/Graphics/Texture.h"
+#include "Emulator/Graphics/Objects/Texture.h"
 
 #include "Kyty/Core/DbgAssert.h"
 #include "Kyty/Core/Vector.h"
@@ -176,6 +176,7 @@ void* TextureObject::Create(GraphicContext* ctx, const uint64_t* vaddr, const ui
 	vk_obj->format        = image_info.format;
 	vk_obj->image         = nullptr;
 	vk_obj->image_view    = nullptr;
+	vk_obj->layout        = image_info.initialLayout;
 
 	vkCreateImage(ctx->device, &image_info, nullptr, &vk_obj->image);
 
@@ -227,7 +228,7 @@ static void update_func(GraphicContext* ctx, const uint64_t* params, void* obj, 
 
 	auto* vk_obj = static_cast<TextureVulkanImage*>(obj);
 
-	bool tile   = (params[TextureObject::PARAM_TILE] != 0);
+	auto tile   = params[TextureObject::PARAM_TILE];
 	auto dfmt   = params[TextureObject::PARAM_DFMT_NFMT] >> 32u;
 	auto nfmt   = params[TextureObject::PARAM_DFMT_NFMT] & 0xffffffffu;
 	auto width  = params[TextureObject::PARAM_WIDTH_HEIGHT] >> 32u;
@@ -247,6 +248,8 @@ static void update_func(GraphicContext* ctx, const uint64_t* params, void* obj, 
 	}
 
 	EXIT_NOT_IMPLEMENTED(levels >= 16);
+
+	EXIT_NOT_IMPLEMENTED(tile != 8 && tile != 13);
 
 	uint32_t level_sizes[16];
 
@@ -285,14 +288,14 @@ static void update_func(GraphicContext* ctx, const uint64_t* params, void* obj, 
 		}
 	}
 
-	if (tile)
+	if (tile == 13)
 	{
 		EXIT_NOT_IMPLEMENTED(pitch != width);
 		auto* temp_buf = new uint8_t[*size];
 		TileConvertTiledToLinear(temp_buf, reinterpret_cast<void*>(*vaddr), TileMode::TextureTiled, dfmt, nfmt, width, height, levels, neo);
 		UtilFillImage(ctx, vk_obj, temp_buf, *size, regions, static_cast<uint64_t>(vk_layout));
 		delete[] temp_buf;
-	} else
+	} else if (tile == 8)
 	{
 		UtilFillImage(ctx, vk_obj, reinterpret_cast<void*>(*vaddr), *size, regions, static_cast<uint64_t>(vk_layout));
 	}

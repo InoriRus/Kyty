@@ -1,4 +1,4 @@
-#include "Emulator/Graphics/VertexBuffer.h"
+#include "Emulator/Graphics/Objects/VertexBuffer.h"
 
 #include "Kyty/Core/DbgAssert.h"
 

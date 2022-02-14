@@ -1,7 +1,8 @@
-#ifndef EMULATOR_INCLUDE_EMULATOR_GRAPHICS_GPUMEMORY_H_
-#define EMULATOR_INCLUDE_EMULATOR_GRAPHICS_GPUMEMORY_H_
+#ifndef EMULATOR_INCLUDE_EMULATOR_GRAPHICS_OBJECTS_GPUMEMORY_H_
+#define EMULATOR_INCLUDE_EMULATOR_GRAPHICS_OBJECTS_GPUMEMORY_H_
 
 #include "Kyty/Core/Common.h"
+#include "Kyty/Core/Vector.h"
 
 #include "Emulator/Common.h"
 
@@ -12,9 +13,7 @@ namespace Kyty::Libs::Graphics {
 struct GraphicContext;
 struct VulkanMemory;
 struct VulkanBuffer;
-struct TextureVulkanImage;
-struct VideoOutVulkanImage;
-struct DepthStencilVulkanImage;
+struct VulkanImage;
 
 enum class GpuMemoryMode
 {
@@ -24,7 +23,7 @@ enum class GpuMemoryMode
 	ReadWrite
 };
 
-enum class GpuMemoryObjectType
+enum class GpuMemoryObjectType : uint64_t
 {
 	Invalid,
 	VideoOutBuffer,
@@ -33,7 +32,16 @@ enum class GpuMemoryObjectType
 	IndexBuffer,
 	VertexBuffer,
 	StorageBuffer,
-	Texture
+	Texture,
+	RenderTexture,
+
+	Max
+};
+
+struct GpuMemoryObject
+{
+	GpuMemoryObjectType type = GpuMemoryObjectType::Invalid;
+	void*               obj  = nullptr;
 };
 
 class GpuObject
@@ -68,21 +76,21 @@ void GpuMemoryInit();
 
 void  GpuMemorySetAllocatedRange(uint64_t vaddr, uint64_t size);
 void  GpuMemoryFree(GraphicContext* ctx, uint64_t vaddr, uint64_t size);
-void* GpuMemoryGetObject(GraphicContext* ctx, uint64_t vaddr, uint64_t size, const GpuObject& info);
-void* GpuMemoryGetObject(GraphicContext* ctx, const uint64_t* vaddr, const uint64_t* size, int vaddr_num, const GpuObject& info);
-void  GpuMemoryResetHash(GraphicContext* ctx, uint64_t vaddr, uint64_t size, GpuMemoryObjectType type);
+void* GpuMemoryCreateObject(GraphicContext* ctx, uint64_t vaddr, uint64_t size, const GpuObject& info);
+void* GpuMemoryCreateObject(GraphicContext* ctx, const uint64_t* vaddr, const uint64_t* size, int vaddr_num, const GpuObject& info);
+void  GpuMemoryResetHash(GraphicContext* ctx, const uint64_t* vaddr, const uint64_t* size, int vaddr_num, GpuMemoryObjectType type);
 void  GpuMemoryDbgDump();
 void  GpuMemoryFlush(GraphicContext* ctx);
 void  GpuMemoryFrameDone();
 void  GpuMemoryWriteBack(GraphicContext* ctx);
 
+Vector<GpuMemoryObject> GpuMemoryFindObjects(uint64_t vaddr, uint64_t size);
+
 bool VulkanAllocate(GraphicContext* ctx, VulkanMemory* mem);
 void VulkanFree(GraphicContext* ctx, VulkanMemory* mem);
 void VulkanMapMemory(GraphicContext* ctx, VulkanMemory* mem, void** data);
 void VulkanUnmapMemory(GraphicContext* ctx, VulkanMemory* mem);
-void VulkanBindImageMemory(GraphicContext* ctx, TextureVulkanImage* image, VulkanMemory* mem);
-void VulkanBindImageMemory(GraphicContext* ctx, VideoOutVulkanImage* image, VulkanMemory* mem);
-void VulkanBindImageMemory(GraphicContext* ctx, DepthStencilVulkanImage* image, VulkanMemory* mem);
+void VulkanBindImageMemory(GraphicContext* ctx, VulkanImage* image, VulkanMemory* mem);
 void VulkanBindBufferMemory(GraphicContext* ctx, VulkanBuffer* buffer, VulkanMemory* mem);
 
 void GpuMemoryRegisterOwner(uint32_t* owner_handle, const char* name);
@@ -96,4 +104,4 @@ void GpuMemoryUnregisterResource(uint32_t resource_handle);
 
 #endif // KYTY_EMU_ENABLED
 
-#endif /* EMULATOR_INCLUDE_EMULATOR_GRAPHICS_GPUMEMORY_H_ */
+#endif /* EMULATOR_INCLUDE_EMULATOR_GRAPHICS_OBJECTS_GPUMEMORY_H_ */

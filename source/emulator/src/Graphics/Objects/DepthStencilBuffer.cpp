@@ -1,4 +1,4 @@
-#include "Emulator/Graphics/DepthStencilBuffer.h"
+#include "Emulator/Graphics/Objects/DepthStencilBuffer.h"
 
 #include "Kyty/Core/DbgAssert.h"
 
@@ -37,6 +37,7 @@ void* DepthStencilBufferObject::Create(GraphicContext* ctx, const uint64_t* vadd
 	vk_obj->format        = pixel_format;
 	vk_obj->image         = nullptr;
 	vk_obj->image_view    = nullptr;
+	vk_obj->layout        = VK_IMAGE_LAYOUT_UNDEFINED;
 
 	VkImageCreateInfo image_info {};
 	image_info.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -50,7 +51,7 @@ void* DepthStencilBufferObject::Create(GraphicContext* ctx, const uint64_t* vadd
 	image_info.arrayLayers   = 1;
 	image_info.format        = vk_obj->format;
 	image_info.tiling        = VK_IMAGE_TILING_OPTIMAL;
-	image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	image_info.initialLayout = vk_obj->layout;
 	image_info.usage         = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 	image_info.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
 	image_info.samples       = VK_SAMPLE_COUNT_1_BIT;
@@ -96,7 +97,7 @@ void* DepthStencilBufferObject::Create(GraphicContext* ctx, const uint64_t* vadd
 
 	EXIT_NOT_IMPLEMENTED(vk_obj->image_view == nullptr);
 
-	UtilSetImageLayoutOptimal(vk_obj);
+	UtilSetDepthLayoutOptimal(vk_obj);
 
 	return vk_obj;
 }

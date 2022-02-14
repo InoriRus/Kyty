@@ -17,7 +17,7 @@ namespace Kyty::Libs::Graphics {
 class CommandBuffer;
 struct GraphicContext;
 struct VulkanBuffer;
-struct VideoOutVulkanImage;
+struct VulkanImage;
 struct TextureVulkanImage;
 struct DepthStencilVulkanImage;
 struct VulkanSwapchain;
@@ -30,16 +30,16 @@ struct BufferImageCopy
 	uint32_t pitch;
 };
 
-void UtilBufferToImage(CommandBuffer* buffer, VulkanBuffer* src_buffer, uint32_t src_pitch, VideoOutVulkanImage* dst_image);
+void UtilBufferToImage(CommandBuffer* buffer, VulkanBuffer* src_buffer, uint32_t src_pitch, VulkanImage* dst_image);
 void UtilBufferToImage(CommandBuffer* buffer, VulkanBuffer* src_buffer, TextureVulkanImage* dst_image,
                        const Vector<BufferImageCopy>& regions, uint64_t dst_layout);
-void UtilBlitImage(CommandBuffer* buffer, VideoOutVulkanImage* src_image, VulkanSwapchain* dst_swapchain);
-void UtilFillImage(GraphicContext* ctx, VideoOutVulkanImage* dst_image, const void* src_data, uint64_t size, uint32_t src_pitch);
+void UtilBlitImage(CommandBuffer* buffer, VulkanImage* src_image, VulkanSwapchain* dst_swapchain);
+void UtilFillImage(GraphicContext* ctx, VulkanImage* dst_image, const void* src_data, uint64_t size, uint32_t src_pitch);
 void UtilFillImage(GraphicContext* ctx, TextureVulkanImage* dst_image, const void* src_data, uint64_t size,
                    const Vector<BufferImageCopy>& regions, uint64_t dst_layout);
 void UtilCopyBuffer(VulkanBuffer* src_buffer, VulkanBuffer* dst_buffer, uint64_t size);
-void UtilSetImageLayoutOptimal(DepthStencilVulkanImage* image);
-void UtilSetImageLayoutOptimal(VideoOutVulkanImage* image);
+void UtilSetDepthLayoutOptimal(DepthStencilVulkanImage* image);
+void UtilSetImageLayoutOptimal(VulkanImage* image);
 
 void VulkanCreateBuffer(GraphicContext* gctx, uint64_t size, VulkanBuffer* buffer);
 void VulkanDeleteBuffer(GraphicContext* gctx, VulkanBuffer* buffer);

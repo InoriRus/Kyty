@@ -27,8 +27,8 @@ public:
 		InvalCount
 	};
 
-	KernelSemaPrivate(const String& name, bool fifo, int init_count, int max_count)
-	    : m_name(name), m_fifo_order(fifo), m_count(init_count), m_init_count(init_count), m_max_count(max_count) {};
+	KernelSemaPrivate(const String& name, bool /*fifo*/, int init_count, int max_count)
+	    : m_name(name), /*m_fifo_order(fifo),*/ m_count(init_count), m_init_count(init_count), m_max_count(max_count) {};
 	virtual ~KernelSemaPrivate();
 
 	KYTY_CLASS_NO_COPY(KernelSemaPrivate);
@@ -53,15 +53,15 @@ private:
 		Deleted
 	};
 
-	Core::Mutex           m_mutex;
-	Core::CondVar         m_cond_var;
-	String                m_name;
-	Status                m_status = Status::Set;
-	Vector<int>           m_waiting_threads;
-	[[maybe_unused]] bool m_fifo_order;
-	int                   m_count;
-	int                   m_init_count;
-	int                   m_max_count;
+	Core::Mutex   m_mutex;
+	Core::CondVar m_cond_var;
+	String        m_name;
+	Status        m_status = Status::Set;
+	Vector<int>   m_waiting_threads;
+	// bool          m_fifo_order;
+	int m_count;
+	int m_init_count;
+	int m_max_count;
 };
 
 KernelSemaPrivate::~KernelSemaPrivate()

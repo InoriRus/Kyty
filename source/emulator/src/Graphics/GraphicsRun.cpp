@@ -70,6 +70,7 @@ public:
 	void FlipWithInterrupt(uint32_t eop_event_type, uint32_t cache_action, void* dst_gpu_addr, uint32_t value);
 	void WriteBack();
 	void MemoryBarrier();
+	void RenderTextureBarrier(uint64_t vaddr, uint64_t size);
 	void DispatchDirect(uint32_t thread_group_x, uint32_t thread_group_y, uint32_t thread_group_z, uint32_t mode);
 	void WaitFlipDone(uint32_t video_out_handle, uint32_t display_buffer_index);
 	void TriggerEvent(uint32_t event_type, uint32_t event_index);
@@ -1109,6 +1110,15 @@ void CommandProcessor::MemoryBarrier()
 	GraphicsRenderMemoryBarrier(m_buffer[m_current_buffer]);
 }
 
+void CommandProcessor::RenderTextureBarrier(uint64_t vaddr, uint64_t size)
+{
+	Core::LockGuard lock(m_mutex);
+
+	EXIT_IF(m_current_buffer < 0 || m_current_buffer >= VK_BUFFERS_NUM);
+
+	GraphicsRenderRenderTextureBarrier(m_buffer[m_current_buffer], vaddr, size);
+}
+
 void CommandProcessor::TriggerEvent(uint32_t event_type, uint32_t event_index)
 {
 	Core::LockGuard lock(m_mutex);
@@ -1117,7 +1127,7 @@ void CommandProcessor::TriggerEvent(uint32_t event_type, uint32_t event_index)
 	printf("\t event_type  = 0x%08" PRIx32 "\n", event_type);
 	printf("\t event_index = 0x%08" PRIx32 "\n", event_index);
 
-	if (event_type == 0x00000016 && event_index == 0x00000007)
+	if ((event_type == 0x00000016 || event_type == 0x00000031) && event_index == 0x00000007)
 	{
 		MemoryBarrier();
 	} else
@@ -2192,25 +2202,42 @@ KYTY_CP_OP_PARSER(cp_op_acquire_mem)
 
 	uint32_t stall_mode   = buffer[0] >> 31u;
 	uint32_t cache_action = buffer[0] & 0x7fffffffu;
-	uint32_t size_lo      = buffer[1];
+	uint64_t size_lo      = buffer[1];
 	uint32_t size_hi      = buffer[2];
-	uint32_t base_lo      = buffer[3];
+	uint64_t base_lo      = buffer[3];
 	uint32_t base_hi      = buffer[4];
 	uint32_t poll         = buffer[5];
 
 	EXIT_NOT_IMPLEMENTED(stall_mode != 1);
-	EXIT_NOT_IMPLEMENTED(cache_action != 0x00C40000 && cache_action != 0x00400000);
-	EXIT_NOT_IMPLEMENTED(size_lo != 1);
 	EXIT_NOT_IMPLEMENTED(size_hi != 0);
-	EXIT_NOT_IMPLEMENTED(base_lo != 0);
 	EXIT_NOT_IMPLEMENTED(base_hi != 0);
 	EXIT_NOT_IMPLEMENTED(poll != 10);
 
-	cp->MemoryBarrier();
-
-	if (cache_action == 0x00C40000)
+	switch (cache_action)
 	{
-		cp->WriteBack();
+		case 0x02003fc0:
+		{
+			EXIT_NOT_IMPLEMENTED(size_lo == 0);
+			EXIT_NOT_IMPLEMENTED(base_lo == 0);
+			cp->RenderTextureBarrier(base_lo << 8u, size_lo << 8u);
+		}
+		break;
+		case 0x00C40000:
+		{
+			EXIT_NOT_IMPLEMENTED(size_lo != 1);
+			EXIT_NOT_IMPLEMENTED(base_lo != 0);
+			cp->MemoryBarrier();
+			cp->WriteBack();
+		}
+		break;
+		case 0x00400000:
+		{
+			EXIT_NOT_IMPLEMENTED(size_lo != 1);
+			EXIT_NOT_IMPLEMENTED(base_lo != 0);
+			cp->MemoryBarrier();
+		}
+		break;
+		default: EXIT("unknown barrier");
 	}
 
 	return 6;

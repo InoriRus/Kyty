@@ -1,4 +1,4 @@
-#include "Emulator/Graphics/VideoOutBuffer.h"
+#include "Emulator/Graphics/Objects/VideoOutBuffer.h"
 
 #include "Kyty/Core/DbgAssert.h"
 
@@ -37,6 +37,7 @@ void* VideoOutBufferObject::Create(GraphicContext* ctx, const uint64_t* vaddr, c
 	vk_obj->format        = VK_FORMAT_B8G8R8A8_SRGB;
 	vk_obj->image         = nullptr;
 	vk_obj->image_view    = nullptr;
+	vk_obj->layout        = VK_IMAGE_LAYOUT_UNDEFINED;
 
 	VkImageCreateInfo image_info {};
 	image_info.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -50,7 +51,7 @@ void* VideoOutBufferObject::Create(GraphicContext* ctx, const uint64_t* vaddr, c
 	image_info.arrayLayers   = 1;
 	image_info.format        = vk_obj->format;
 	image_info.tiling        = VK_IMAGE_TILING_OPTIMAL;
-	image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	image_info.initialLayout = vk_obj->layout;
 	image_info.usage         = static_cast<VkImageUsageFlags>(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT) |
 	                   VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 	image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -141,6 +142,8 @@ static void update_func(GraphicContext* ctx, const uint64_t* params, void* obj, 
 	auto width  = params[VideoOutBufferObject::PARAM_WIDTH];
 	auto height = params[VideoOutBufferObject::PARAM_HEIGHT];
 
+	vk_obj->layout = VK_IMAGE_LAYOUT_UNDEFINED;
+
 	if (tiled && buffer_is_tiled(*vaddr, *size))
 	{
 		EXIT_NOT_IMPLEMENTED(width != pitch);
@@ -158,7 +161,7 @@ bool VideoOutBufferObject::Equal(const uint64_t* other) const
 {
 	return (params[PARAM_FORMAT] == other[PARAM_FORMAT] && params[PARAM_WIDTH] == other[PARAM_WIDTH] &&
 	        params[PARAM_HEIGHT] == other[PARAM_HEIGHT] && params[PARAM_TILED] == other[PARAM_TILED] &&
-	        params[PARAM_PITCH] == other[PARAM_PITCH]);
+	        params[PARAM_PITCH] == other[PARAM_PITCH] && params[PARAM_NEO] == other[PARAM_NEO]);
 }
 
 static void delete_func(GraphicContext* ctx, void* obj, VulkanMemory* mem)

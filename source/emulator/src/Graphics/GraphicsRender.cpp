@@ -6,20 +6,21 @@
 #include "Kyty/Math/Rand.h"
 
 #include "Emulator/Config.h"
-#include "Emulator/Graphics/DepthStencilBuffer.h"
-#include "Emulator/Graphics/GpuMemory.h"
 #include "Emulator/Graphics/GraphicContext.h"
 #include "Emulator/Graphics/HardwareContext.h"
-#include "Emulator/Graphics/IndexBuffer.h"
-#include "Emulator/Graphics/Label.h"
+#include "Emulator/Graphics/Objects/DepthStencilBuffer.h"
+#include "Emulator/Graphics/Objects/GpuMemory.h"
+#include "Emulator/Graphics/Objects/IndexBuffer.h"
+#include "Emulator/Graphics/Objects/Label.h"
+#include "Emulator/Graphics/Objects/RenderTexture.h"
+#include "Emulator/Graphics/Objects/StorageBuffer.h"
+#include "Emulator/Graphics/Objects/Texture.h"
+#include "Emulator/Graphics/Objects/VertexBuffer.h"
+#include "Emulator/Graphics/Objects/VideoOutBuffer.h"
 #include "Emulator/Graphics/Shader.h"
-#include "Emulator/Graphics/StorageBuffer.h"
-#include "Emulator/Graphics/Texture.h"
 #include "Emulator/Graphics/Tile.h"
 #include "Emulator/Graphics/Utils.h"
-#include "Emulator/Graphics/VertexBuffer.h"
 #include "Emulator/Graphics/VideoOut.h"
-#include "Emulator/Graphics/VideoOutBuffer.h"
 #include "Emulator/Graphics/Window.h"
 #include "Emulator/Kernel/EventQueue.h"
 #include "Emulator/Kernel/Pthread.h"
@@ -111,7 +112,7 @@ public:
 	void            DeleteAllPipelines();
 
 private:
-	static constexpr uint32_t MAX_PIPELINES = 16;
+	static constexpr uint32_t MAX_PIPELINES = 32;
 
 	struct Pipeline
 	{
@@ -168,11 +169,10 @@ public:
 	void                 Free(VulkanDescriptorSet* set);
 
 	VulkanDescriptorSet* GetDescriptor(Stage stage, int storage_buffers_num, VulkanBuffer** storage_buffers, int textures2d_sampled_num,
-	                                   TextureVulkanImage** textures2d_sampled, int textures2d_storage_num,
-	                                   TextureVulkanImage** textures2d_storage, int samplers_num, uint64_t* samplers, int gds_buffers_num,
-	                                   VulkanBuffer** gds_buffers);
+	                                   VulkanImage** textures2d_sampled, int textures2d_storage_num, VulkanImage** textures2d_storage,
+	                                   int samplers_num, uint64_t* samplers, int gds_buffers_num, VulkanBuffer** gds_buffers);
 	void                 FreeDescriptor(VulkanBuffer* buffer);
-	void                 FreeDescriptor(TextureVulkanImage* image);
+	void                 FreeDescriptor(VulkanImage* image);
 
 private:
 	struct Set
@@ -241,8 +241,8 @@ public:
 	KYTY_CLASS_NO_COPY(FramebufferCache);
 
 	VulkanFramebuffer* CreateFramebuffer(RenderColorInfo* color, RenderDepthInfo* depth);
-	void               FreeFramebuffer(VideoOutVulkanImage* image);
-	void               FreeFramebuffer(DepthStencilVulkanImage* image);
+	void               FreeFramebufferByColor(VulkanImage* image);
+	void               FreeFramebufferByDepth(DepthStencilVulkanImage* image);
 
 private:
 	VideoOutVulkanImage* CreateDummyBuffer(VkFormat format, uint32_t width, uint32_t height);
@@ -349,13 +349,25 @@ struct RenderDepthInfo
 	VkStencilOpState         stencil_front            = {};
 	VkStencilOpState         stencil_back             = {};
 	DepthStencilVulkanImage* vulkan_buffer            = nullptr;
+	uint64_t                 vaddr[3]                 = {};
+	uint64_t                 size[3]                  = {};
+	int                      vaddr_num                = 0;
+};
+
+enum class RenderColorType
+{
+	NoColorOutput,
+	DisplayBuffer,
+	OffscreenBuffer,
+	RenderTexture,
 };
 
 struct RenderColorInfo
 {
-	VideoOutVulkanImage* vulkan_buffer = nullptr;
-	uint64_t             base_addr     = 0;
-	uint64_t             buffer_size   = 0;
+	RenderColorType type          = RenderColorType::NoColorOutput;
+	VulkanImage*    vulkan_buffer = nullptr;
+	uint64_t        base_addr     = 0;
+	uint64_t        buffer_size   = 0;
 };
 
 class CommandPool
@@ -550,7 +562,7 @@ static void z_check(const DepthRenderTarget& z)
 		EXIT_NOT_IMPLEMENTED(z.z_info.format != 0x00000003);
 		EXIT_NOT_IMPLEMENTED(z.z_info.tile_mode_index != (Config::IsNeo() ? 0x00000002 : 0));
 		EXIT_NOT_IMPLEMENTED(z.z_info.num_samples != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(z.z_info.tile_surface_enable != true);
+		// EXIT_NOT_IMPLEMENTED(z.z_info.tile_surface_enable != true);
 		EXIT_NOT_IMPLEMENTED(z.z_info.expclear_enabled != false);
 		EXIT_NOT_IMPLEMENTED(z.z_info.zrange_precision != 0x00000001);
 	}
@@ -594,11 +606,11 @@ static void z_check(const DepthRenderTarget& z)
 		EXIT_NOT_IMPLEMENTED(z.z_write_base_addr == 0);
 		EXIT_NOT_IMPLEMENTED(z.stencil_info.format != 0 && z.stencil_write_base_addr == 0);
 		// EXIT_NOT_IMPLEMENTED(z.pitch_div8_minus1 != 0x000000ff);
-		EXIT_NOT_IMPLEMENTED(z.height_div8_minus1 != 0x0000008f);
+		// EXIT_NOT_IMPLEMENTED(z.height_div8_minus1 != 0x0000008f);
 		// EXIT_NOT_IMPLEMENTED(z.slice_div64_minus1 != 0x00008fff);
-		EXIT_NOT_IMPLEMENTED(z.htile_data_base_addr == 0);
-		EXIT_NOT_IMPLEMENTED(z.width != 0x00000780);
-		EXIT_NOT_IMPLEMENTED(z.height != 0x00000438);
+		// EXIT_NOT_IMPLEMENTED(z.htile_data_base_addr == 0);
+		// EXIT_NOT_IMPLEMENTED(z.width != 0x00000780);
+		// EXIT_NOT_IMPLEMENTED(z.height != 0x00000438);
 	}
 }
 
@@ -1142,7 +1154,7 @@ VulkanFramebuffer* FramebufferCache::CreateFramebuffer(RenderColorInfo* color, R
 	                     (color->vulkan_buffer->extent.width != depth->vulkan_buffer->extent.width ||
 	                      color->vulkan_buffer->extent.height != depth->vulkan_buffer->extent.height));
 
-	VideoOutVulkanImage* vulkan_buffer =
+	VulkanImage* vulkan_buffer =
 	    (with_color ? color->vulkan_buffer
 	                : CreateDummyBuffer(VK_FORMAT_B8G8R8A8_SRGB, depth->vulkan_buffer->extent.width, depth->vulkan_buffer->extent.height));
 
@@ -1247,7 +1259,7 @@ VulkanFramebuffer* FramebufferCache::CreateFramebuffer(RenderColorInfo* color, R
 	return framebuffer;
 }
 
-void FramebufferCache::FreeFramebuffer(VideoOutVulkanImage* image)
+void FramebufferCache::FreeFramebufferByColor(VulkanImage* image)
 {
 	EXIT_IF(g_render_ctx == nullptr);
 	EXIT_IF(image == nullptr);
@@ -1277,7 +1289,7 @@ void FramebufferCache::FreeFramebuffer(VideoOutVulkanImage* image)
 	}
 }
 
-void FramebufferCache::FreeFramebuffer(DepthStencilVulkanImage* image)
+void FramebufferCache::FreeFramebufferByDepth(DepthStencilVulkanImage* image)
 {
 	EXIT_IF(g_render_ctx == nullptr);
 	EXIT_IF(image == nullptr);
@@ -1328,6 +1340,7 @@ VideoOutVulkanImage* FramebufferCache::CreateDummyBuffer(VkFormat format, uint32
 	vk_obj->format        = format;
 	vk_obj->image         = nullptr;
 	vk_obj->image_view    = nullptr;
+	vk_obj->layout        = VK_IMAGE_LAYOUT_UNDEFINED;
 
 	VkImageCreateInfo image_info {};
 	image_info.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -1341,7 +1354,7 @@ VideoOutVulkanImage* FramebufferCache::CreateDummyBuffer(VkFormat format, uint32
 	image_info.arrayLayers   = 1;
 	image_info.format        = vk_obj->format;
 	image_info.tiling        = VK_IMAGE_TILING_OPTIMAL;
-	image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	image_info.initialLayout = vk_obj->layout;
 	image_info.usage         = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 	image_info.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
 	image_info.samples       = VK_SAMPLE_COUNT_1_BIT;
@@ -2460,8 +2473,8 @@ void DescriptorCache::Free(VulkanDescriptorSet* set)
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 VulkanDescriptorSet* DescriptorCache::GetDescriptor(Stage stage, int storage_buffers_num, VulkanBuffer** storage_buffers,
-                                                    int textures2d_sampled_num, TextureVulkanImage** textures2d_sampled,
-                                                    int textures2d_storage_num, TextureVulkanImage** textures2d_storage, int samplers_num,
+                                                    int textures2d_sampled_num, VulkanImage** textures2d_sampled,
+                                                    int textures2d_storage_num, VulkanImage** textures2d_storage, int samplers_num,
                                                     uint64_t* samplers, int gds_buffers_num, VulkanBuffer** gds_buffers)
 {
 	EXIT_IF(storage_buffers_num < 0 || storage_buffers_num > BUFFERS_MAX);
@@ -2736,7 +2749,7 @@ void DescriptorCache::FreeDescriptor(VulkanBuffer* buffer)
 	}
 }
 
-void DescriptorCache::FreeDescriptor(TextureVulkanImage* image)
+void DescriptorCache::FreeDescriptor(VulkanImage* image)
 {
 	EXIT_IF(image == nullptr);
 
@@ -2790,12 +2803,17 @@ VkDescriptorSetLayout DescriptorCache::GetDescriptorSetLayout(Stage stage, int s
 
 void DeleteFramebuffer(VideoOutVulkanImage* image)
 {
-	g_render_ctx->GetFramebufferCache()->FreeFramebuffer(image);
+	g_render_ctx->GetFramebufferCache()->FreeFramebufferByColor(image);
+}
+
+void DeleteFramebuffer(RenderTextureVulkanImage* image)
+{
+	g_render_ctx->GetFramebufferCache()->FreeFramebufferByColor(image);
 }
 
 void DeleteFramebuffer(DepthStencilVulkanImage* image)
 {
-	g_render_ctx->GetFramebufferCache()->FreeFramebuffer(image);
+	g_render_ctx->GetFramebufferCache()->FreeFramebufferByDepth(image);
 }
 
 void DeleteDescriptor(VulkanBuffer* buffer)
@@ -2804,6 +2822,11 @@ void DeleteDescriptor(VulkanBuffer* buffer)
 }
 
 void DeleteDescriptor(TextureVulkanImage* image)
+{
+	g_render_ctx->GetDescriptorCache()->FreeDescriptor(image);
+}
+
+void DeleteDescriptor(RenderTextureVulkanImage* image)
 {
 	g_render_ctx->GetDescriptorCache()->FreeDescriptor(image);
 }
@@ -2817,17 +2840,33 @@ static void FindRenderDepthInfo(const HardwareContext& hw, RenderDepthInfo* r)
 	const auto& rc  = hw.GetRenderControl();
 	const auto& dc  = hw.GetDepthControl();
 
+	uint32_t size         = 0;
 	uint32_t stencil_size = 0;
 	uint32_t htile_size   = 0;
 	uint32_t depth_size   = 0;
 	uint32_t pitch        = 0;
+
+	if (z.z_info.format == 3)
+	{
+		size = (z.slice_div64_minus1 + 1) * 64 * 4;
+	} else if (z.z_info.format == 1)
+	{
+		size = (z.slice_div64_minus1 + 1) * 64 * 2;
+	}
 
 	bool htile = z.z_info.tile_surface_enable;
 
 	TileGetDepthSize(z.width, z.height, z.z_info.format, z.stencil_info.format, htile, neo, &stencil_size, &htile_size, &depth_size,
 	                 &pitch);
 
-	EXIT_NOT_IMPLEMENTED(pitch != 0 && (z.pitch_div8_minus1 + 1) * 8 != pitch);
+	if (pitch == 0)
+	{
+		depth_size = size;
+	} else
+	{
+		EXIT_NOT_IMPLEMENTED(depth_size != size);
+		EXIT_NOT_IMPLEMENTED((z.pitch_div8_minus1 + 1) * 8 != pitch);
+	}
 
 	switch (z.z_info.format * 2 + z.stencil_info.format)
 	{
@@ -2877,117 +2916,170 @@ static void FindRenderDepthInfo(const HardwareContext& hw, RenderDepthInfo* r)
 	{
 		DepthStencilBufferObject vulkan_buffer_info(r->format, r->width, r->height, htile, neo);
 
-		uint64_t vaddr[3]  = {};
-		uint64_t size[3]   = {};
-		int      vaddr_num = 0;
+		r->vaddr_num = 0;
 
 		if (r->depth_buffer_size > 0)
 		{
-			vaddr[vaddr_num] = r->depth_buffer_vaddr;
-			size[vaddr_num]  = r->depth_buffer_size;
-			vaddr_num++;
+			r->vaddr[r->vaddr_num] = r->depth_buffer_vaddr;
+			r->size[r->vaddr_num]  = r->depth_buffer_size;
+			r->vaddr_num++;
 		}
 
 		if (r->stencil_buffer_size > 0)
 		{
-			vaddr[vaddr_num] = r->stencil_buffer_vaddr;
-			size[vaddr_num]  = r->stencil_buffer_size;
-			vaddr_num++;
+			r->vaddr[r->vaddr_num] = r->stencil_buffer_vaddr;
+			r->size[r->vaddr_num]  = r->stencil_buffer_size;
+			r->vaddr_num++;
 		}
 
 		if (r->htile_buffer_size > 0)
 		{
-			vaddr[vaddr_num] = r->htile_buffer_vaddr;
-			size[vaddr_num]  = r->htile_buffer_size;
-			vaddr_num++;
+			r->vaddr[r->vaddr_num] = r->htile_buffer_vaddr;
+			r->size[r->vaddr_num]  = r->htile_buffer_size;
+			r->vaddr_num++;
 		}
 
-		EXIT_NOT_IMPLEMENTED(vaddr_num == 0);
+		EXIT_NOT_IMPLEMENTED(r->vaddr_num == 0);
 
 		r->vulkan_buffer = static_cast<DepthStencilVulkanImage*>(
-		    GpuMemoryGetObject(g_render_ctx->GetGraphicCtx(), vaddr, size, vaddr_num, vulkan_buffer_info));
+		    GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), r->vaddr, r->size, r->vaddr_num, vulkan_buffer_info));
 
 		EXIT_NOT_IMPLEMENTED(r->vulkan_buffer == nullptr);
 	}
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 static void FindRenderColorInfo(const HardwareContext& hw, RenderColorInfo* r)
 {
 	EXIT_IF(r == nullptr);
 
-	const auto& rt = hw.GetRenderTargets(0);
+	const auto& rt   = hw.GetRenderTargets(0);
+	auto        mask = hw.GetRenderTargetMask();
 
-	if (rt.base_addr != 0)
-	{
-		auto     width             = rt.width;
-		auto     height            = rt.height;
-		auto     pitch             = (rt.pitch_div8_minus1 + 1) * 8;
-		auto     size              = (rt.slice_div64_minus1 + 1) * 64 * 4;
-		bool     tile              = false;
-		uint32_t format            = 0;
-		bool     render_to_texture = false;
-
-		if (rt.tile_mode == 0x8)
-		{
-			tile = false;
-		} else if (rt.tile_mode == 0xa)
-		{
-			tile = true;
-		} else if (rt.tile_mode == 0xd)
-		{
-			tile              = true;
-			render_to_texture = true;
-		} else
-		{
-			EXIT("unknown tile mode: %u\n", rt.tile_mode);
-		}
-
-		if (render_to_texture)
-		{
-			EXIT("not implemented");
-		} else
-		{
-			if (rt.format == 0xa && rt.channel_type == 0x6 && rt.channel_order == 0x1)
-			{
-				format = 0x80000000;
-			} else
-			{
-				EXIT("unknown format");
-			}
-
-			auto video_image = VideoOut::VideoOutGetImage(rt.base_addr);
-			if (video_image.image == nullptr)
-			{
-				// Offscreen buffer
-				VideoOutBufferObject vulkan_buffer_info(format, width, height, tile, Config::IsNeo(), pitch);
-				auto*                buffer_vulkan = static_cast<Graphics::VideoOutVulkanImage*>(
-                    Graphics::GpuMemoryGetObject(g_render_ctx->GetGraphicCtx(), rt.base_addr, size, vulkan_buffer_info));
-				EXIT_NOT_IMPLEMENTED(buffer_vulkan == nullptr);
-				r->base_addr     = rt.base_addr;
-				r->vulkan_buffer = buffer_vulkan;
-				r->buffer_size   = size;
-			} else
-			{
-				// Display buffer
-				EXIT_NOT_IMPLEMENTED(video_image.buffer_size != size);
-				EXIT_NOT_IMPLEMENTED(video_image.buffer_pitch != pitch);
-				r->base_addr     = rt.base_addr;
-				r->vulkan_buffer = video_image.image;
-				r->buffer_size   = video_image.buffer_size;
-			}
-		}
-	} else
+	if (rt.base_addr == 0 || mask == 0)
 	{
 		// No color output
+		r->type          = RenderColorType::NoColorOutput;
 		r->base_addr     = 0;
 		r->vulkan_buffer = nullptr;
 		r->buffer_size   = 0;
+		return;
+	}
+
+	auto     width             = rt.width;
+	auto     height            = rt.height;
+	auto     pitch             = (rt.pitch_div8_minus1 + 1) * 8;
+	auto     size              = (rt.slice_div64_minus1 + 1) * 64 * 4;
+	bool     tile              = false;
+	uint32_t format            = 0;
+	bool     render_to_texture = false;
+
+	if (rt.tile_mode == 0x8)
+	{
+		tile = false;
+	} else if (rt.tile_mode == 0xa)
+	{
+		tile = true;
+	} else if (rt.tile_mode == 0xd || rt.tile_mode == 0xe)
+	{
+		tile              = true;
+		render_to_texture = true;
+	} else
+	{
+		EXIT("unknown tile mode: %u\n", rt.tile_mode);
+	}
+
+	if (render_to_texture)
+	{
+		if (rt.format == 0xa && rt.channel_type == 0x0 && rt.channel_order == 0x0)
+		{
+			// Render to texture
+			RenderTextureObject vulkan_buffer_info(RenderTextureFormat::R8G8B8A8Unorm, width, height, tile, rt.neo_mode, pitch);
+			auto*               buffer_vulkan = static_cast<Graphics::RenderTextureVulkanImage*>(
+                Graphics::GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), rt.base_addr, size, vulkan_buffer_info));
+			EXIT_NOT_IMPLEMENTED(buffer_vulkan == nullptr);
+			r->type          = RenderColorType::RenderTexture;
+			r->base_addr     = rt.base_addr;
+			r->vulkan_buffer = buffer_vulkan;
+			r->buffer_size   = size;
+		} else
+		{
+			EXIT("unknown format");
+		}
+	} else
+	{
+		if (rt.format == 0xa && rt.channel_type == 0x6 && rt.channel_order == 0x1)
+		{
+			format = 0x80000000;
+		} else
+		{
+			EXIT("unknown format");
+		}
+
+		auto video_image = VideoOut::VideoOutGetImage(rt.base_addr);
+		if (video_image.image == nullptr)
+		{
+			// Offscreen buffer
+			VideoOutBufferObject vulkan_buffer_info(format, width, height, tile, Config::IsNeo(), pitch);
+			auto*                buffer_vulkan = static_cast<Graphics::VideoOutVulkanImage*>(
+                Graphics::GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), rt.base_addr, size, vulkan_buffer_info));
+			EXIT_NOT_IMPLEMENTED(buffer_vulkan == nullptr);
+			r->type          = RenderColorType::OffscreenBuffer;
+			r->base_addr     = rt.base_addr;
+			r->vulkan_buffer = buffer_vulkan;
+			r->buffer_size   = size;
+		} else
+		{
+			// Display buffer
+			EXIT_NOT_IMPLEMENTED(video_image.buffer_size != size);
+			EXIT_NOT_IMPLEMENTED(video_image.buffer_pitch != pitch);
+			r->type          = RenderColorType::DisplayBuffer;
+			r->base_addr     = rt.base_addr;
+			r->vulkan_buffer = video_image.image;
+			r->buffer_size   = video_image.buffer_size;
+		}
 	}
 }
 
 static void InvalidateMemoryObject(const RenderColorInfo& r)
 {
-	GpuMemoryResetHash(g_render_ctx->GetGraphicCtx(), r.base_addr, r.buffer_size, GpuMemoryObjectType::VideoOutBuffer);
+	bool with_color = (r.vulkan_buffer != nullptr);
+
+	if (with_color)
+	{
+		if (r.type == RenderColorType::RenderTexture)
+		{
+			GpuMemoryResetHash(g_render_ctx->GetGraphicCtx(), &r.base_addr, &r.buffer_size, 1, GpuMemoryObjectType::RenderTexture);
+		} else if (r.type == RenderColorType::DisplayBuffer || r.type == RenderColorType::OffscreenBuffer)
+		{
+			GpuMemoryResetHash(g_render_ctx->GetGraphicCtx(), &r.base_addr, &r.buffer_size, 1, GpuMemoryObjectType::VideoOutBuffer);
+		}
+	}
+}
+
+static void InvalidateMemoryObject(const RenderDepthInfo& r)
+{
+	bool with_depth = (r.format != VK_FORMAT_UNDEFINED && r.vulkan_buffer != nullptr);
+
+	if (with_depth)
+	{
+		GpuMemoryResetHash(g_render_ctx->GetGraphicCtx(), r.vaddr, r.size, r.vaddr_num, GpuMemoryObjectType::DepthStencilBuffer);
+	}
+}
+
+static RenderTextureVulkanImage* FindRenderTexture(uint64_t vaddr, uint64_t size)
+{
+	auto objects = GpuMemoryFindObjects(vaddr, size);
+
+	for (const auto& obj: objects)
+	{
+		if (obj.type == GpuMemoryObjectType::RenderTexture)
+		{
+			return static_cast<RenderTextureVulkanImage*>(obj.obj);
+		}
+	}
+
+	return nullptr;
 }
 
 static void PrepareStorageBuffers(const ShaderStorageResources& storage_buffers, VulkanBuffer** buffers, uint32_t** sgprs)
@@ -3026,7 +3118,7 @@ static void PrepareStorageBuffers(const ShaderStorageResources& storage_buffers,
 
 		StorageBufferGpuObject buf_info(stride, num_records, read_only);
 
-		auto* buf = static_cast<VulkanBuffer*>(GpuMemoryGetObject(g_render_ctx->GetGraphicCtx(), addr, size, buf_info));
+		auto* buf = static_cast<VulkanBuffer*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), addr, size, buf_info));
 
 		EXIT_NOT_IMPLEMENTED(buf == nullptr);
 
@@ -3046,7 +3138,7 @@ static void PrepareStorageBuffers(const ShaderStorageResources& storage_buffers,
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-static void PrepareTextures(const ShaderTextureResources& textures, TextureVulkanImage** images, uint32_t** sgprs, bool with_sampler)
+static void PrepareTextures(const ShaderTextureResources& textures, VulkanImage** images, uint32_t** sgprs, bool with_sampler)
 {
 	EXIT_IF(images == nullptr);
 	EXIT_IF(sgprs == nullptr);
@@ -3059,7 +3151,7 @@ static void PrepareTextures(const ShaderTextureResources& textures, TextureVulka
 		EXIT_NOT_IMPLEMENTED(r.Base() == 0);
 		EXIT_NOT_IMPLEMENTED(r.MinLod() != 0);
 		EXIT_NOT_IMPLEMENTED(r.Dfmt() != 10 && r.Dfmt() != 37);
-		EXIT_NOT_IMPLEMENTED(r.Nfmt() != 9);
+		EXIT_NOT_IMPLEMENTED(r.Nfmt() != 9 && r.Nfmt() != 0);
 		// EXIT_NOT_IMPLEMENTED(r.Width() != 511);
 		// EXIT_NOT_IMPLEMENTED(r.Height() != 511);
 		EXIT_NOT_IMPLEMENTED(r.PerfMod() != 7 && r.PerfMod() != 0);
@@ -3070,7 +3162,7 @@ static void PrepareTextures(const ShaderTextureResources& textures, TextureVulka
 		// EXIT_NOT_IMPLEMENTED(r.DstSelW() != 7);
 		EXIT_NOT_IMPLEMENTED(r.BaseLevel() != 0);
 		EXIT_NOT_IMPLEMENTED(r.LastLevel() != 0 && r.LastLevel() != 9);
-		EXIT_NOT_IMPLEMENTED(!(r.TilingIdx() == 8 || r.TilingIdx() == 13));
+		EXIT_NOT_IMPLEMENTED(!(r.TilingIdx() == 8 || r.TilingIdx() == 13 || r.TilingIdx() == 14));
 		EXIT_NOT_IMPLEMENTED(!(r.LastLevel() == 0 && r.Pow2Pad() == false) && !(r.LastLevel() == 9 && r.Pow2Pad() == true));
 		EXIT_NOT_IMPLEMENTED(r.Type() != 9);
 		EXIT_NOT_IMPLEMENTED(r.Depth() != 0);
@@ -3089,17 +3181,22 @@ static void PrepareTextures(const ShaderTextureResources& textures, TextureVulka
 		auto     height  = r.Height() + 1;
 		auto     pitch   = r.Pitch() + 1;
 		auto     levels  = r.LastLevel() - r.BaseLevel() + 1;
-		bool     tile    = (r.TilingIdx() != 8);
+		auto     tile    = r.TilingIdx();
 		uint32_t swizzle = static_cast<uint32_t>(r.DstSelX()) | (static_cast<uint32_t>(r.DstSelY()) << 8u) |
 		                   (static_cast<uint32_t>(r.DstSelZ()) << 16u) | (static_cast<uint32_t>(r.DstSelW()) << 24u);
 
 		TileGetTextureSize(r.Dfmt(), r.Nfmt(), width, height, pitch, levels, tile, neo, &size, nullptr, nullptr, nullptr);
 		EXIT_NOT_IMPLEMENTED(size == 0);
 
-		TextureObject vulkan_texture_info(r.Dfmt(), r.Nfmt(), width, height, pitch, levels, tile, neo, swizzle,
-		                                  (with_sampler ? TextureObject::TEXTURE_USAGE_SAMPLED : TextureObject::TEXTURE_USAGE_STORAGE));
+		VulkanImage* tex = FindRenderTexture(addr, size);
 
-		auto* tex = static_cast<TextureVulkanImage*>(GpuMemoryGetObject(g_render_ctx->GetGraphicCtx(), addr, size, vulkan_texture_info));
+		if (tex == nullptr)
+		{
+			TextureObject vulkan_texture_info(r.Dfmt(), r.Nfmt(), width, height, pitch, levels, tile, neo, swizzle,
+			                                  (with_sampler ? TextureObject::TEXTURE_USAGE_SAMPLED : TextureObject::TEXTURE_USAGE_STORAGE));
+
+			tex = static_cast<TextureVulkanImage*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), addr, size, vulkan_texture_info));
+		}
 
 		EXIT_NOT_IMPLEMENTED(tex == nullptr);
 
@@ -3205,11 +3302,11 @@ static void BindDescriptors(VkCommandBuffer vk_buffer, VkPipelineBindPoint pipel
 		    (!bind_params.textures2D_without_sampler && bind.textures2D.textures_num > DescriptorCache::TEXTURES_SAMPLED_MAX));
 		EXIT_NOT_IMPLEMENTED(bind.samplers.samplers_num > DescriptorCache::SAMPLERS_MAX);
 
-		VulkanBuffer*       storage_buffers[DescriptorCache::BUFFERS_MAX];
-		TextureVulkanImage* textures2d_sampled[DescriptorCache::TEXTURES_SAMPLED_MAX];
-		TextureVulkanImage* textures2d_storage[DescriptorCache::TEXTURES_STORAGE_MAX];
-		uint64_t            samplers[DescriptorCache::SAMPLERS_MAX];
-		uint32_t            sgprs[DescriptorCache::PUSH_CONSTANTS_MAX];
+		VulkanBuffer* storage_buffers[DescriptorCache::BUFFERS_MAX];
+		VulkanImage*  textures2d_sampled[DescriptorCache::TEXTURES_SAMPLED_MAX];
+		VulkanImage*  textures2d_storage[DescriptorCache::TEXTURES_STORAGE_MAX];
+		uint64_t      samplers[DescriptorCache::SAMPLERS_MAX];
+		uint32_t      sgprs[DescriptorCache::PUSH_CONSTANTS_MAX];
 
 		uint32_t* sgprs_ptr = sgprs;
 
@@ -3343,7 +3440,8 @@ void GraphicsRenderDrawIndex(CommandBuffer* buffer, HardwareContext* ctx, UserCo
 		uint64_t    addr = b.addr;
 		uint64_t    size = b.stride * b.num_records;
 
-		auto* vertices = static_cast<VulkanBuffer*>(GpuMemoryGetObject(g_render_ctx->GetGraphicCtx(), addr, size, VertexBufferGpuObject()));
+		auto* vertices =
+		    static_cast<VulkanBuffer*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), addr, size, VertexBufferGpuObject()));
 
 		VkDeviceSize offset = 0;
 
@@ -3357,7 +3455,7 @@ void GraphicsRenderDrawIndex(CommandBuffer* buffer, HardwareContext* ctx, UserCo
 	                pipeline->additional_params->ps_bind, VK_SHADER_STAGE_FRAGMENT_BIT, DescriptorCache::Stage::Pixel);
 
 	VulkanBuffer* indices = static_cast<VulkanBuffer*>(
-	    GpuMemoryGetObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(index_addr), index_size, IndexBufferGpuObject()));
+	    GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(index_addr), index_size, IndexBufferGpuObject()));
 
 	EXIT_NOT_IMPLEMENTED(indices == nullptr);
 
@@ -3368,6 +3466,7 @@ void GraphicsRenderDrawIndex(CommandBuffer* buffer, HardwareContext* ctx, UserCo
 	buffer->EndRenderPass();
 
 	InvalidateMemoryObject(color_info);
+	InvalidateMemoryObject(depth_info);
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
@@ -3448,7 +3547,8 @@ void GraphicsRenderDrawIndexAuto(CommandBuffer* buffer, HardwareContext* ctx, Us
 		uint64_t    addr = b.addr;
 		uint64_t    size = b.stride * b.num_records;
 
-		auto* vertices = static_cast<VulkanBuffer*>(GpuMemoryGetObject(g_render_ctx->GetGraphicCtx(), addr, size, VertexBufferGpuObject()));
+		auto* vertices =
+		    static_cast<VulkanBuffer*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), addr, size, VertexBufferGpuObject()));
 
 		VkDeviceSize offset = 0;
 
@@ -3479,6 +3579,7 @@ void GraphicsRenderDrawIndexAuto(CommandBuffer* buffer, HardwareContext* ctx, Us
 	buffer->EndRenderPass();
 
 	InvalidateMemoryObject(color_info);
+	InvalidateMemoryObject(depth_info);
 }
 
 void GraphicsRenderDispatchDirect(CommandBuffer* buffer, HardwareContext* ctx, uint32_t thread_group_x, uint32_t thread_group_y,
@@ -3535,6 +3636,43 @@ void GraphicsRenderMemoryBarrier(CommandBuffer* buffer)
 	                     nullptr);
 }
 
+void GraphicsRenderRenderTextureBarrier(CommandBuffer* buffer, uint64_t vaddr, uint64_t size)
+{
+	EXIT_IF(buffer == nullptr);
+	EXIT_IF(buffer->IsInvalid());
+
+	Core::LockGuard lock(g_render_ctx->GetMutex());
+
+	auto* vk_buffer = buffer->GetPool()->buffers[buffer->GetIndex()];
+
+	VulkanImage* image = FindRenderTexture(vaddr, size);
+
+	EXIT_NOT_IMPLEMENTED(image == nullptr);
+	EXIT_NOT_IMPLEMENTED(image->layout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+	VkImageMemoryBarrier image_memory_barrier {};
+	image_memory_barrier.sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	image_memory_barrier.pNext                           = nullptr;
+	image_memory_barrier.srcAccessMask                   = VK_ACCESS_MEMORY_WRITE_BIT;
+	image_memory_barrier.dstAccessMask                   = VK_ACCESS_MEMORY_READ_BIT;
+	image_memory_barrier.oldLayout                       = image->layout;
+	image_memory_barrier.newLayout                       = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	image_memory_barrier.srcQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+	image_memory_barrier.dstQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+	image_memory_barrier.image                           = image->image;
+	image_memory_barrier.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+	image_memory_barrier.subresourceRange.baseMipLevel   = 0;
+	image_memory_barrier.subresourceRange.levelCount     = 1;
+	image_memory_barrier.subresourceRange.baseArrayLayer = 0;
+	image_memory_barrier.subresourceRange.layerCount     = 1;
+
+	vkCmdPipelineBarrier(vk_buffer, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+	                     VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1,
+	                     &image_memory_barrier);
+
+	image->layout = image_memory_barrier.newLayout;
+}
+
 void GraphicsRenderWriteAtEndOfPipe(CommandBuffer* buffer, uint32_t* dst_gpu_addr, uint32_t value)
 {
 	EXIT_IF(g_render_ctx == nullptr);
@@ -3547,7 +3685,7 @@ void GraphicsRenderWriteAtEndOfPipe(CommandBuffer* buffer, uint32_t* dst_gpu_add
 	Graphics::LabelGpuObject label_info(value, nullptr, nullptr);
 
 	auto* label =
-	    static_cast<Label*>(GpuMemoryGetObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(dst_gpu_addr), 4, label_info));
+	    static_cast<Label*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(dst_gpu_addr), 4, label_info));
 
 	LabelSet(buffer, label);
 }
@@ -3576,7 +3714,7 @@ void GraphicsRenderWriteAtEndOfPipeGds(CommandBuffer* buffer, uint32_t* dst_gpu_
 	    nullptr, args);
 
 	auto* label =
-	    static_cast<Label*>(GpuMemoryGetObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(dst_gpu_addr), 4, label_info));
+	    static_cast<Label*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(dst_gpu_addr), 4, label_info));
 
 	LabelSet(buffer, label);
 }
@@ -3593,7 +3731,7 @@ void GraphicsRenderWriteAtEndOfPipe(CommandBuffer* buffer, uint64_t* dst_gpu_add
 	Graphics::LabelGpuObject label_info(value, nullptr, nullptr);
 
 	auto* label =
-	    static_cast<Label*>(GpuMemoryGetObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(dst_gpu_addr), 8, label_info));
+	    static_cast<Label*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(dst_gpu_addr), 8, label_info));
 
 	LabelSet(buffer, label);
 }
@@ -3623,7 +3761,7 @@ void GraphicsRenderWriteAtEndOfPipeClockCounter(CommandBuffer* buffer, uint64_t*
 	    nullptr, args);
 
 	auto* label =
-	    static_cast<Label*>(GpuMemoryGetObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(dst_gpu_addr), 8, label_info));
+	    static_cast<Label*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(dst_gpu_addr), 8, label_info));
 
 	LabelSet(buffer, label);
 }
@@ -3648,7 +3786,7 @@ void GraphicsRenderWriteAtEndOfPipeWithWriteBack(CommandBuffer* buffer, uint64_t
 	    nullptr);
 
 	auto* label =
-	    static_cast<Label*>(GpuMemoryGetObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(dst_gpu_addr), 8, label_info));
+	    static_cast<Label*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(dst_gpu_addr), 8, label_info));
 
 	LabelSet(buffer, label);
 }
@@ -3678,7 +3816,7 @@ void GraphicsRenderWriteAtEndOfPipeWithInterruptWriteBack(CommandBuffer* buffer,
 	    });
 
 	auto* label =
-	    static_cast<Label*>(GpuMemoryGetObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(dst_gpu_addr), 8, label_info));
+	    static_cast<Label*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(dst_gpu_addr), 8, label_info));
 
 	LabelSet(buffer, label);
 }
@@ -3701,7 +3839,7 @@ void GraphicsRenderWriteAtEndOfPipeWithInterrupt(CommandBuffer* buffer, uint64_t
 	                                    });
 
 	auto* label =
-	    static_cast<Label*>(GpuMemoryGetObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(dst_gpu_addr), 8, label_info));
+	    static_cast<Label*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(dst_gpu_addr), 8, label_info));
 
 	LabelSet(buffer, label);
 }
@@ -3743,7 +3881,7 @@ void GraphicsRenderWriteAtEndOfPipeWithInterruptWriteBackFlip(CommandBuffer* buf
 	    args);
 
 	auto* label =
-	    static_cast<Label*>(GpuMemoryGetObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(dst_gpu_addr), 4, label_info));
+	    static_cast<Label*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(dst_gpu_addr), 4, label_info));
 
 	LabelSet(buffer, label);
 }
@@ -3776,7 +3914,7 @@ void GraphicsRenderWriteAtEndOfPipeWithFlip(CommandBuffer* buffer, uint32_t* dst
 	    nullptr, args);
 
 	auto* label =
-	    static_cast<Label*>(GpuMemoryGetObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(dst_gpu_addr), 4, label_info));
+	    static_cast<Label*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(dst_gpu_addr), 4, label_info));
 
 	LabelSet(buffer, label);
 }
@@ -4068,6 +4206,31 @@ VulkanFramebuffer* CommandBuffer::BeginRenderPass(RenderColorInfo* color, Render
 	render_pass_info.renderArea.extent = extent;
 	render_pass_info.clearValueCount   = with_depth ? 2 : 1;
 	render_pass_info.pClearValues      = clears;
+
+	if (with_color && color->vulkan_buffer->layout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+	{
+		VkImageMemoryBarrier image_memory_barrier {};
+		image_memory_barrier.sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		image_memory_barrier.pNext                           = nullptr;
+		image_memory_barrier.srcAccessMask                   = VK_ACCESS_MEMORY_READ_BIT;
+		image_memory_barrier.dstAccessMask                   = VK_ACCESS_MEMORY_WRITE_BIT;
+		image_memory_barrier.oldLayout                       = color->vulkan_buffer->layout;
+		image_memory_barrier.newLayout                       = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		image_memory_barrier.srcQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+		image_memory_barrier.dstQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+		image_memory_barrier.image                           = color->vulkan_buffer->image;
+		image_memory_barrier.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+		image_memory_barrier.subresourceRange.baseMipLevel   = 0;
+		image_memory_barrier.subresourceRange.levelCount     = 1;
+		image_memory_barrier.subresourceRange.baseArrayLayer = 0;
+		image_memory_barrier.subresourceRange.layerCount     = 1;
+
+		vkCmdPipelineBarrier(buffer, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+		                     VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1,
+		                     &image_memory_barrier);
+
+		color->vulkan_buffer->layout = image_memory_barrier.newLayout;
+	}
 
 	vkCmdBeginRenderPass(buffer, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
 

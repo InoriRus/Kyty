@@ -3,6 +3,7 @@ file(GLOB emulator_src
 	src/*.cpp
 	src/Libs/*.cpp
 	src/Graphics/*.cpp
+	src/Graphics/Objects/*.cpp
 	src/Kernel/*.cpp
 	include/*.h
 )

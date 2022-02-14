@@ -1,4 +1,4 @@
-#include "Emulator/Graphics/StorageBuffer.h"
+#include "Emulator/Graphics/Objects/StorageBuffer.h"
 
 #include "Kyty/Core/DbgAssert.h"
 

@@ -1,10 +1,10 @@
-#ifndef EMULATOR_INCLUDE_EMULATOR_GRAPHICS_TEXTURE_H_
-#define EMULATOR_INCLUDE_EMULATOR_GRAPHICS_TEXTURE_H_
+#ifndef EMULATOR_INCLUDE_EMULATOR_GRAPHICS_OBJECTS_TEXTURE_H_
+#define EMULATOR_INCLUDE_EMULATOR_GRAPHICS_OBJECTS_TEXTURE_H_
 
 #include "Kyty/Core/Common.h"
 
 #include "Emulator/Common.h"
-#include "Emulator/Graphics/GpuMemory.h"
+#include "Emulator/Graphics/Objects/GpuMemory.h"
 
 #ifdef KYTY_EMU_ENABLED
 
@@ -28,7 +28,7 @@ public:
 	static constexpr int PARAM_NEO          = 6;
 	static constexpr int PARAM_SWIZZLE      = 7;
 
-	TextureObject(uint32_t dfmt, uint32_t nfmt, uint32_t width, uint32_t height, uint32_t pitch, uint32_t levels, bool htile, bool neo,
+	TextureObject(uint32_t dfmt, uint32_t nfmt, uint32_t width, uint32_t height, uint32_t pitch, uint32_t levels, uint32_t tile, bool neo,
 	              uint32_t swizzle, uint32_t usage)
 	{
 		params[PARAM_DFMT_NFMT]    = (static_cast<uint64_t>(dfmt) << 32u) | nfmt;
@@ -36,7 +36,7 @@ public:
 		params[PARAM_WIDTH_HEIGHT] = (static_cast<uint64_t>(width) << 32u) | height;
 		params[PARAM_USAGE]        = usage;
 		params[PARAM_LEVELS]       = levels;
-		params[PARAM_TILE]         = htile ? 1 : 0;
+		params[PARAM_TILE]         = tile;
 		params[PARAM_NEO]          = neo ? 1 : 0;
 		params[PARAM_SWIZZLE]      = swizzle;
 		check_hash                 = true;
@@ -55,4 +55,4 @@ public:
 
 #endif // KYTY_EMU_ENABLED
 
-#endif /* EMULATOR_INCLUDE_EMULATOR_GRAPHICS_TEXTURE_H_ */
+#endif /* EMULATOR_INCLUDE_EMULATOR_GRAPHICS_OBJECTS_TEXTURE_H_ */
