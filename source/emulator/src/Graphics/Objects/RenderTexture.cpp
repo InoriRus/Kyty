@@ -14,7 +14,60 @@
 
 namespace Kyty::Libs::Graphics {
 
-void* RenderTextureObject::Create(GraphicContext* ctx, const uint64_t* vaddr, const uint64_t* size, int vaddr_num, VulkanMemory* mem) const
+static bool buffer_is_tiled(uint64_t vaddr, uint64_t size)
+{
+	if ((size & 0x7u) == 0)
+	{
+		const auto* ptr     = reinterpret_cast<const uint64_t*>(vaddr);
+		const auto* ptr_end = reinterpret_cast<const uint64_t*>(vaddr + size / 8);
+		for (uint64_t element = *ptr; ptr < ptr_end; ptr++)
+		{
+			if (element != *ptr)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+	return true;
+}
+
+static void update_func(GraphicContext* ctx, const uint64_t* params, void* obj, const uint64_t* vaddr, const uint64_t* size, int vaddr_num)
+{
+	KYTY_PROFILER_BLOCK("RenderTextureObject::update_func");
+
+	EXIT_IF(obj == nullptr);
+	EXIT_IF(ctx == nullptr);
+	EXIT_IF(params == nullptr);
+	EXIT_IF(vaddr == nullptr || size == nullptr || vaddr_num != 1);
+
+	auto* vk_obj = static_cast<RenderTextureVulkanImage*>(obj);
+
+	bool tiled = (params[RenderTextureObject::PARAM_TILED] != 0);
+	// bool neo    = (params[RenderTextureObject::PARAM_NEO] != 0);
+	auto pitch = params[RenderTextureObject::PARAM_PITCH];
+	auto width = params[RenderTextureObject::PARAM_WIDTH];
+	// auto height = params[RenderTextureObject::PARAM_HEIGHT];
+
+	vk_obj->layout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+	if (tiled && buffer_is_tiled(*vaddr, *size))
+	{
+		EXIT_NOT_IMPLEMENTED(width != pitch);
+		auto* temp_buf = new uint8_t[*size];
+		KYTY_NOT_IMPLEMENTED;
+		// TODO()
+		// TileConvertTiledToLinear(temp_buf, reinterpret_cast<void*>(*vaddr), TileMode::VideoOutTiled, width, height, neo);
+		// UtilFillImage(ctx, vk_obj, temp_buf, *size, pitch);
+		delete[] temp_buf;
+	} else
+	{
+		UtilFillImage(ctx, vk_obj, reinterpret_cast<void*>(*vaddr), *size, pitch);
+	}
+}
+
+static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint64_t* vaddr, const uint64_t* size, int vaddr_num,
+                         VulkanMemory* mem)
 {
 	KYTY_PROFILER_BLOCK("RenderTextureObject::Create");
 
@@ -22,9 +75,9 @@ void* RenderTextureObject::Create(GraphicContext* ctx, const uint64_t* vaddr, co
 	EXIT_IF(mem == nullptr);
 	EXIT_IF(ctx == nullptr);
 
-	auto pixel_format = params[PARAM_FORMAT];
-	auto width        = params[PARAM_WIDTH];
-	auto height       = params[PARAM_HEIGHT];
+	auto pixel_format = params[RenderTextureObject::PARAM_FORMAT];
+	auto width        = params[RenderTextureObject::PARAM_WIDTH];
+	auto height       = params[RenderTextureObject::PARAM_HEIGHT];
 
 	VkFormat vk_format = VK_FORMAT_UNDEFINED;
 
@@ -89,7 +142,7 @@ void* RenderTextureObject::Create(GraphicContext* ctx, const uint64_t* vaddr, co
 
 	// EXIT_NOT_IMPLEMENTED(mem->requirements.size > *size);
 
-	GetUpdateFunc()(ctx, params, vk_obj, vaddr, size, vaddr_num);
+	update_func(ctx, params, vk_obj, vaddr, size, vaddr_num);
 
 	VkImageViewCreateInfo create_info {};
 	create_info.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -115,65 +168,6 @@ void* RenderTextureObject::Create(GraphicContext* ctx, const uint64_t* vaddr, co
 	return vk_obj;
 }
 
-static bool buffer_is_tiled(uint64_t vaddr, uint64_t size)
-{
-	if ((size & 0x7u) == 0)
-	{
-		const auto* ptr     = reinterpret_cast<const uint64_t*>(vaddr);
-		const auto* ptr_end = reinterpret_cast<const uint64_t*>(vaddr + size / 8);
-		for (uint64_t element = *ptr; ptr < ptr_end; ptr++)
-		{
-			if (element != *ptr)
-			{
-				return true;
-			}
-		}
-		return false;
-	}
-	return true;
-}
-
-static void update_func(GraphicContext* ctx, const uint64_t* params, void* obj, const uint64_t* vaddr, const uint64_t* size, int vaddr_num)
-{
-	KYTY_PROFILER_BLOCK("RenderTextureObject::update_func");
-
-	EXIT_IF(obj == nullptr);
-	EXIT_IF(ctx == nullptr);
-	EXIT_IF(params == nullptr);
-	EXIT_IF(vaddr == nullptr || size == nullptr || vaddr_num != 1);
-
-	auto* vk_obj = static_cast<RenderTextureVulkanImage*>(obj);
-
-	bool tiled = (params[RenderTextureObject::PARAM_TILED] != 0);
-	// bool neo    = (params[RenderTextureObject::PARAM_NEO] != 0);
-	auto pitch = params[RenderTextureObject::PARAM_PITCH];
-	auto width = params[RenderTextureObject::PARAM_WIDTH];
-	// auto height = params[RenderTextureObject::PARAM_HEIGHT];
-
-	vk_obj->layout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-	if (tiled && buffer_is_tiled(*vaddr, *size))
-	{
-		EXIT_NOT_IMPLEMENTED(width != pitch);
-		auto* temp_buf = new uint8_t[*size];
-		KYTY_NOT_IMPLEMENTED;
-		// TODO()
-		// TileConvertTiledToLinear(temp_buf, reinterpret_cast<void*>(*vaddr), TileMode::VideoOutTiled, width, height, neo);
-		// UtilFillImage(ctx, vk_obj, temp_buf, *size, pitch);
-		delete[] temp_buf;
-	} else
-	{
-		UtilFillImage(ctx, vk_obj, reinterpret_cast<void*>(*vaddr), *size, pitch);
-	}
-}
-
-bool RenderTextureObject::Equal(const uint64_t* other) const
-{
-	return (params[PARAM_FORMAT] == other[PARAM_FORMAT] && params[PARAM_WIDTH] == other[PARAM_WIDTH] &&
-	        params[PARAM_HEIGHT] == other[PARAM_HEIGHT] && params[PARAM_TILED] == other[PARAM_TILED] &&
-	        params[PARAM_PITCH] == other[PARAM_PITCH] && params[PARAM_PITCH] == other[PARAM_PITCH]);
-}
-
 static void delete_func(GraphicContext* ctx, void* obj, VulkanMemory* mem)
 {
 	KYTY_PROFILER_BLOCK("RenderTextureObject::delete_func");
@@ -194,6 +188,18 @@ static void delete_func(GraphicContext* ctx, void* obj, VulkanMemory* mem)
 	VulkanFree(ctx, mem);
 
 	delete vk_obj;
+}
+
+bool RenderTextureObject::Equal(const uint64_t* other) const
+{
+	return (params[PARAM_FORMAT] == other[PARAM_FORMAT] && params[PARAM_WIDTH] == other[PARAM_WIDTH] &&
+	        params[PARAM_HEIGHT] == other[PARAM_HEIGHT] && params[PARAM_TILED] == other[PARAM_TILED] &&
+	        params[PARAM_PITCH] == other[PARAM_PITCH] && params[PARAM_PITCH] == other[PARAM_PITCH]);
+}
+
+GpuObject::create_func_t RenderTextureObject::GetCreateFunc() const
+{
+	return create_func;
 }
 
 GpuObject::delete_func_t RenderTextureObject::GetDeleteFunc() const

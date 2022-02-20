@@ -14,6 +14,7 @@
 #include "Emulator/Graphics/Objects/Label.h"
 #include "Emulator/Graphics/Objects/RenderTexture.h"
 #include "Emulator/Graphics/Objects/StorageBuffer.h"
+#include "Emulator/Graphics/Objects/StorageTexture.h"
 #include "Emulator/Graphics/Objects/Texture.h"
 #include "Emulator/Graphics/Objects/VertexBuffer.h"
 #include "Emulator/Graphics/Objects/VideoOutBuffer.h"
@@ -161,16 +162,15 @@ public:
 	virtual ~DescriptorCache() { KYTY_NOT_IMPLEMENTED; }
 	KYTY_CLASS_NO_COPY(DescriptorCache);
 
-	VkDescriptorSetLayout GetDescriptorSetLayout(Stage stage, int storage_buffers_num, int textures2d_sampled_num,
-	                                             int textures2d_storage_num, int samplers_num, int gds_buffers_num);
+	VkDescriptorSetLayout GetDescriptorSetLayout(Stage stage, const ShaderBindResources& bind, const ShaderBindParameters& bind_params);
 
 	VulkanDescriptorSet* Allocate(Stage stage, int storage_buffers_num, int textures2d_sampled_num, int textures2d_storage_num,
 	                              int samplers_num, int gds_buffers_num);
 	void                 Free(VulkanDescriptorSet* set);
 
-	VulkanDescriptorSet* GetDescriptor(Stage stage, int storage_buffers_num, VulkanBuffer** storage_buffers, int textures2d_sampled_num,
-	                                   VulkanImage** textures2d_sampled, int textures2d_storage_num, VulkanImage** textures2d_storage,
-	                                   int samplers_num, uint64_t* samplers, int gds_buffers_num, VulkanBuffer** gds_buffers);
+	VulkanDescriptorSet* GetDescriptor(Stage stage, VulkanBuffer** storage_buffers, VulkanImage** textures2d_sampled,
+	                                   VulkanImage** textures2d_storage, uint64_t* samplers, VulkanBuffer** gds_buffers,
+	                                   const ShaderBindResources& bind, const ShaderBindParameters& bind_params);
 	void                 FreeDescriptor(VulkanBuffer* buffer);
 	void                 FreeDescriptor(VulkanImage* image);
 
@@ -1603,10 +1603,7 @@ static void CreateLayout(VkDescriptorSetLayout* set_layouts, uint32_t* set_layou
 	{
 		EXIT_IF(bind.descriptor_set_slot != *set_layouts_num);
 
-		set_layouts[*set_layouts_num] = g_render_ctx->GetDescriptorCache()->GetDescriptorSetLayout(
-		    stage, bind.storage_buffers.buffers_num, (bind_params.textures2D_without_sampler ? 0 : bind.textures2D.textures_num),
-		    (bind_params.textures2D_without_sampler ? bind.textures2D.textures_num : 0), bind.samplers.samplers_num,
-		    (bind.gds_pointers.pointers_num > 0 ? 1 : 0));
+		set_layouts[*set_layouts_num] = g_render_ctx->GetDescriptorCache()->GetDescriptorSetLayout(stage, bind, bind_params);
 		(*set_layouts_num)++;
 	}
 }
@@ -2040,6 +2037,8 @@ VulkanPipeline* PipelineCache::CreatePipeline(VulkanFramebuffer* framebuffer, Re
 	p.vs_shader_id   = vs_id;
 	p.params         = new PipelineParameters;
 
+	EXIT_NOT_IMPLEMENTED(depth->depth_test_enable && ps_input_info->ps_execute_on_noop);
+
 	p.params->viewport_scale[0]        = vp.viewports[0].xscale;
 	p.params->viewport_scale[1]        = vp.viewports[0].yscale;
 	p.params->viewport_scale[2]        = vp.viewports[0].zscale;
@@ -2241,12 +2240,22 @@ static void create_layout(GraphicContext* gctx, int storage_buffers_num, int tex
 {
 	uint32_t binding_num = 0;
 
-	VkDescriptorSetLayoutBinding ubo_layout_binding[5] = {};
+	ShaderBindResources tmp {};
+	tmp.storage_buffers.buffers_num = storage_buffers_num;
+	tmp.textures2D.textures_num     = textures2d_sampled_num + textures2d_storage_num;
+	tmp.samplers.samplers_num       = samplers_num;
+	tmp.gds_pointers.pointers_num   = gds_buffers_num;
+
+	ShaderCalcBindingIndices(&tmp);
+
+	constexpr uint32_t B_MAX = 5;
+
+	VkDescriptorSetLayoutBinding ubo_layout_binding[B_MAX] = {};
 
 	if (storage_buffers_num > 0)
 	{
-		EXIT_IF(binding_num >= sizeof(ubo_layout_binding) / sizeof(ubo_layout_binding[0]));
-		ubo_layout_binding[binding_num].binding            = binding_num;
+		EXIT_IF(binding_num >= B_MAX);
+		ubo_layout_binding[binding_num].binding            = tmp.storage_buffers.binding_index;
 		ubo_layout_binding[binding_num].descriptorType     = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		ubo_layout_binding[binding_num].descriptorCount    = storage_buffers_num;
 		ubo_layout_binding[binding_num].stageFlags         = stage;
@@ -2256,8 +2265,8 @@ static void create_layout(GraphicContext* gctx, int storage_buffers_num, int tex
 
 	if (textures2d_sampled_num > 0)
 	{
-		EXIT_IF(binding_num >= sizeof(ubo_layout_binding) / sizeof(ubo_layout_binding[0]));
-		ubo_layout_binding[binding_num].binding            = binding_num;
+		EXIT_IF(binding_num >= B_MAX);
+		ubo_layout_binding[binding_num].binding            = tmp.textures2D.binding_sampled_index;
 		ubo_layout_binding[binding_num].descriptorType     = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
 		ubo_layout_binding[binding_num].descriptorCount    = textures2d_sampled_num;
 		ubo_layout_binding[binding_num].stageFlags         = stage;
@@ -2267,8 +2276,8 @@ static void create_layout(GraphicContext* gctx, int storage_buffers_num, int tex
 
 	if (textures2d_storage_num > 0)
 	{
-		EXIT_IF(binding_num >= sizeof(ubo_layout_binding) / sizeof(ubo_layout_binding[0]));
-		ubo_layout_binding[binding_num].binding            = binding_num;
+		EXIT_IF(binding_num >= B_MAX);
+		ubo_layout_binding[binding_num].binding            = tmp.textures2D.binding_storage_index;
 		ubo_layout_binding[binding_num].descriptorType     = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 		ubo_layout_binding[binding_num].descriptorCount    = textures2d_storage_num;
 		ubo_layout_binding[binding_num].stageFlags         = stage;
@@ -2278,8 +2287,8 @@ static void create_layout(GraphicContext* gctx, int storage_buffers_num, int tex
 
 	if (samplers_num > 0)
 	{
-		EXIT_IF(binding_num >= sizeof(ubo_layout_binding) / sizeof(ubo_layout_binding[0]));
-		ubo_layout_binding[binding_num].binding            = binding_num;
+		EXIT_IF(binding_num >= B_MAX);
+		ubo_layout_binding[binding_num].binding            = tmp.samplers.binding_index;
 		ubo_layout_binding[binding_num].descriptorType     = VK_DESCRIPTOR_TYPE_SAMPLER;
 		ubo_layout_binding[binding_num].descriptorCount    = samplers_num;
 		ubo_layout_binding[binding_num].stageFlags         = stage;
@@ -2289,8 +2298,8 @@ static void create_layout(GraphicContext* gctx, int storage_buffers_num, int tex
 
 	if (gds_buffers_num > 0)
 	{
-		EXIT_IF(binding_num >= sizeof(ubo_layout_binding) / sizeof(ubo_layout_binding[0]));
-		ubo_layout_binding[binding_num].binding            = binding_num;
+		EXIT_IF(binding_num >= B_MAX);
+		ubo_layout_binding[binding_num].binding            = tmp.gds_pointers.binding_index;
 		ubo_layout_binding[binding_num].descriptorType     = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		ubo_layout_binding[binding_num].descriptorCount    = gds_buffers_num;
 		ubo_layout_binding[binding_num].stageFlags         = stage;
@@ -2472,11 +2481,16 @@ void DescriptorCache::Free(VulkanDescriptorSet* set)
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-VulkanDescriptorSet* DescriptorCache::GetDescriptor(Stage stage, int storage_buffers_num, VulkanBuffer** storage_buffers,
-                                                    int textures2d_sampled_num, VulkanImage** textures2d_sampled,
-                                                    int textures2d_storage_num, VulkanImage** textures2d_storage, int samplers_num,
-                                                    uint64_t* samplers, int gds_buffers_num, VulkanBuffer** gds_buffers)
+VulkanDescriptorSet* DescriptorCache::GetDescriptor(Stage stage, VulkanBuffer** storage_buffers, VulkanImage** textures2d_sampled,
+                                                    VulkanImage** textures2d_storage, uint64_t* samplers, VulkanBuffer** gds_buffers,
+                                                    const ShaderBindResources& bind, const ShaderBindParameters& bind_params)
 {
+	int storage_buffers_num    = bind.storage_buffers.buffers_num;
+	int textures2d_sampled_num = bind_params.textures2d_sampled_num;
+	int textures2d_storage_num = bind_params.textures2d_storage_num;
+	int samplers_num           = bind.samplers.samplers_num;
+	int gds_buffers_num        = bind.gds_pointers.pointers_num;
+
 	EXIT_IF(storage_buffers_num < 0 || storage_buffers_num > BUFFERS_MAX);
 	EXIT_IF(textures2d_sampled_num < 0 || textures2d_sampled_num > TEXTURES_SAMPLED_MAX);
 	EXIT_IF(textures2d_storage_num < 0 || textures2d_storage_num > TEXTURES_STORAGE_MAX);
@@ -2599,15 +2613,17 @@ VulkanDescriptorSet* DescriptorCache::GetDescriptor(Stage stage, int storage_buf
 
 	int binding_num = 0;
 
-	VkWriteDescriptorSet descriptor_write[5] = {};
+	constexpr uint32_t B_MAX = 5;
+
+	VkWriteDescriptorSet descriptor_write[B_MAX] = {};
 
 	if (storage_buffers_num > 0)
 	{
-		EXIT_IF(binding_num >= static_cast<int>(sizeof(descriptor_write) / sizeof(descriptor_write[0])));
+		EXIT_IF(binding_num >= B_MAX);
 		descriptor_write[binding_num].sType            = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		descriptor_write[binding_num].pNext            = nullptr;
 		descriptor_write[binding_num].dstSet           = new_set->set;
-		descriptor_write[binding_num].dstBinding       = binding_num;
+		descriptor_write[binding_num].dstBinding       = bind.storage_buffers.binding_index;
 		descriptor_write[binding_num].dstArrayElement  = 0;
 		descriptor_write[binding_num].descriptorType   = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		descriptor_write[binding_num].descriptorCount  = storage_buffers_num;
@@ -2619,11 +2635,11 @@ VulkanDescriptorSet* DescriptorCache::GetDescriptor(Stage stage, int storage_buf
 
 	if (textures2d_sampled_num > 0)
 	{
-		EXIT_IF(binding_num >= static_cast<int>(sizeof(descriptor_write) / sizeof(descriptor_write[0])));
+		EXIT_IF(binding_num >= B_MAX);
 		descriptor_write[binding_num].sType            = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		descriptor_write[binding_num].pNext            = nullptr;
 		descriptor_write[binding_num].dstSet           = new_set->set;
-		descriptor_write[binding_num].dstBinding       = binding_num;
+		descriptor_write[binding_num].dstBinding       = bind.textures2D.binding_sampled_index;
 		descriptor_write[binding_num].dstArrayElement  = 0;
 		descriptor_write[binding_num].descriptorType   = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
 		descriptor_write[binding_num].descriptorCount  = textures2d_sampled_num;
@@ -2635,11 +2651,11 @@ VulkanDescriptorSet* DescriptorCache::GetDescriptor(Stage stage, int storage_buf
 
 	if (textures2d_storage_num > 0)
 	{
-		EXIT_IF(binding_num >= static_cast<int>(sizeof(descriptor_write) / sizeof(descriptor_write[0])));
+		EXIT_IF(binding_num >= B_MAX);
 		descriptor_write[binding_num].sType            = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		descriptor_write[binding_num].pNext            = nullptr;
 		descriptor_write[binding_num].dstSet           = new_set->set;
-		descriptor_write[binding_num].dstBinding       = binding_num;
+		descriptor_write[binding_num].dstBinding       = bind.textures2D.binding_storage_index;
 		descriptor_write[binding_num].dstArrayElement  = 0;
 		descriptor_write[binding_num].descriptorType   = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 		descriptor_write[binding_num].descriptorCount  = textures2d_storage_num;
@@ -2651,11 +2667,11 @@ VulkanDescriptorSet* DescriptorCache::GetDescriptor(Stage stage, int storage_buf
 
 	if (samplers_num > 0)
 	{
-		EXIT_IF(binding_num >= static_cast<int>(sizeof(descriptor_write) / sizeof(descriptor_write[0])));
+		EXIT_IF(binding_num >= B_MAX);
 		descriptor_write[binding_num].sType            = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		descriptor_write[binding_num].pNext            = nullptr;
 		descriptor_write[binding_num].dstSet           = new_set->set;
-		descriptor_write[binding_num].dstBinding       = binding_num;
+		descriptor_write[binding_num].dstBinding       = bind.samplers.binding_index;
 		descriptor_write[binding_num].dstArrayElement  = 0;
 		descriptor_write[binding_num].descriptorType   = VK_DESCRIPTOR_TYPE_SAMPLER;
 		descriptor_write[binding_num].descriptorCount  = samplers_num;
@@ -2667,11 +2683,11 @@ VulkanDescriptorSet* DescriptorCache::GetDescriptor(Stage stage, int storage_buf
 
 	if (gds_buffers_num > 0)
 	{
-		EXIT_IF(binding_num >= static_cast<int>(sizeof(descriptor_write) / sizeof(descriptor_write[0])));
+		EXIT_IF(binding_num >= B_MAX);
 		descriptor_write[binding_num].sType            = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		descriptor_write[binding_num].pNext            = nullptr;
 		descriptor_write[binding_num].dstSet           = new_set->set;
-		descriptor_write[binding_num].dstBinding       = binding_num;
+		descriptor_write[binding_num].dstBinding       = bind.gds_pointers.binding_index;
 		descriptor_write[binding_num].dstArrayElement  = 0;
 		descriptor_write[binding_num].descriptorType   = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		descriptor_write[binding_num].descriptorCount  = gds_buffers_num;
@@ -2772,9 +2788,15 @@ void DescriptorCache::FreeDescriptor(VulkanImage* image)
 	}
 }
 
-VkDescriptorSetLayout DescriptorCache::GetDescriptorSetLayout(Stage stage, int storage_buffers_num, int textures2d_sampled_num,
-                                                              int textures2d_storage_num, int samplers_num, int gds_buffers_num)
+VkDescriptorSetLayout DescriptorCache::GetDescriptorSetLayout(Stage stage, const ShaderBindResources& bind,
+                                                              const ShaderBindParameters& bind_params)
 {
+	int storage_buffers_num    = bind.storage_buffers.buffers_num;
+	int textures2d_sampled_num = bind_params.textures2d_sampled_num;
+	int textures2d_storage_num = bind_params.textures2d_storage_num;
+	int samplers_num           = bind.samplers.samplers_num;
+	int gds_buffers_num        = bind.gds_pointers.pointers_num;
+
 	EXIT_IF(storage_buffers_num < 0 || storage_buffers_num > BUFFERS_MAX);
 	EXIT_IF(textures2d_sampled_num < 0 || textures2d_sampled_num > TEXTURES_SAMPLED_MAX);
 	EXIT_IF(textures2d_storage_num < 0 || textures2d_storage_num > TEXTURES_STORAGE_MAX);
@@ -2822,6 +2844,11 @@ void DeleteDescriptor(VulkanBuffer* buffer)
 }
 
 void DeleteDescriptor(TextureVulkanImage* image)
+{
+	g_render_ctx->GetDescriptorCache()->FreeDescriptor(image);
+}
+
+void DeleteDescriptor(StorageTextureVulkanImage* image)
 {
 	g_render_ctx->GetDescriptorCache()->FreeDescriptor(image);
 }
@@ -3138,11 +3165,17 @@ static void PrepareStorageBuffers(const ShaderStorageResources& storage_buffers,
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-static void PrepareTextures(const ShaderTextureResources& textures, VulkanImage** images, uint32_t** sgprs, bool with_sampler)
+static void PrepareTextures(const ShaderTextureResources& textures, VulkanImage** images_sampled, VulkanImage** images_storage,
+                            uint32_t** sgprs, const bool* without_sampler)
 {
-	EXIT_IF(images == nullptr);
+	EXIT_IF(images_sampled == nullptr);
+	EXIT_IF(images_storage == nullptr);
 	EXIT_IF(sgprs == nullptr);
 	EXIT_IF(*sgprs == nullptr);
+	EXIT_IF(without_sampler == nullptr);
+
+	int index_sampled = 0;
+	int index_storage = 0;
 
 	for (int i = 0; i < textures.textures_num; i++)
 	{
@@ -3172,7 +3205,12 @@ static void PrepareTextures(const ShaderTextureResources& textures, VulkanImage*
 		EXIT_NOT_IMPLEMENTED(r.MinLodWarn() != 0);
 		EXIT_NOT_IMPLEMENTED(r.CounterBankId() != 0);
 		EXIT_NOT_IMPLEMENTED(r.LodHdwCntEn() != false);
-		EXIT_NOT_IMPLEMENTED(r.MemoryType() != 0x10);
+		EXIT_NOT_IMPLEMENTED(r.MemoryType() != 0x10 && r.MemoryType() != 0x6d);
+
+		bool read_only = (r.MemoryType() == 0x10);
+
+		EXIT_NOT_IMPLEMENTED(read_only && !(textures.usages[i] == ShaderTextureUsage::ReadOnly));
+		// EXIT_NOT_IMPLEMENTED(!read_only && !(textures.usages[i] == ShaderTextureUsage::ReadWrite));
 
 		auto     addr    = r.Base();
 		uint32_t size    = 0;
@@ -3192,17 +3230,34 @@ static void PrepareTextures(const ShaderTextureResources& textures, VulkanImage*
 
 		if (tex == nullptr)
 		{
-			TextureObject vulkan_texture_info(r.Dfmt(), r.Nfmt(), width, height, pitch, levels, tile, neo, swizzle,
-			                                  (with_sampler ? TextureObject::TEXTURE_USAGE_SAMPLED : TextureObject::TEXTURE_USAGE_STORAGE));
+			if (without_sampler[i])
+			{
+				StorageTextureObject vulkan_texture_info(r.Dfmt(), r.Nfmt(), width, height, pitch, levels, tile, neo, swizzle);
 
-			tex = static_cast<TextureVulkanImage*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), addr, size, vulkan_texture_info));
+				tex = static_cast<StorageTextureVulkanImage*>(
+				    GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), addr, size, vulkan_texture_info));
+			} else
+			{
+				TextureObject vulkan_texture_info(r.Dfmt(), r.Nfmt(), width, height, pitch, levels, tile, neo, swizzle);
+
+				tex =
+				    static_cast<TextureVulkanImage*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), addr, size, vulkan_texture_info));
+			}
 		}
 
 		EXIT_NOT_IMPLEMENTED(tex == nullptr);
 
-		images[i] = tex;
-
-		r.UpdateAddress(i);
+		if (without_sampler[i])
+		{
+			images_storage[index_storage] = tex;
+			r.UpdateAddress(index_storage);
+			index_storage++;
+		} else
+		{
+			images_sampled[index_sampled] = tex;
+			r.UpdateAddress(index_sampled);
+			index_sampled++;
+		}
 
 		EXIT_NOT_IMPLEMENTED((r.Base() >> 32u) != 0);
 
@@ -3243,16 +3298,16 @@ static void PrepareSamplers(const ShaderSamplerResources& samplers, uint64_t* sa
 		EXIT_NOT_IMPLEMENTED(r.TruncCoord() != false);
 		EXIT_NOT_IMPLEMENTED(r.DisableCubeWrap() != false);
 		EXIT_NOT_IMPLEMENTED(r.FilterMode() != 0);
-		EXIT_NOT_IMPLEMENTED(r.MinLod() != 0);
-		EXIT_NOT_IMPLEMENTED(r.MaxLod() != 4095);
+		// EXIT_NOT_IMPLEMENTED(r.MinLod() != 0);
+		// EXIT_NOT_IMPLEMENTED(r.MaxLod() != 4095);
 		EXIT_NOT_IMPLEMENTED(r.PerfMip() != 0);
 		EXIT_NOT_IMPLEMENTED(r.PerfZ() != 0);
 		EXIT_NOT_IMPLEMENTED(r.LodBias() != 0);
 		EXIT_NOT_IMPLEMENTED(r.LodBiasSec() != 0);
-		EXIT_NOT_IMPLEMENTED(r.XyMagFilter() != 1);
-		EXIT_NOT_IMPLEMENTED(r.XyMinFilter() != 1);
+		// EXIT_NOT_IMPLEMENTED(r.XyMagFilter() != 1);
+		// EXIT_NOT_IMPLEMENTED(r.XyMinFilter() != 1);
 		EXIT_NOT_IMPLEMENTED(r.ZFilter() != 1);
-		EXIT_NOT_IMPLEMENTED(r.MipFilter() != 0 && r.MipFilter() != 2);
+		// EXIT_NOT_IMPLEMENTED(r.MipFilter() != 0 && r.MipFilter() != 2);
 		EXIT_NOT_IMPLEMENTED(r.BorderColorPtr() != 0);
 		EXIT_NOT_IMPLEMENTED(r.BorderColorType() != 0);
 
@@ -3297,9 +3352,9 @@ static void BindDescriptors(VkCommandBuffer vk_buffer, VkPipelineBindPoint pipel
 	{
 		EXIT_NOT_IMPLEMENTED(bind.push_constant_size > DescriptorCache::PUSH_CONSTANTS_MAX * 4);
 		EXIT_NOT_IMPLEMENTED(bind.storage_buffers.buffers_num > DescriptorCache::BUFFERS_MAX);
-		EXIT_NOT_IMPLEMENTED(
-		    (bind_params.textures2D_without_sampler && bind.textures2D.textures_num > DescriptorCache::TEXTURES_STORAGE_MAX) ||
-		    (!bind_params.textures2D_without_sampler && bind.textures2D.textures_num > DescriptorCache::TEXTURES_SAMPLED_MAX));
+		EXIT_NOT_IMPLEMENTED((bind_params.textures2d_storage_num > DescriptorCache::TEXTURES_STORAGE_MAX) ||
+		                     (bind_params.textures2d_sampled_num > DescriptorCache::TEXTURES_SAMPLED_MAX));
+		EXIT_NOT_IMPLEMENTED(bind_params.textures2d_storage_num + bind_params.textures2d_sampled_num != bind.textures2D.textures_num);
 		EXIT_NOT_IMPLEMENTED(bind.samplers.samplers_num > DescriptorCache::SAMPLERS_MAX);
 
 		VulkanBuffer* storage_buffers[DescriptorCache::BUFFERS_MAX];
@@ -3318,13 +3373,7 @@ static void BindDescriptors(VkCommandBuffer vk_buffer, VkPipelineBindPoint pipel
 		}
 		if (bind.textures2D.textures_num > 0)
 		{
-			if (bind_params.textures2D_without_sampler)
-			{
-				PrepareTextures(bind.textures2D, textures2d_storage, &sgprs_ptr, false);
-			} else
-			{
-				PrepareTextures(bind.textures2D, textures2d_sampled, &sgprs_ptr, true);
-			}
+			PrepareTextures(bind.textures2D, textures2d_sampled, textures2d_storage, &sgprs_ptr, bind_params.textures2d_without_sampler);
 		}
 		if (bind.samplers.samplers_num > 0)
 		{
@@ -3339,10 +3388,7 @@ static void BindDescriptors(VkCommandBuffer vk_buffer, VkPipelineBindPoint pipel
 		EXIT_IF(bind.push_constant_size != (sgprs_ptr - sgprs) * 4);
 
 		auto* descriptor_set = g_render_ctx->GetDescriptorCache()->GetDescriptor(
-		    stage, bind.storage_buffers.buffers_num, storage_buffers,
-		    (bind_params.textures2D_without_sampler ? 0 : bind.textures2D.textures_num), textures2d_sampled,
-		    (bind_params.textures2D_without_sampler ? bind.textures2D.textures_num : 0), textures2d_storage, bind.samplers.samplers_num,
-		    samplers, (gds_buffer != nullptr ? 1 : 0), &gds_buffer);
+		    stage, storage_buffers, textures2d_sampled, textures2d_storage, samplers, &gds_buffer, bind, bind_params);
 
 		EXIT_IF(descriptor_set == nullptr);
 		vkCmdBindDescriptorSets(vk_buffer, pipeline_bind_point, layout, bind.descriptor_set_slot, 1, &descriptor_set->set, 0, nullptr);
@@ -3565,8 +3611,8 @@ void GraphicsRenderDrawIndexAuto(CommandBuffer* buffer, HardwareContext* ctx, Us
 	{
 		case 4: vkCmdDraw(vk_buffer, index_count, 1, 0, 0); break;
 		case 17:
-			EXIT_NOT_IMPLEMENTED(!(vertex_shader_info.vs_embedded && vertex_shader_info.vs_embedded_id == 0 && index_count == 3 &&
-			                       vs_input_info.buffers_num == 0));
+			EXIT_NOT_IMPLEMENTED(!(/*vertex_shader_info.vs_embedded && vertex_shader_info.vs_embedded_id == 0 &&*/
+			                       index_count == 3 && vs_input_info.buffers_num == 0));
 			vkCmdDraw(vk_buffer, 4, 1, 0, 0);
 			break;
 		case 19:
@@ -3662,7 +3708,7 @@ void GraphicsRenderRenderTextureBarrier(CommandBuffer* buffer, uint64_t vaddr, u
 	image_memory_barrier.image                           = image->image;
 	image_memory_barrier.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
 	image_memory_barrier.subresourceRange.baseMipLevel   = 0;
-	image_memory_barrier.subresourceRange.levelCount     = 1;
+	image_memory_barrier.subresourceRange.levelCount     = VK_REMAINING_MIP_LEVELS;
 	image_memory_barrier.subresourceRange.baseArrayLayer = 0;
 	image_memory_barrier.subresourceRange.layerCount     = 1;
 
@@ -4221,7 +4267,7 @@ VulkanFramebuffer* CommandBuffer::BeginRenderPass(RenderColorInfo* color, Render
 		image_memory_barrier.image                           = color->vulkan_buffer->image;
 		image_memory_barrier.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
 		image_memory_barrier.subresourceRange.baseMipLevel   = 0;
-		image_memory_barrier.subresourceRange.levelCount     = 1;
+		image_memory_barrier.subresourceRange.levelCount     = VK_REMAINING_MIP_LEVELS;
 		image_memory_barrier.subresourceRange.baseArrayLayer = 0;
 		image_memory_barrier.subresourceRange.layerCount     = 1;
 

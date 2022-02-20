@@ -120,9 +120,8 @@ private:
 
 	struct ObjectInfo
 	{
-		void*                        obj                           = nullptr;
+		GpuMemoryObject              object;
 		uint64_t                     params[GpuObject::PARAMS_MAX] = {};
-		GpuMemoryObjectType          type                          = GpuMemoryObjectType::Invalid;
 		uint64_t                     hash[VADDR_BLOCKS_MAX]        = {};
 		GpuObject::write_back_func_t write_back_func               = nullptr;
 		GpuObject::delete_func_t     delete_func                   = nullptr;
@@ -378,7 +377,13 @@ static uint64_t calc_hash(const uint8_t* buf, uint64_t size)
 
 void GpuMemory::Link(int id1, int id2, OverlapType rel)
 {
-	EXIT_NOT_IMPLEMENTED(rel != OverlapType::Equals);
+	OverlapType other_rel = OverlapType::None;
+	switch (rel)
+	{
+		case OverlapType::Equals: other_rel = OverlapType::Equals; break;
+		case OverlapType::IsContainedWithin: other_rel = OverlapType::Contains; break;
+		default: EXIT("invalid rel: %s\n", Core::EnumName(rel).C_Str());
+	}
 
 	auto& h1 = m_objects[id1];
 	EXIT_IF(h1.free);
@@ -386,11 +391,11 @@ void GpuMemory::Link(int id1, int id2, OverlapType rel)
 	auto& h2 = m_objects[id2];
 	EXIT_IF(h2.free);
 
-	EXIT_NOT_IMPLEMENTED(!h1.others.IsEmpty());
-	EXIT_NOT_IMPLEMENTED(!h2.others.IsEmpty());
+	// EXIT_NOT_IMPLEMENTED(!h1.others.IsEmpty());
+	// EXIT_NOT_IMPLEMENTED(!h2.others.IsEmpty());
 
 	h1.others.Add({rel, id2});
-	h2.others.Add({rel, id1});
+	h2.others.Add({other_rel, id1});
 }
 
 void GpuMemory::Update(GraphicContext* ctx, ObjectInfo& o, const uint64_t* vaddr, const uint64_t* size, int vaddr_num, const uint64_t* hash)
@@ -400,8 +405,8 @@ void GpuMemory::Update(GraphicContext* ctx, ObjectInfo& o, const uint64_t* vaddr
 	{
 		if (o.hash[vi] != hash[vi])
 		{
-			printf("Update (CPU -> GPU): type = %s, vaddr = 0x%016" PRIx64 ", size = 0x%016" PRIx64 "\n", Core::EnumName(o.type).C_Str(),
-			       vaddr[vi], size[vi]);
+			printf("Update (CPU -> GPU): type = %s, vaddr = 0x%016" PRIx64 ", size = 0x%016" PRIx64 "\n",
+			       Core::EnumName(o.object.type).C_Str(), vaddr[vi], size[vi]);
 			need_update = true;
 			o.hash[vi]  = hash[vi];
 		}
@@ -409,7 +414,7 @@ void GpuMemory::Update(GraphicContext* ctx, ObjectInfo& o, const uint64_t* vaddr
 	if (need_update)
 	{
 		EXIT_IF(o.update_func == nullptr);
-		o.update_func(ctx, o.params, o.obj, vaddr, size, vaddr_num);
+		o.update_func(ctx, o.params, o.object.obj, vaddr, size, vaddr_num);
 	}
 }
 
@@ -436,8 +441,9 @@ void* GpuMemory::CreateObject(GraphicContext* ctx, const uint64_t* vaddr, const 
 		}
 	}
 
-	bool overlap    = false;
-	bool delete_all = false;
+	bool overlap             = false;
+	bool delete_all          = false;
+	bool create_from_objects = false;
 
 	auto others = FindBlocks(vaddr, size, vaddr_num);
 
@@ -448,7 +454,7 @@ void* GpuMemory::CreateObject(GraphicContext* ctx, const uint64_t* vaddr, const 
 			auto& h = m_objects[obj.object_id];
 			EXIT_IF(h.free);
 			auto& o = h.info;
-			if (obj.relation == OverlapType::Equals && o.type == info.type && info.Equal(o.params))
+			if (obj.relation == OverlapType::Equals && o.object.type == info.type && info.Equal(o.params))
 			{
 				Update(ctx, o, vaddr, size, vaddr_num, hash);
 
@@ -457,7 +463,7 @@ void* GpuMemory::CreateObject(GraphicContext* ctx, const uint64_t* vaddr, const 
 				o.in_use         = true;
 				o.read_only      = info.read_only;
 				o.check_hash     = info.check_hash;
-				return o.obj;
+				return o.object.obj;
 			}
 		}
 
@@ -468,7 +474,7 @@ void* GpuMemory::CreateObject(GraphicContext* ctx, const uint64_t* vaddr, const 
 			EXIT_IF(h.free);
 			auto& o = h.info;
 
-			switch (ObjectsRelation(o.type, obj.relation, info.type))
+			switch (ObjectsRelation(o.object.type, obj.relation, info.type))
 			{
 				case ObjectsRelation(GpuMemoryObjectType::StorageBuffer, OverlapType::Equals, GpuMemoryObjectType::RenderTexture):
 				case ObjectsRelation(GpuMemoryObjectType::VideoOutBuffer, OverlapType::Equals, GpuMemoryObjectType::StorageBuffer):
@@ -482,23 +488,33 @@ void* GpuMemory::CreateObject(GraphicContext* ctx, const uint64_t* vaddr, const 
 					delete_all = true;
 					break;
 				}
+				case ObjectsRelation(GpuMemoryObjectType::StorageTexture, OverlapType::Equals, GpuMemoryObjectType::Texture):
+				{
+					overlap             = true;
+					create_from_objects = true;
+					break;
+				}
 				default:
-					EXIT("unknown relation: %s - %s - %s\n", Core::EnumName(o.type).C_Str(), Core::EnumName(obj.relation).C_Str(),
+					EXIT("unknown relation: %s - %s - %s\n", Core::EnumName(o.object.type).C_Str(), Core::EnumName(obj.relation).C_Str(),
 					     Core::EnumName(info.type).C_Str());
 			}
 		} else
 		{
 			OverlapType         rel  = others.At(0).relation;
-			GpuMemoryObjectType type = m_objects[others.At(0).object_id].info.type;
+			GpuMemoryObjectType type = m_objects[others.At(0).object_id].info.object.type;
 			for (const auto& obj: others)
 			{
-				EXIT_NOT_IMPLEMENTED(rel != obj.relation || type != m_objects[obj.object_id].info.type);
+				EXIT_NOT_IMPLEMENTED(rel != obj.relation || type != m_objects[obj.object_id].info.object.type);
 			}
 
 			switch (ObjectsRelation(type, rel, info.type)) // NOLINT
 			{
 				case ObjectsRelation(GpuMemoryObjectType::Label, OverlapType::IsContainedWithin, GpuMemoryObjectType::StorageBuffer):
 					delete_all = true;
+					break;
+				case ObjectsRelation(GpuMemoryObjectType::RenderTexture, OverlapType::IsContainedWithin, GpuMemoryObjectType::Texture):
+					overlap             = true;
+					create_from_objects = true;
 					break;
 				default:
 					EXIT("unknown relation: %s - %s - %s\n", Core::EnumName(type).C_Str(), Core::EnumName(rel).C_Str(),
@@ -529,13 +545,29 @@ void* GpuMemory::CreateObject(GraphicContext* ctx, const uint64_t* vaddr, const 
 		o.params[i] = info.params[i];
 	}
 
-	o.type = info.type;
-	o.obj  = nullptr;
+	o.object.type = info.type;
+	o.object.obj  = nullptr;
 	for (int vi = 0; vi < vaddr_num; vi++)
 	{
 		o.hash[vi] = hash[vi];
 	}
-	o.obj             = info.Create(ctx, vaddr, size, vaddr_num, &o.mem);
+
+	if (create_from_objects)
+	{
+		Vector<GpuMemoryObject> objects;
+		for (const auto& obj: others)
+		{
+			const auto& o2 = m_objects[obj.object_id].info;
+			objects.Add(o2.object);
+		}
+		auto create_func = info.GetCreateFromObjectsFunc();
+		EXIT_IF(create_func == nullptr);
+		o.object.obj = create_func(ctx, o.params, objects, &o.mem);
+	} else
+	{
+		o.object.obj = info.GetCreateFunc()(ctx, o.params, vaddr, size, vaddr_num, &o.mem);
+	}
+
 	o.write_back_func = info.GetWriteBackFunc();
 	o.delete_func     = info.GetDeleteFunc();
 	o.update_func     = info.GetUpdateFunc();
@@ -574,12 +606,13 @@ void* GpuMemory::CreateObject(GraphicContext* ctx, const uint64_t* vaddr, const 
 
 	if (overlap)
 	{
-		EXIT_NOT_IMPLEMENTED(others.Size() != 1);
-
-		Link(index, others.At(0).object_id, others.At(0).relation);
+		for (const auto& obj: others)
+		{
+			Link(index, obj.object_id, obj.relation);
+		}
 	}
 
-	return o.obj;
+	return o.object.obj;
 }
 
 Vector<GpuMemoryObject> GpuMemory::FindObjects(const uint64_t* vaddr, const uint64_t* size, int vaddr_num)
@@ -603,10 +636,10 @@ Vector<GpuMemoryObject> GpuMemory::FindObjects(const uint64_t* vaddr, const uint
 	{
 		const auto& h = m_objects[obj.object_id];
 		EXIT_IF(h.free);
-		printf("\t %s, %d, %s\n", Core::EnumName(obj.relation).C_Str(), obj.object_id, Core::EnumName(h.info.type).C_Str());
+		printf("\t %s, %d, %s\n", Core::EnumName(obj.relation).C_Str(), obj.object_id, Core::EnumName(h.info.object.type).C_Str());
 		if (obj.relation == OverlapType::Equals)
 		{
-			ret.Add({h.info.type, h.info.obj});
+			ret.Add(h.info.object);
 		}
 	}
 
@@ -634,13 +667,13 @@ void GpuMemory::ResetHash(GraphicContext* /*ctx*/, const uint64_t* vaddr, const 
 			EXIT_IF(h.free);
 
 			auto& o = h.info;
-			if (o.type == type)
+			if (o.object.type == type)
 			{
 				for (int vi = 0; vi < vaddr_num; vi++)
 				{
 					printf("ResetHash: type = %s, vaddr = 0x%016" PRIx64 ", size = 0x%016" PRIx64 ", old_hash = 0x%016" PRIx64
 					       ", new_hash = 0x%016" PRIx64 "\n",
-					       Core::EnumName(o.type).C_Str(), vaddr[vi], size[vi], o.hash[vi], new_hash);
+					       Core::EnumName(o.object.type).C_Str(), vaddr[vi], size[vi], o.hash[vi], new_hash);
 
 					o.hash[vi] = new_hash;
 				}
@@ -699,10 +732,10 @@ void GpuMemory::Free(GraphicContext* ctx, int object_id)
 		// EXIT_IF(block.free);
 		for (int vi = 0; vi < block.vaddr_num; vi++)
 		{
-			printf("Delete: type = %s, vaddr = 0x%016" PRIx64 ", size = 0x%016" PRIx64 "\n", Core::EnumName(o.type).C_Str(),
+			printf("Delete: type = %s, vaddr = 0x%016" PRIx64 ", size = 0x%016" PRIx64 "\n", Core::EnumName(o.object.type).C_Str(),
 			       block.vaddr[vi], block.size[vi]);
 		}
-		o.delete_func(ctx, o.obj, &o.mem);
+		o.delete_func(ctx, o.object.obj, &o.mem);
 	}
 	h.free = true;
 	DeleteBlock(&h.block);
@@ -840,7 +873,7 @@ void GpuMemory::WriteBack(GraphicContext* ctx)
 				auto& block = h.block;
 				// EXIT_IF(block.free);
 
-				o.write_back_func(ctx, o.obj, block.vaddr, block.size, block.vaddr_num);
+				o.write_back_func(ctx, o.object.obj, block.vaddr, block.size, block.vaddr_num);
 
 				for (int vi = 0; vi < block.vaddr_num; vi++)
 				{
@@ -853,7 +886,7 @@ void GpuMemory::WriteBack(GraphicContext* ctx)
 
 					printf("WriteBack (GPU -> CPU): type = %s, vaddr = 0x%016" PRIx64 ", size = 0x%016" PRIx64 ", old_hash = 0x%016" PRIx64
 					       ", new_hash = 0x%016" PRIx64 "\n",
-					       Core::EnumName(o.type).C_Str(), block.vaddr[vi], block.size[vi], o.hash[vi], new_hash);
+					       Core::EnumName(o.object.type).C_Str(), block.vaddr[vi], block.size[vi], o.hash[vi], new_hash);
 
 					o.hash[vi] = new_hash;
 				}
@@ -889,7 +922,7 @@ void GpuMemory::Flush(GraphicContext* ctx)
 			auto& o = h.info;
 
 			EXIT_IF(o.update_func == nullptr);
-			o.update_func(ctx, o.params, o.obj, block.vaddr, block.size, block.vaddr_num);
+			o.update_func(ctx, o.params, o.object.obj, block.vaddr, block.size, block.vaddr_num);
 		}
 	}
 }
@@ -1012,13 +1045,13 @@ void GpuMemory::DbgDbDump()
 				(r.block.vaddr_num > 0 ? m_db_add_object->BindString(":size", hex(r.block.size[0])) : m_db_add_object->BindNull(":size"));
 				(r.block.vaddr_num > 1 ? m_db_add_object->BindString(":size2", hex(r.block.size[1])) : m_db_add_object->BindNull(":size2"));
 				(r.block.vaddr_num > 2 ? m_db_add_object->BindString(":size3", hex(r.block.size[2])) : m_db_add_object->BindNull(":size3"));
-				m_db_add_object->BindString(":obj", hex(r.info.obj));
+				m_db_add_object->BindString(":obj", hex(r.info.object.obj));
 				int param0_index = m_db_add_object->GetIndex(":param0");
 				for (int i = 0; i < GpuObject::PARAMS_MAX; i++)
 				{
 					m_db_add_object->BindInt64(param0_index + i, static_cast<int64_t>(r.info.params[i]));
 				}
-				m_db_add_object->BindString(":type", Core::EnumName(r.info.type).C_Str());
+				m_db_add_object->BindString(":type", Core::EnumName(r.info.object.type).C_Str());
 				int hash0_index = m_db_add_object->GetIndex(":hash");
 				for (int i = 0; i < VADDR_BLOCKS_MAX; i++)
 				{
@@ -1120,7 +1153,7 @@ void GpuMemory::DbgDump()
 				}
 			}
 			auto& o = h.info;
-			printf("\t type           = %s\n", Core::EnumName(o.type).C_Str());
+			printf("\t type           = %s\n", Core::EnumName(o.object.type).C_Str());
 			for (int vi = 0; vi < block.vaddr_num; vi++)
 			{
 				printf("\t hash           = 0x%016" PRIx64 "\n", o.hash[vi]);

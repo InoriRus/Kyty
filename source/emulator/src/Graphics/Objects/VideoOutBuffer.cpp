@@ -14,7 +14,58 @@
 
 namespace Kyty::Libs::Graphics {
 
-void* VideoOutBufferObject::Create(GraphicContext* ctx, const uint64_t* vaddr, const uint64_t* size, int vaddr_num, VulkanMemory* mem) const
+static bool buffer_is_tiled(uint64_t vaddr, uint64_t size)
+{
+	if ((size & 0x7u) == 0)
+	{
+		const auto* ptr     = reinterpret_cast<const uint64_t*>(vaddr);
+		const auto* ptr_end = reinterpret_cast<const uint64_t*>(vaddr + size / 8);
+		for (uint64_t element = *ptr; ptr < ptr_end; ptr++)
+		{
+			if (element != *ptr)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+	return true;
+}
+
+static void update_func(GraphicContext* ctx, const uint64_t* params, void* obj, const uint64_t* vaddr, const uint64_t* size, int vaddr_num)
+{
+	KYTY_PROFILER_BLOCK("VideoOutBufferObject::update_func");
+
+	EXIT_IF(obj == nullptr);
+	EXIT_IF(ctx == nullptr);
+	EXIT_IF(params == nullptr);
+	EXIT_IF(vaddr == nullptr || size == nullptr || vaddr_num != 1);
+
+	auto* vk_obj = static_cast<VideoOutVulkanImage*>(obj);
+
+	bool tiled  = (params[VideoOutBufferObject::PARAM_TILED] != 0);
+	bool neo    = (params[VideoOutBufferObject::PARAM_NEO] != 0);
+	auto pitch  = params[VideoOutBufferObject::PARAM_PITCH];
+	auto width  = params[VideoOutBufferObject::PARAM_WIDTH];
+	auto height = params[VideoOutBufferObject::PARAM_HEIGHT];
+
+	vk_obj->layout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+	if (tiled && buffer_is_tiled(*vaddr, *size))
+	{
+		EXIT_NOT_IMPLEMENTED(width != pitch);
+		auto* temp_buf = new uint8_t[*size];
+		TileConvertTiledToLinear(temp_buf, reinterpret_cast<void*>(*vaddr), TileMode::VideoOutTiled, width, height, neo);
+		UtilFillImage(ctx, vk_obj, temp_buf, *size, pitch);
+		delete[] temp_buf;
+	} else
+	{
+		UtilFillImage(ctx, vk_obj, reinterpret_cast<void*>(*vaddr), *size, pitch);
+	}
+}
+
+static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint64_t* vaddr, const uint64_t* size, int vaddr_num,
+                         VulkanMemory* mem)
 {
 	KYTY_PROFILER_BLOCK("VideoOutBufferObject::Create");
 
@@ -22,9 +73,9 @@ void* VideoOutBufferObject::Create(GraphicContext* ctx, const uint64_t* vaddr, c
 	EXIT_IF(mem == nullptr);
 	EXIT_IF(ctx == nullptr);
 
-	auto pixel_format = params[PARAM_FORMAT];
-	auto width        = params[PARAM_WIDTH];
-	auto height       = params[PARAM_HEIGHT];
+	auto pixel_format = params[VideoOutBufferObject::PARAM_FORMAT];
+	auto width        = params[VideoOutBufferObject::PARAM_WIDTH];
+	auto height       = params[VideoOutBufferObject::PARAM_HEIGHT];
 
 	EXIT_NOT_IMPLEMENTED(pixel_format != 0x80000000);
 	EXIT_NOT_IMPLEMENTED(width == 0);
@@ -81,7 +132,7 @@ void* VideoOutBufferObject::Create(GraphicContext* ctx, const uint64_t* vaddr, c
 
 	// EXIT_NOT_IMPLEMENTED(mem->requirements.size > *size);
 
-	GetUpdateFunc()(ctx, params, vk_obj, vaddr, size, vaddr_num);
+	update_func(ctx, params, vk_obj, vaddr, size, vaddr_num);
 
 	VkImageViewCreateInfo create_info {};
 	create_info.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -107,63 +158,6 @@ void* VideoOutBufferObject::Create(GraphicContext* ctx, const uint64_t* vaddr, c
 	return vk_obj;
 }
 
-static bool buffer_is_tiled(uint64_t vaddr, uint64_t size)
-{
-	if ((size & 0x7u) == 0)
-	{
-		const auto* ptr     = reinterpret_cast<const uint64_t*>(vaddr);
-		const auto* ptr_end = reinterpret_cast<const uint64_t*>(vaddr + size / 8);
-		for (uint64_t element = *ptr; ptr < ptr_end; ptr++)
-		{
-			if (element != *ptr)
-			{
-				return true;
-			}
-		}
-		return false;
-	}
-	return true;
-}
-
-static void update_func(GraphicContext* ctx, const uint64_t* params, void* obj, const uint64_t* vaddr, const uint64_t* size, int vaddr_num)
-{
-	KYTY_PROFILER_BLOCK("VideoOutBufferObject::update_func");
-
-	EXIT_IF(obj == nullptr);
-	EXIT_IF(ctx == nullptr);
-	EXIT_IF(params == nullptr);
-	EXIT_IF(vaddr == nullptr || size == nullptr || vaddr_num != 1);
-
-	auto* vk_obj = static_cast<VideoOutVulkanImage*>(obj);
-
-	bool tiled  = (params[VideoOutBufferObject::PARAM_TILED] != 0);
-	bool neo    = (params[VideoOutBufferObject::PARAM_NEO] != 0);
-	auto pitch  = params[VideoOutBufferObject::PARAM_PITCH];
-	auto width  = params[VideoOutBufferObject::PARAM_WIDTH];
-	auto height = params[VideoOutBufferObject::PARAM_HEIGHT];
-
-	vk_obj->layout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-	if (tiled && buffer_is_tiled(*vaddr, *size))
-	{
-		EXIT_NOT_IMPLEMENTED(width != pitch);
-		auto* temp_buf = new uint8_t[*size];
-		TileConvertTiledToLinear(temp_buf, reinterpret_cast<void*>(*vaddr), TileMode::VideoOutTiled, width, height, neo);
-		UtilFillImage(ctx, vk_obj, temp_buf, *size, pitch);
-		delete[] temp_buf;
-	} else
-	{
-		UtilFillImage(ctx, vk_obj, reinterpret_cast<void*>(*vaddr), *size, pitch);
-	}
-}
-
-bool VideoOutBufferObject::Equal(const uint64_t* other) const
-{
-	return (params[PARAM_FORMAT] == other[PARAM_FORMAT] && params[PARAM_WIDTH] == other[PARAM_WIDTH] &&
-	        params[PARAM_HEIGHT] == other[PARAM_HEIGHT] && params[PARAM_TILED] == other[PARAM_TILED] &&
-	        params[PARAM_PITCH] == other[PARAM_PITCH] && params[PARAM_NEO] == other[PARAM_NEO]);
-}
-
 static void delete_func(GraphicContext* ctx, void* obj, VulkanMemory* mem)
 {
 	KYTY_PROFILER_BLOCK("VideoOutBufferObject::delete_func");
@@ -185,6 +179,18 @@ static void delete_func(GraphicContext* ctx, void* obj, VulkanMemory* mem)
 	VulkanFree(ctx, mem);
 
 	delete vk_obj;
+}
+
+bool VideoOutBufferObject::Equal(const uint64_t* other) const
+{
+	return (params[PARAM_FORMAT] == other[PARAM_FORMAT] && params[PARAM_WIDTH] == other[PARAM_WIDTH] &&
+	        params[PARAM_HEIGHT] == other[PARAM_HEIGHT] && params[PARAM_TILED] == other[PARAM_TILED] &&
+	        params[PARAM_PITCH] == other[PARAM_PITCH] && params[PARAM_NEO] == other[PARAM_NEO]);
+}
+
+GpuObject::create_func_t VideoOutBufferObject::GetCreateFunc() const
+{
+	return create_func;
 }
 
 GpuObject::delete_func_t VideoOutBufferObject::GetDeleteFunc() const

@@ -16,6 +16,7 @@ class CommandProcessor;
 struct VideoOutVulkanImage;
 struct DepthStencilVulkanImage;
 struct TextureVulkanImage;
+struct StorageTextureVulkanImage;
 struct RenderTextureVulkanImage;
 struct VulkanCommandPool;
 struct VulkanBuffer;
@@ -90,6 +91,7 @@ void DeleteFramebuffer(DepthStencilVulkanImage* image);
 void DeleteFramebuffer(RenderTextureVulkanImage* image);
 void DeleteDescriptor(VulkanBuffer* buffer);
 void DeleteDescriptor(TextureVulkanImage* image);
+void DeleteDescriptor(StorageTextureVulkanImage* image);
 void DeleteDescriptor(RenderTextureVulkanImage* image);
 
 int GraphicsRenderAddEqEvent(LibKernel::EventQueue::KernelEqueue eq, int id, void* udata);

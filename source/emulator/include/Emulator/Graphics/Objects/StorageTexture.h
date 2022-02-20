@@ -1,5 +1,5 @@
-#ifndef EMULATOR_INCLUDE_EMULATOR_GRAPHICS_OBJECTS_TEXTURE_H_
-#define EMULATOR_INCLUDE_EMULATOR_GRAPHICS_OBJECTS_TEXTURE_H_
+#ifndef EMULATOR_INCLUDE_EMULATOR_GRAPHICS_OBJECTS_STORAGETEXTURE_H_
+#define EMULATOR_INCLUDE_EMULATOR_GRAPHICS_OBJECTS_STORAGETEXTURE_H_
 
 #include "Kyty/Core/Common.h"
 
@@ -10,7 +10,7 @@
 
 namespace Kyty::Libs::Graphics {
 
-class TextureObject: public GpuObject
+class StorageTextureObject: public GpuObject
 {
 public:
 	static constexpr int PARAM_DFMT_NFMT    = 0;
@@ -21,8 +21,8 @@ public:
 	static constexpr int PARAM_NEO          = 5;
 	static constexpr int PARAM_SWIZZLE      = 6;
 
-	TextureObject(uint32_t dfmt, uint32_t nfmt, uint32_t width, uint32_t height, uint32_t pitch, uint32_t levels, uint32_t tile, bool neo,
-	              uint32_t swizzle)
+	StorageTextureObject(uint32_t dfmt, uint32_t nfmt, uint32_t width, uint32_t height, uint32_t pitch, uint32_t levels, uint32_t tile,
+	                     bool neo, uint32_t swizzle)
 	{
 		params[PARAM_DFMT_NFMT]    = (static_cast<uint64_t>(dfmt) << 32u) | nfmt;
 		params[PARAM_PITCH]        = pitch;
@@ -32,13 +32,13 @@ public:
 		params[PARAM_NEO]          = neo ? 1 : 0;
 		params[PARAM_SWIZZLE]      = swizzle;
 		check_hash                 = true;
-		type                       = Graphics::GpuMemoryObjectType::Texture;
+		type                       = Graphics::GpuMemoryObjectType::StorageTexture;
 	}
 
 	bool Equal(const uint64_t* other) const override;
 
 	[[nodiscard]] create_func_t              GetCreateFunc() const override;
-	[[nodiscard]] create_from_objects_func_t GetCreateFromObjectsFunc() const override;
+	[[nodiscard]] create_from_objects_func_t GetCreateFromObjectsFunc() const override { return nullptr; };
 	[[nodiscard]] write_back_func_t          GetWriteBackFunc() const override { return nullptr; };
 	[[nodiscard]] delete_func_t              GetDeleteFunc() const override;
 	[[nodiscard]] update_func_t              GetUpdateFunc() const override;
@@ -48,4 +48,4 @@ public:
 
 #endif // KYTY_EMU_ENABLED
 
-#endif /* EMULATOR_INCLUDE_EMULATOR_GRAPHICS_OBJECTS_TEXTURE_H_ */
+#endif /* EMULATOR_INCLUDE_EMULATOR_GRAPHICS_OBJECTS_STORAGETEXTURE_H_ */

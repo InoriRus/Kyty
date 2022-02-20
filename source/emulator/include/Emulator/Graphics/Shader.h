@@ -42,6 +42,7 @@ enum class ShaderInstructionType
 	Exp,
 	ImageLoad,
 	ImageSample,
+	ImageStoreMip,
 	SAddcU32,
 	SAddI32,
 	SAddU32,
@@ -284,6 +285,7 @@ enum Format : uint64_t
 	Vdata3Vaddr3StSsDmask7              = FormatDefine({DA3, S0A3, S1A8, S2A4, Dmask7}),
 	Vdata4Vaddr3StSsDmaskF              = FormatDefine({DA4, S0A3, S1A8, S2A4, DmaskF}),
 	Vdata4Vaddr3StDmaskF                = FormatDefine({DA4, S0A3, S1A8, DmaskF}),
+	Vdata4Vaddr4StDmaskF                = FormatDefine({DA4, S0A4, S1A8, DmaskF}),
 	VdstVsrc0Vsrc1Smask2                = FormatDefine({D, S0, S1, S2A2}),
 	VdstVsrc0Vsrc1Vsrc2                 = FormatDefine({D, S0, S1, S2}),
 	VdstVsrcAttrChan                    = FormatDefine({D, S0, Attr}),
@@ -570,6 +572,13 @@ enum class ShaderStorageUsage
 	ReadWrite,
 };
 
+enum class ShaderTextureUsage
+{
+	Unknown,
+	ReadOnly,
+	ReadWrite,
+};
+
 struct ShaderStorageResources
 {
 	static constexpr int BUFFERS_MAX = 16;
@@ -588,11 +597,13 @@ struct ShaderTextureResources
 	static constexpr int RES_MAX = 16;
 
 	ShaderTextureResource textures[RES_MAX];
+	ShaderTextureUsage    usages[RES_MAX]         = {};
 	int                   slots[RES_MAX]          = {0};
 	int                   start_register[RES_MAX] = {0};
 	bool                  extended[RES_MAX]       = {};
 	int                   textures_num            = 0;
-	int                   binding_index           = 0;
+	int                   binding_sampled_index   = 0;
+	int                   binding_storage_index   = 0;
 };
 
 struct ShaderSamplerResources
@@ -641,7 +652,9 @@ struct ShaderBindResources
 
 struct ShaderBindParameters
 {
-	bool textures2D_without_sampler = false;
+	bool textures2d_without_sampler[ShaderTextureResources::RES_MAX] = {};
+	int  textures2d_sampled_num                                      = 0;
+	int  textures2d_storage_num                                      = 0;
 };
 
 struct ShaderVertexInputInfo
@@ -674,9 +687,12 @@ struct ShaderPixelInputInfo
 	uint8_t             target_output_mode[8]     = {};
 	bool                ps_pos_xy                 = false;
 	bool                ps_pixel_kill_enable      = false;
+	bool                ps_early_z                = false;
+	bool                ps_execute_on_noop        = false;
 	ShaderBindResources bind;
 };
 
+void                 ShaderCalcBindingIndices(ShaderBindResources* bind);
 void                 ShaderGetInputInfoVS(const VertexShaderInfo* regs, ShaderVertexInputInfo* info);
 void                 ShaderGetInputInfoPS(const PixelShaderInfo* regs, const ShaderVertexInputInfo* vs_info, ShaderPixelInputInfo* ps_info);
 void                 ShaderGetInputInfoCS(const ComputeShaderInfo* regs, ShaderComputeInputInfo* info);

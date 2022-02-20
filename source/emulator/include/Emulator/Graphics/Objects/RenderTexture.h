@@ -10,9 +10,6 @@
 
 namespace Kyty::Libs::Graphics {
 
-struct GraphicContext;
-struct VulkanMemory;
-
 enum class RenderTextureFormat : uint64_t
 {
 	R8G8B8A8Unorm
@@ -40,12 +37,13 @@ public:
 		type                 = Graphics::GpuMemoryObjectType::RenderTexture;
 	}
 
-	void* Create(GraphicContext* ctx, const uint64_t* vaddr, const uint64_t* size, int vaddr_num, VulkanMemory* mem) const override;
-	bool  Equal(const uint64_t* other) const override;
+	bool Equal(const uint64_t* other) const override;
 
-	[[nodiscard]] write_back_func_t GetWriteBackFunc() const override { return nullptr; };
-	[[nodiscard]] delete_func_t     GetDeleteFunc() const override;
-	[[nodiscard]] update_func_t     GetUpdateFunc() const override;
+	[[nodiscard]] create_func_t              GetCreateFunc() const override;
+	[[nodiscard]] create_from_objects_func_t GetCreateFromObjectsFunc() const override { return nullptr; };
+	[[nodiscard]] write_back_func_t          GetWriteBackFunc() const override { return nullptr; };
+	[[nodiscard]] delete_func_t              GetDeleteFunc() const override;
+	[[nodiscard]] update_func_t              GetUpdateFunc() const override;
 };
 
 } // namespace Kyty::Libs::Graphics

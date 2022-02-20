@@ -87,6 +87,10 @@ struct TextureVulkanImage: public VulkanImage
 {
 };
 
+struct StorageTextureVulkanImage: public VulkanImage
+{
+};
+
 struct RenderTextureVulkanImage: public VulkanImage
 {
 };

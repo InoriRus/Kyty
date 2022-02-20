@@ -13,8 +13,14 @@
 
 namespace Kyty::Libs::Graphics {
 
-void* DepthStencilBufferObject::Create(GraphicContext* ctx, const uint64_t* vaddr, const uint64_t* size, int vaddr_num,
-                                       VulkanMemory* mem) const
+static void update_func(GraphicContext* /*ctx*/, const uint64_t* /*params*/, void* /*obj*/, const uint64_t* /*vaddr*/,
+                        const uint64_t* /*size*/, int /*vaddr_num*/)
+{
+	KYTY_PROFILER_BLOCK("DepthStencilBufferObject::update_func");
+}
+
+static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint64_t* vaddr, const uint64_t* size, int vaddr_num,
+                         VulkanMemory* mem)
 {
 	KYTY_PROFILER_BLOCK("DepthStencilBufferObject::Create");
 
@@ -22,9 +28,9 @@ void* DepthStencilBufferObject::Create(GraphicContext* ctx, const uint64_t* vadd
 	EXIT_IF(mem == nullptr);
 	EXIT_IF(ctx == nullptr);
 
-	auto pixel_format = static_cast<VkFormat>(params[PARAM_FORMAT]);
-	auto width        = params[PARAM_WIDTH];
-	auto height       = params[PARAM_HEIGHT];
+	auto pixel_format = static_cast<VkFormat>(params[DepthStencilBufferObject::PARAM_FORMAT]);
+	auto width        = params[DepthStencilBufferObject::PARAM_WIDTH];
+	auto height       = params[DepthStencilBufferObject::PARAM_HEIGHT];
 
 	EXIT_NOT_IMPLEMENTED(pixel_format == VK_FORMAT_UNDEFINED);
 	EXIT_NOT_IMPLEMENTED(width == 0);
@@ -74,7 +80,7 @@ void* DepthStencilBufferObject::Create(GraphicContext* ctx, const uint64_t* vadd
 
 	// EXIT_NOT_IMPLEMENTED(mem->requirements.size > *size);
 
-	GetUpdateFunc()(ctx, params, vk_obj, vaddr, size, vaddr_num);
+	update_func(ctx, params, vk_obj, vaddr, size, vaddr_num);
 
 	VkImageViewCreateInfo create_info {};
 	create_info.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -102,18 +108,6 @@ void* DepthStencilBufferObject::Create(GraphicContext* ctx, const uint64_t* vadd
 	return vk_obj;
 }
 
-static void update_func(GraphicContext* /*ctx*/, const uint64_t* /*params*/, void* /*obj*/, const uint64_t* /*vaddr*/,
-                        const uint64_t* /*size*/, int /*vaddr_num*/)
-{
-	KYTY_PROFILER_BLOCK("DepthStencilBufferObject::update_func");
-}
-
-bool DepthStencilBufferObject::Equal(const uint64_t* other) const
-{
-	return (params[PARAM_FORMAT] == other[PARAM_FORMAT] && params[PARAM_WIDTH] == other[PARAM_WIDTH] &&
-	        params[PARAM_HEIGHT] == other[PARAM_HEIGHT] && params[PARAM_HTILE] == other[PARAM_HTILE]);
-}
-
 static void delete_func(GraphicContext* ctx, void* obj, VulkanMemory* mem)
 {
 	KYTY_PROFILER_BLOCK("DepthStencilBufferObject::delete_func");
@@ -132,6 +126,17 @@ static void delete_func(GraphicContext* ctx, void* obj, VulkanMemory* mem)
 	VulkanFree(ctx, mem);
 
 	delete vk_obj;
+}
+
+bool DepthStencilBufferObject::Equal(const uint64_t* other) const
+{
+	return (params[PARAM_FORMAT] == other[PARAM_FORMAT] && params[PARAM_WIDTH] == other[PARAM_WIDTH] &&
+	        params[PARAM_HEIGHT] == other[PARAM_HEIGHT] && params[PARAM_HTILE] == other[PARAM_HTILE]);
+}
+
+GpuObject::create_func_t DepthStencilBufferObject::GetCreateFunc() const
+{
+	return create_func;
 }
 
 GpuObject::delete_func_t DepthStencilBufferObject::GetDeleteFunc() const

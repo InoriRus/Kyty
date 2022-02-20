@@ -330,7 +330,8 @@ void LabelSet(CommandBuffer* buffer, Label* label)
 	g_label_manager->Set(buffer, label);
 }
 
-void* LabelGpuObject::Create(GraphicContext* ctx, const uint64_t* vaddr, const uint64_t* size, int vaddr_num, VulkanMemory* /*mem*/) const
+static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint64_t* vaddr, const uint64_t* size, int vaddr_num,
+                         VulkanMemory* /*mem*/)
 {
 	KYTY_PROFILER_BLOCK("LabelGpuObject::Create");
 
@@ -338,15 +339,15 @@ void* LabelGpuObject::Create(GraphicContext* ctx, const uint64_t* vaddr, const u
 
 	EXIT_NOT_IMPLEMENTED(*size != 8 && *size != 4);
 
-	auto value      = params[PARAM_VALUE];
-	auto callback_1 = reinterpret_cast<LabelGpuObject::callback_t>(params[PARAM_CALLBACK_1]);
-	auto callback_2 = reinterpret_cast<LabelGpuObject::callback_t>(params[PARAM_CALLBACK_2]);
+	auto value      = params[LabelGpuObject::PARAM_VALUE];
+	auto callback_1 = reinterpret_cast<LabelGpuObject::callback_t>(params[LabelGpuObject::PARAM_CALLBACK_1]);
+	auto callback_2 = reinterpret_cast<LabelGpuObject::callback_t>(params[LabelGpuObject::PARAM_CALLBACK_2]);
 
-	auto* label_obj =
-	    (*size == 8 ? LabelCreate(ctx, reinterpret_cast<uint64_t*>(*vaddr), value, callback_1, callback_2, params + PARAM_ARG_1)
-	                : (*size == 4 ? LabelCreate(ctx, reinterpret_cast<uint32_t*>(*vaddr), static_cast<uint32_t>(value), callback_1,
-	                                            callback_2, params + PARAM_ARG_1)
-	                              : nullptr));
+	auto* label_obj = (*size == 8 ? LabelCreate(ctx, reinterpret_cast<uint64_t*>(*vaddr), value, callback_1, callback_2,
+	                                            params + LabelGpuObject::PARAM_ARG_1)
+	                              : (*size == 4 ? LabelCreate(ctx, reinterpret_cast<uint32_t*>(*vaddr), static_cast<uint32_t>(value),
+	                                                          callback_1, callback_2, params + LabelGpuObject::PARAM_ARG_1)
+	                                            : nullptr));
 
 	EXIT_NOT_IMPLEMENTED(label_obj == nullptr);
 
@@ -361,14 +362,6 @@ static void update_func(GraphicContext* /*ctx*/, const uint64_t* /*params*/, voi
 	KYTY_NOT_IMPLEMENTED;
 }
 
-bool LabelGpuObject::Equal(const uint64_t* other) const
-{
-	return (params[PARAM_VALUE] == other[PARAM_VALUE] && params[PARAM_CALLBACK_1] == other[PARAM_CALLBACK_1] &&
-	        params[PARAM_CALLBACK_2] == other[PARAM_CALLBACK_2] && params[PARAM_ARG_1] == other[PARAM_ARG_1] &&
-	        params[PARAM_ARG_2] == other[PARAM_ARG_2] && params[PARAM_ARG_3] == other[PARAM_ARG_3] &&
-	        params[PARAM_ARG_4] == other[PARAM_ARG_4]);
-}
-
 static void delete_func(GraphicContext* /*ctx*/, void* obj, VulkanMemory* /*mem*/)
 {
 	KYTY_PROFILER_BLOCK("LabelGpuObject::delete_func");
@@ -378,6 +371,19 @@ static void delete_func(GraphicContext* /*ctx*/, void* obj, VulkanMemory* /*mem*
 	EXIT_IF(label_obj == nullptr);
 
 	LabelDelete(label_obj);
+}
+
+bool LabelGpuObject::Equal(const uint64_t* other) const
+{
+	return (params[PARAM_VALUE] == other[PARAM_VALUE] && params[PARAM_CALLBACK_1] == other[PARAM_CALLBACK_1] &&
+	        params[PARAM_CALLBACK_2] == other[PARAM_CALLBACK_2] && params[PARAM_ARG_1] == other[PARAM_ARG_1] &&
+	        params[PARAM_ARG_2] == other[PARAM_ARG_2] && params[PARAM_ARG_3] == other[PARAM_ARG_3] &&
+	        params[PARAM_ARG_4] == other[PARAM_ARG_4]);
+}
+
+GpuObject::create_func_t LabelGpuObject::GetCreateFunc() const
+{
+	return create_func;
 }
 
 GpuObject::delete_func_t LabelGpuObject::GetDeleteFunc() const

@@ -1329,6 +1329,12 @@ static VkPhysicalDevice VulkanFindPhysicalDevice(VkInstance instance, VkSurfaceK
 			}
 		}
 
+		if (device_features.fragmentStoresAndAtomics != VK_TRUE)
+		{
+			printf("fragmentStoresAndAtomics is not supported\n");
+			skip_device = true;
+		}
+
 		if (!skip_device)
 		{
 			uint32_t extensions_count = 0;
@@ -1518,7 +1524,8 @@ static VkDevice VulkanCreateDevice(VkPhysicalDevice physical_device, VkSurfaceKH
 	queue_create_info.queueCount       = queue_count;
 	queue_create_info.pQueuePriorities = queue_priority.GetDataConst();
 
-	// VkPhysicalDeviceFeatures device_features {};
+	VkPhysicalDeviceFeatures device_features {};
+	device_features.fragmentStoresAndAtomics = VK_TRUE;
 
 	VkDeviceCreateInfo create_info {};
 	create_info.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -1530,7 +1537,7 @@ static VkDevice VulkanCreateDevice(VkPhysicalDevice physical_device, VkSurfaceKH
 	create_info.ppEnabledLayerNames     = (r->enable_validation_layers ? r->required_layers.GetDataConst() : nullptr);
 	create_info.enabledExtensionCount   = device_extensions.Size();
 	create_info.ppEnabledExtensionNames = device_extensions.GetDataConst();
-	create_info.pEnabledFeatures        = nullptr; //&device_features;
+	create_info.pEnabledFeatures        = &device_features;
 
 	VkDevice device = nullptr;
 

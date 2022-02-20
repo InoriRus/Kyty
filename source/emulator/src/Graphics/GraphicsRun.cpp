@@ -937,6 +937,8 @@ void CommandProcessor::Run(uint32_t* data, uint32_t num_dw)
 
 		auto s = pfunc(this, cmd_id, cmd, dw, num_dw);
 
+		// printf("\t %05" PRIx32 ": %u\n", num_dw - dw, s);
+
 		cmd += s;
 		dw -= s + 1;
 	}

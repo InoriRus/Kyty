@@ -215,6 +215,7 @@ static String dbg_fmt_to_str(const ShaderInstruction& inst)
 		case ShaderInstructionFormat::Vdata3Vaddr3StSsDmask7: return U"Vdata4Vaddr3StSsDmask7"; break;
 		case ShaderInstructionFormat::Vdata4Vaddr3StSsDmaskF: return U"Vdata4Vaddr3StSsDmaskF"; break;
 		case ShaderInstructionFormat::Vdata4Vaddr3StDmaskF: return U"Vdata4Vaddr3StDmaskF"; break;
+		case ShaderInstructionFormat::Vdata4Vaddr4StDmaskF: return U"Vdata4Vaddr4StDmaskF"; break;
 		case ShaderInstructionFormat::SVdstSVsrc0SVsrc1: return U"SVdstSVsrc0SVsrc1"; break;
 		case ShaderInstructionFormat::VdstVsrc0Vsrc1Smask2: return U"VdstVsrc0Vsrc1Smask2"; break;
 		case ShaderInstructionFormat::VdstVsrc0Vsrc1Vsrc2: return U"VdstVsrc0Vsrc1Vsrc2"; break;
@@ -1554,6 +1555,17 @@ KYTY_SHADER_PARSER(shader_parse_mimg)
 				inst.dst.size = 4;
 			}
 			break;
+		case 0x09:
+			inst.type        = ShaderInstructionType::ImageStoreMip;
+			inst.src[0].size = 4;
+			inst.src[1].size = 8;
+			inst.src_num     = 2;
+			if (dmask == 0xf)
+			{
+				inst.format   = ShaderInstructionFormat::Vdata4Vaddr4StDmaskF;
+				inst.dst.size = 4;
+			}
+			break;
 		case 0x20:
 			inst.type        = ShaderInstructionType::ImageSample;
 			inst.src[0].size = 3;
@@ -1570,6 +1582,12 @@ KYTY_SHADER_PARSER(shader_parse_mimg)
 			}
 			break;
 		default: printf("%s", dst->DbgDump().C_Str()); EXIT("unknown mimg opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 "\n", opcode, pc);
+	}
+
+	if (inst.format == ShaderInstructionFormat::Unknown)
+	{
+		printf("%s", dst->DbgDump().C_Str());
+		EXIT("unknown mimg format for opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 "\n", opcode, pc)
 	}
 
 	dst->GetInstructions().Add(inst);
@@ -1857,10 +1875,10 @@ static void ps_check(const PsStageRegisters& ps)
 {
 	EXIT_NOT_IMPLEMENTED(ps.target_output_mode[0] != 4 && ps.target_output_mode[0] != 9);
 	EXIT_NOT_IMPLEMENTED(ps.conservative_z_export_value != 0x00000000);
-	EXIT_NOT_IMPLEMENTED(ps.shader_z_behavior != 0x00000001);
+	EXIT_NOT_IMPLEMENTED(ps.shader_z_behavior != 0x00000001 && ps.shader_z_behavior != 0x00000000);
 	// EXIT_NOT_IMPLEMENTED(ps.shader_kill_enable != false);
 	EXIT_NOT_IMPLEMENTED(ps.shader_z_export_enable != false);
-	EXIT_NOT_IMPLEMENTED(ps.shader_execute_on_noop != false);
+	// EXIT_NOT_IMPLEMENTED(ps.shader_execute_on_noop != false);
 	// EXIT_NOT_IMPLEMENTED(ps.m_spiShaderPgmRsrc1Ps != 0x002c0000);
 	// EXIT_NOT_IMPLEMENTED(ps.m_spiShaderPgmRsrc2Ps != 0x00000000);
 	// EXIT_NOT_IMPLEMENTED(ps.vgprs != 0x00 && ps.vgprs != 0x01);
@@ -2199,8 +2217,8 @@ static void ShaderGetStorageBuffer(ShaderStorageResources* info, int start_index
 	info->buffers_num++;
 }
 
-static void ShaderGetTextureBuffer(ShaderTextureResources* info, int start_index, int slot, const UserSgprInfo& user_sgpr,
-                                   const uint32_t* extended_buffer)
+static void ShaderGetTextureBuffer(ShaderTextureResources* info, int start_index, int slot, ShaderTextureUsage usage,
+                                   const UserSgprInfo& user_sgpr, const uint32_t* extended_buffer)
 {
 	EXIT_IF(info == nullptr);
 
@@ -2216,6 +2234,7 @@ static void ShaderGetTextureBuffer(ShaderTextureResources* info, int start_index
 	info->start_register[index] = start_index;
 	info->extended[index]       = extended;
 	info->slots[index]          = slot;
+	info->usages[index]         = usage;
 
 	if (!extended)
 	{
@@ -2302,7 +2321,7 @@ static void ShaderGetGdsPointer(ShaderGdsResources* info, int start_index, int s
 	info->pointers_num++;
 }
 
-static void ShaderCalcBindingIndices(ShaderBindResources* bind)
+void ShaderCalcBindingIndices(ShaderBindResources* bind)
 {
 	int binding_index = 0;
 
@@ -2310,30 +2329,28 @@ static void ShaderCalcBindingIndices(ShaderBindResources* bind)
 
 	if (bind->storage_buffers.buffers_num > 0)
 	{
-		bind->storage_buffers.binding_index = binding_index;
+		bind->storage_buffers.binding_index = binding_index++;
 		bind->push_constant_size += bind->storage_buffers.buffers_num * 16;
-		binding_index++;
 	}
 
 	if (bind->textures2D.textures_num > 0)
 	{
-		bind->textures2D.binding_index = binding_index;
+		bind->textures2D.binding_sampled_index = binding_index++;
+		bind->textures2D.binding_storage_index = binding_index++;
+
 		bind->push_constant_size += bind->textures2D.textures_num * 32;
-		binding_index++;
 	}
 
 	if (bind->samplers.samplers_num > 0)
 	{
-		bind->samplers.binding_index = binding_index;
+		bind->samplers.binding_index = binding_index++;
 		bind->push_constant_size += bind->samplers.samplers_num * 16;
-		binding_index++;
 	}
 
 	if (bind->gds_pointers.pointers_num > 0)
 	{
-		bind->gds_pointers.binding_index = binding_index;
+		bind->gds_pointers.binding_index = binding_index++;
 		bind->push_constant_size += (((bind->gds_pointers.pointers_num - 1) / 4) + 1) * 16;
-		binding_index++;
 	}
 
 	EXIT_IF((bind->push_constant_size % 16) != 0);
@@ -2411,6 +2428,7 @@ void ShaderGetInputInfoVS(const VertexShaderInfo* regs, ShaderVertexInputInfo* i
 	ShaderCalcBindingIndices(&info->bind);
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void ShaderGetInputInfoPS(const PixelShaderInfo* regs, const ShaderVertexInputInfo* vs_info, ShaderPixelInputInfo* ps_info)
 {
 	EXIT_IF(vs_info == nullptr);
@@ -2420,6 +2438,8 @@ void ShaderGetInputInfoPS(const PixelShaderInfo* regs, const ShaderVertexInputIn
 	ps_info->input_num            = regs->ps_regs.ps_in_control;
 	ps_info->ps_pos_xy            = (regs->ps_regs.ps_input_ena == 0x00000302 && regs->ps_regs.ps_input_addr == 0x00000302);
 	ps_info->ps_pixel_kill_enable = regs->ps_regs.shader_kill_enable;
+	ps_info->ps_early_z           = (regs->ps_regs.shader_z_behavior == 1);
+	ps_info->ps_execute_on_noop   = regs->ps_regs.shader_execute_on_noop;
 
 	for (uint32_t i = 0; i < ps_info->input_num; i++)
 	{
@@ -2454,8 +2474,8 @@ void ShaderGetInputInfoPS(const PixelShaderInfo* regs, const ShaderVertexInputIn
 					                       regs->ps_user_sgpr, extended_buffer);
 				} else if (usage.flags == 3)
 				{
-					ShaderGetTextureBuffer(&ps_info->bind.textures2D, usage.start_register, usage.slot, regs->ps_user_sgpr,
-					                       extended_buffer);
+					ShaderGetTextureBuffer(&ps_info->bind.textures2D, usage.start_register, usage.slot, ShaderTextureUsage::ReadOnly,
+					                       regs->ps_user_sgpr, extended_buffer);
 					EXIT_NOT_IMPLEMENTED(ps_info->bind.textures2D.textures[ps_info->bind.textures2D.textures_num - 1].Type() != 9);
 				}
 				break;
@@ -2467,6 +2487,15 @@ void ShaderGetInputInfoPS(const PixelShaderInfo* regs, const ShaderVertexInputIn
 				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
 				ShaderGetStorageBuffer(&ps_info->bind.storage_buffers, usage.start_register, usage.slot, ShaderStorageUsage::Constant,
 				                       regs->ps_user_sgpr, extended_buffer);
+				break;
+			case 0x04:
+				EXIT_NOT_IMPLEMENTED(usage.flags != 3);
+				if (usage.flags == 3)
+				{
+					ShaderGetTextureBuffer(&ps_info->bind.textures2D, usage.start_register, usage.slot, ShaderTextureUsage::ReadWrite,
+					                       regs->ps_user_sgpr, extended_buffer);
+					EXIT_NOT_IMPLEMENTED(ps_info->bind.textures2D.textures[ps_info->bind.textures2D.textures_num - 1].Type() != 9);
+				}
 				break;
 			case 0x1b:
 				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
@@ -2524,7 +2553,8 @@ void ShaderGetInputInfoCS(const ComputeShaderInfo* regs, ShaderComputeInputInfo*
 					                       regs->cs_user_sgpr, extended_buffer);
 				} else if (usage.flags == 3)
 				{
-					ShaderGetTextureBuffer(&info->bind.textures2D, usage.start_register, usage.slot, regs->cs_user_sgpr, extended_buffer);
+					ShaderGetTextureBuffer(&info->bind.textures2D, usage.start_register, usage.slot, ShaderTextureUsage::ReadOnly,
+					                       regs->cs_user_sgpr, extended_buffer);
 					EXIT_NOT_IMPLEMENTED(info->bind.textures2D.textures[info->bind.textures2D.textures_num - 1].Type() != 9);
 				}
 				break;
@@ -2562,21 +2592,22 @@ void ShaderGetInputInfoCS(const ComputeShaderInfo* regs, ShaderComputeInputInfo*
 
 static void ShaderDbgDumpResources(const ShaderBindResources& bind)
 {
-	printf("\t descriptor_set_slot           = %u\n", bind.descriptor_set_slot);
-	printf("\t push_constant_offset          = %u\n", bind.push_constant_offset);
-	printf("\t push_constant_size            = %u\n", bind.push_constant_size);
-	printf("\t storage_buffers.buffers_num   = %d\n", bind.storage_buffers.buffers_num);
-	printf("\t storage_buffers.binding_index = %d\n", bind.storage_buffers.binding_index);
-	printf("\t textures.textures_num         = %d\n", bind.textures2D.textures_num);
-	printf("\t textures.binding_index        = %d\n", bind.textures2D.binding_index);
-	printf("\t samplers.samplers_num         = %d\n", bind.samplers.samplers_num);
-	printf("\t samplers.binding_index        = %d\n", bind.samplers.binding_index);
-	printf("\t gds_pointers.pointers_num     = %d\n", bind.gds_pointers.pointers_num);
-	printf("\t gds_pointers.binding_index    = %d\n", bind.gds_pointers.binding_index);
-	printf("\t extended.used                 = %s\n", (bind.extended.used ? "true" : "false"));
-	printf("\t extended.slot                 = %d\n", bind.extended.slot);
-	printf("\t extended.start_register       = %d\n", bind.extended.start_register);
-	printf("\t extended.data.Base            = %" PRIx64 "\n", bind.extended.data.Base());
+	printf("\t descriptor_set_slot            = %u\n", bind.descriptor_set_slot);
+	printf("\t push_constant_offset           = %u\n", bind.push_constant_offset);
+	printf("\t push_constant_size             = %u\n", bind.push_constant_size);
+	printf("\t storage_buffers.buffers_num    = %d\n", bind.storage_buffers.buffers_num);
+	printf("\t storage_buffers.binding_index  = %d\n", bind.storage_buffers.binding_index);
+	printf("\t textures.textures_num          = %d\n", bind.textures2D.textures_num);
+	printf("\t textures.binding_sampled_index = %d\n", bind.textures2D.binding_sampled_index);
+	printf("\t textures.binding_storage_index = %d\n", bind.textures2D.binding_storage_index);
+	printf("\t samplers.samplers_num          = %d\n", bind.samplers.samplers_num);
+	printf("\t samplers.binding_index         = %d\n", bind.samplers.binding_index);
+	printf("\t gds_pointers.pointers_num      = %d\n", bind.gds_pointers.pointers_num);
+	printf("\t gds_pointers.binding_index     = %d\n", bind.gds_pointers.binding_index);
+	printf("\t extended.used                  = %s\n", (bind.extended.used ? "true" : "false"));
+	printf("\t extended.slot                  = %d\n", bind.extended.slot);
+	printf("\t extended.start_register        = %d\n", bind.extended.start_register);
+	printf("\t extended.data.Base             = %" PRIx64 "\n", bind.extended.data.Base());
 
 	for (int i = 0; i < bind.storage_buffers.buffers_num; i++)
 	{
@@ -2640,6 +2671,7 @@ static void ShaderDbgDumpResources(const ShaderBindResources& bind)
 		printf("\t\t slot            = %d\n", bind.textures2D.slots[i]);
 		printf("\t\t start_register  = %d\n", bind.textures2D.start_register[i]);
 		printf("\t\t extended        = %s\n", (bind.textures2D.extended[i] ? "true" : "false"));
+		printf("\t\t usage           = %s\n", Core::EnumName(bind.textures2D.usages[i]).C_Str());
 	}
 
 	for (int i = 0; i < bind.samplers.samplers_num; i++)
@@ -2754,6 +2786,8 @@ void ShaderDbgDumpInputInfo(const ShaderPixelInputInfo* info)
 	printf("\t input_num            = %u\n", info->input_num);
 	printf("\t ps_pos_xy            = %s\n", info->ps_pos_xy ? "true" : "false");
 	printf("\t ps_pixel_kill_enable = %s\n", info->ps_pixel_kill_enable ? "true" : "false");
+	printf("\t ps_early_z           = %s\n", info->ps_early_z ? "true" : "false");
+	printf("\t ps_execute_on_noop   = %s\n", info->ps_execute_on_noop ? "true" : "false");
 
 	for (uint32_t i = 0; i < info->input_num; i++)
 	{
@@ -3140,17 +3174,92 @@ Vector<uint32_t> ShaderRecompileCS(const ShaderCode& code, const ShaderComputeIn
 	return ret;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 static ShaderBindParameters ShaderUpdateBindInfo(const ShaderCode& code, const ShaderBindResources* bind)
 {
 	ShaderBindParameters p {};
+
+	auto find_image_op = [&](int index, int s, bool& found, bool& without_sampler)
+	{
+		const auto& insts = code.GetInstructions();
+		int         size  = static_cast<int>(insts.Size());
+		for (int i = index; i < size; i++)
+		{
+			const auto& inst = insts.At(i);
+
+			if ((inst.dst.type == ShaderOperandType::Sgpr && s >= inst.dst.register_id && s < inst.dst.register_id + inst.dst.size) ||
+			    (inst.dst2.type == ShaderOperandType::Sgpr && s >= inst.dst2.register_id && s < inst.dst2.register_id + inst.dst2.size) ||
+			    inst.type == ShaderInstructionType::SEndpgm)
+			{
+				break;
+			}
+
+			if (inst.type == ShaderInstructionType::ImageStoreMip || inst.type == ShaderInstructionType::ImageLoad)
+			{
+				if (inst.src[1].register_id == s)
+				{
+					EXIT_NOT_IMPLEMENTED(found && !without_sampler);
+					without_sampler = true;
+					found           = true;
+				}
+			} else if (inst.type == ShaderInstructionType::ImageSample)
+			{
+				if (inst.src[1].register_id == s)
+				{
+					EXIT_NOT_IMPLEMENTED(found && without_sampler);
+					without_sampler = false;
+					found           = true;
+				}
+			}
+		}
+	};
+
 	if (bind->textures2D.textures_num > 0)
 	{
-		bool image_sample = code.HasAnyOf({ShaderInstructionType::ImageSample});
-		bool image_load   = code.HasAnyOf({ShaderInstructionType::ImageLoad});
+		const auto& insts = code.GetInstructions();
 
-		EXIT_NOT_IMPLEMENTED(image_sample && image_load);
+		for (int ti = 0; ti < bind->textures2D.textures_num; ti++)
+		{
+			bool found = false;
+			if (bind->textures2D.extended[ti])
+			{
+				int s = bind->extended.start_register;
 
-		p.textures2D_without_sampler = image_load;
+				int index = 0;
+				for (const auto& inst: insts)
+				{
+					if ((inst.dst.type == ShaderOperandType::Sgpr && s >= inst.dst.register_id &&
+					     s < inst.dst.register_id + inst.dst.size) ||
+					    (inst.dst2.type == ShaderOperandType::Sgpr && s >= inst.dst2.register_id &&
+					     s < inst.dst2.register_id + inst.dst2.size) ||
+					    inst.type == ShaderInstructionType::SEndpgm)
+					{
+						break;
+					}
+
+					if (inst.type == ShaderInstructionType::SLoadDwordx8 && inst.src[0].register_id == s &&
+					    static_cast<int>(inst.src[1].constant.u >> 2u) + 16 == bind->textures2D.start_register[ti])
+					{
+						find_image_op(index + 1, inst.dst.register_id, found, p.textures2d_without_sampler[ti]);
+					}
+
+					index++;
+				}
+			} else
+			{
+				find_image_op(0, bind->textures2D.start_register[ti], found, p.textures2d_without_sampler[ti]);
+			}
+
+			EXIT_NOT_IMPLEMENTED(!found);
+
+			if (p.textures2d_without_sampler[ti])
+			{
+				p.textures2d_storage_num++;
+			} else
+			{
+				p.textures2d_sampled_num++;
+			}
+		}
 	}
 	return p;
 }
@@ -3176,16 +3285,16 @@ static void ShaderGetBindIds(ShaderId* ret, const ShaderBindResources& bind)
 
 	for (int i = 0; i < bind.storage_buffers.buffers_num; i++)
 	{
-		const auto& r = bind.storage_buffers.buffers[i];
+		// const auto& r = bind.storage_buffers.buffers[i];
 
-		ret->ids.Add(static_cast<uint32_t>(r.SwizzleEnabled()));
-		ret->ids.Add(r.DstSelX());
-		ret->ids.Add(r.DstSelY());
-		ret->ids.Add(r.DstSelZ());
-		ret->ids.Add(r.DstSelW());
-		ret->ids.Add(r.Nfmt());
-		ret->ids.Add(r.Dfmt());
-		ret->ids.Add(static_cast<uint32_t>(r.AddTid()));
+		// ret->ids.Add(static_cast<uint32_t>(r.SwizzleEnabled()));
+		// ret->ids.Add(r.DstSelX());
+		// ret->ids.Add(r.DstSelY());
+		// ret->ids.Add(r.DstSelZ());
+		// ret->ids.Add(r.DstSelW());
+		// ret->ids.Add(r.Nfmt());
+		// ret->ids.Add(r.Dfmt());
+		// ret->ids.Add(static_cast<uint32_t>(r.AddTid()));
 		ret->ids.Add(bind.storage_buffers.slots[i]);
 		ret->ids.Add(bind.storage_buffers.start_register[i]);
 		ret->ids.Add(static_cast<uint32_t>(bind.storage_buffers.extended[i]));
@@ -3196,66 +3305,67 @@ static void ShaderGetBindIds(ShaderId* ret, const ShaderBindResources& bind)
 
 	for (int i = 0; i < bind.textures2D.textures_num; i++)
 	{
-		const auto& r = bind.textures2D.textures[i];
-		ret->ids.Add(r.MinLod());
-		ret->ids.Add(r.Dfmt());
-		ret->ids.Add(r.Nfmt());
-		ret->ids.Add(r.Width());
-		ret->ids.Add(r.Height());
-		ret->ids.Add(r.PerfMod());
-		ret->ids.Add(static_cast<uint32_t>(r.Interlaced()));
-		ret->ids.Add(r.DstSelX());
-		ret->ids.Add(r.DstSelY());
-		ret->ids.Add(r.DstSelZ());
-		ret->ids.Add(r.DstSelW());
-		ret->ids.Add(r.BaseLevel());
-		ret->ids.Add(r.LastLevel());
-		ret->ids.Add(r.TilingIdx());
-		ret->ids.Add(static_cast<uint32_t>(r.Pow2Pad()));
-		ret->ids.Add(r.Type());
-		ret->ids.Add(r.Depth());
-		ret->ids.Add(r.Pitch());
-		ret->ids.Add(r.BaseArray());
-		ret->ids.Add(r.LastArray());
-		ret->ids.Add(r.MinLodWarn());
-		ret->ids.Add(r.CounterBankId());
-		ret->ids.Add(static_cast<uint32_t>(r.LodHdwCntEn()));
+		// const auto& r = bind.textures2D.textures[i];
+		// ret->ids.Add(r.MinLod());
+		// ret->ids.Add(r.Dfmt());
+		// ret->ids.Add(r.Nfmt());
+		// ret->ids.Add(r.Width());
+		// ret->ids.Add(r.Height());
+		// ret->ids.Add(r.PerfMod());
+		// ret->ids.Add(static_cast<uint32_t>(r.Interlaced()));
+		// ret->ids.Add(r.DstSelX());
+		// ret->ids.Add(r.DstSelY());
+		// ret->ids.Add(r.DstSelZ());
+		// ret->ids.Add(r.DstSelW());
+		// ret->ids.Add(r.BaseLevel());
+		// ret->ids.Add(r.LastLevel());
+		// ret->ids.Add(r.TilingIdx());
+		// ret->ids.Add(static_cast<uint32_t>(r.Pow2Pad()));
+		// ret->ids.Add(r.Type());
+		// ret->ids.Add(r.Depth());
+		// ret->ids.Add(r.Pitch());
+		// ret->ids.Add(r.BaseArray());
+		// ret->ids.Add(r.LastArray());
+		// ret->ids.Add(r.MinLodWarn());
+		// ret->ids.Add(r.CounterBankId());
+		// ret->ids.Add(static_cast<uint32_t>(r.LodHdwCntEn()));
 		ret->ids.Add(bind.textures2D.slots[i]);
 		ret->ids.Add(bind.textures2D.start_register[i]);
 		ret->ids.Add(static_cast<uint32_t>(bind.textures2D.extended[i]));
+		ret->ids.Add(static_cast<uint32_t>(bind.textures2D.usages[i]));
 	}
 
 	ret->ids.Add(bind.samplers.samplers_num);
 
 	for (int i = 0; i < bind.samplers.samplers_num; i++)
 	{
-		const auto& r = bind.samplers.samplers[i];
+		// const auto& r = bind.samplers.samplers[i];
 
-		ret->ids.Add(r.ClampX());
-		ret->ids.Add(r.ClampY());
-		ret->ids.Add(r.ClampZ());
-		ret->ids.Add(r.MaxAnisoRatio());
-		ret->ids.Add(r.DepthCompareFunc());
-		ret->ids.Add(static_cast<uint32_t>(r.ForceUnormCoords()));
-		ret->ids.Add(r.AnisoThreshold());
-		ret->ids.Add(static_cast<uint32_t>(r.McCoordTrunc()));
-		ret->ids.Add(static_cast<uint32_t>(r.ForceDegamma()));
-		ret->ids.Add(r.AnisoBias());
-		ret->ids.Add(static_cast<uint32_t>(r.TruncCoord()));
-		ret->ids.Add(static_cast<uint32_t>(r.DisableCubeWrap()));
-		ret->ids.Add(r.FilterMode());
-		ret->ids.Add(r.MinLod());
-		ret->ids.Add(r.MaxLod());
-		ret->ids.Add(r.PerfMip());
-		ret->ids.Add(r.PerfZ());
-		ret->ids.Add(r.LodBias());
-		ret->ids.Add(r.LodBiasSec());
-		ret->ids.Add(r.XyMagFilter());
-		ret->ids.Add(r.XyMinFilter());
-		ret->ids.Add(r.ZFilter());
-		ret->ids.Add(r.MipFilter());
-		ret->ids.Add(r.BorderColorPtr());
-		ret->ids.Add(r.BorderColorType());
+		// ret->ids.Add(r.ClampX());
+		// ret->ids.Add(r.ClampY());
+		// ret->ids.Add(r.ClampZ());
+		// ret->ids.Add(r.MaxAnisoRatio());
+		// ret->ids.Add(r.DepthCompareFunc());
+		// ret->ids.Add(static_cast<uint32_t>(r.ForceUnormCoords()));
+		// ret->ids.Add(r.AnisoThreshold());
+		// ret->ids.Add(static_cast<uint32_t>(r.McCoordTrunc()));
+		// ret->ids.Add(static_cast<uint32_t>(r.ForceDegamma()));
+		// ret->ids.Add(r.AnisoBias());
+		// ret->ids.Add(static_cast<uint32_t>(r.TruncCoord()));
+		// ret->ids.Add(static_cast<uint32_t>(r.DisableCubeWrap()));
+		// ret->ids.Add(r.FilterMode());
+		// ret->ids.Add(r.MinLod());
+		// ret->ids.Add(r.MaxLod());
+		// ret->ids.Add(r.PerfMip());
+		// ret->ids.Add(r.PerfZ());
+		// ret->ids.Add(r.LodBias());
+		// ret->ids.Add(r.LodBiasSec());
+		// ret->ids.Add(r.XyMagFilter());
+		// ret->ids.Add(r.XyMinFilter());
+		// ret->ids.Add(r.ZFilter());
+		// ret->ids.Add(r.MipFilter());
+		// ret->ids.Add(r.BorderColorPtr());
+		// ret->ids.Add(r.BorderColorType());
 		ret->ids.Add(bind.samplers.slots[i]);
 		ret->ids.Add(bind.samplers.start_register[i]);
 		ret->ids.Add(static_cast<uint32_t>(bind.samplers.extended[i]));
@@ -3360,6 +3470,8 @@ ShaderId ShaderGetIdPS(const PixelShaderInfo* regs, const ShaderPixelInputInfo* 
 	ret.ids.Add(input_info->input_num);
 	ret.ids.Add(static_cast<uint32_t>(input_info->ps_pos_xy));
 	ret.ids.Add(static_cast<uint32_t>(input_info->ps_pixel_kill_enable));
+	ret.ids.Add(static_cast<uint32_t>(input_info->ps_early_z));
+	ret.ids.Add(static_cast<uint32_t>(input_info->ps_execute_on_noop));
 
 	for (uint32_t i = 0; i < input_info->input_num; i++)
 	{

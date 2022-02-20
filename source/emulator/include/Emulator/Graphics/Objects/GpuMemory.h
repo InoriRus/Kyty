@@ -34,6 +34,7 @@ enum class GpuMemoryObjectType : uint64_t
 	StorageBuffer,
 	Texture,
 	RenderTexture,
+	StorageTexture,
 
 	Max
 };
@@ -47,10 +48,14 @@ struct GpuMemoryObject
 class GpuObject
 {
 public:
-	using write_back_func_t = void (*)(GraphicContext* ctx, void* obj, const uint64_t* vaddr, const uint64_t* size, int vaddr_num);
-	using delete_func_t     = void (*)(GraphicContext* ctx, void* obj, VulkanMemory* mem);
-	using update_func_t     = void (*)(GraphicContext* ctx, const uint64_t* params, void* obj, const uint64_t* vaddr, const uint64_t* size,
-                                   int vaddr_num);
+	using create_func_t = void* (*)(GraphicContext* ctx, const uint64_t* params, const uint64_t* vaddr, const uint64_t* size, int vaddr_num,
+	                                VulkanMemory* mem);
+	using create_from_objects_func_t = void* (*)(GraphicContext* ctx, const uint64_t* params, const Vector<GpuMemoryObject>& objects,
+	                                             VulkanMemory* mem);
+	using write_back_func_t          = void (*)(GraphicContext* ctx, void* obj, const uint64_t* vaddr, const uint64_t* size, int vaddr_num);
+	using delete_func_t              = void (*)(GraphicContext* ctx, void* obj, VulkanMemory* mem);
+	using update_func_t = void (*)(GraphicContext* ctx, const uint64_t* params, void* obj, const uint64_t* vaddr, const uint64_t* size,
+	                               int vaddr_num);
 
 	static constexpr int PARAMS_MAX = 8;
 
@@ -59,12 +64,13 @@ public:
 
 	KYTY_CLASS_DEFAULT_COPY(GpuObject);
 
-	virtual void* Create(GraphicContext* ctx, const uint64_t* vaddr, const uint64_t* size, int vaddr_num, VulkanMemory* mem) const = 0;
-	virtual bool  Equal(const uint64_t* other) const                                                                               = 0;
+	virtual bool Equal(const uint64_t* other) const = 0;
 
-	[[nodiscard]] virtual write_back_func_t GetWriteBackFunc() const = 0;
-	[[nodiscard]] virtual delete_func_t     GetDeleteFunc() const    = 0;
-	[[nodiscard]] virtual update_func_t     GetUpdateFunc() const    = 0;
+	[[nodiscard]] virtual create_func_t              GetCreateFunc() const            = 0;
+	[[nodiscard]] virtual create_from_objects_func_t GetCreateFromObjectsFunc() const = 0;
+	[[nodiscard]] virtual write_back_func_t          GetWriteBackFunc() const         = 0;
+	[[nodiscard]] virtual delete_func_t              GetDeleteFunc() const            = 0;
+	[[nodiscard]] virtual update_func_t              GetUpdateFunc() const            = 0;
 
 	uint64_t            params[PARAMS_MAX] = {};
 	bool                check_hash         = false;

@@ -1,4 +1,4 @@
-#include "Emulator/Graphics/Objects/Texture.h"
+#include "Emulator/Graphics/Objects/StorageTexture.h"
 
 #include "Kyty/Core/DbgAssert.h"
 #include "Kyty/Core/Vector.h"
@@ -53,9 +53,9 @@ static VkComponentSwizzle get_swizzle(uint8_t s)
 
 static VkImageUsageFlags get_usage()
 {
-	VkImageUsageFlags vk_usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+	VkImageUsageFlags vk_usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
-	vk_usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+	vk_usage |= VK_IMAGE_USAGE_STORAGE_BIT;
 
 	return vk_usage;
 }
@@ -119,25 +119,25 @@ static bool CheckSwizzle(GraphicContext* /*ctx*/, VkImageCreateInfo* image_info,
 
 static void update_func(GraphicContext* ctx, const uint64_t* params, void* obj, const uint64_t* vaddr, const uint64_t* size, int vaddr_num)
 {
-	KYTY_PROFILER_BLOCK("TextureObject::update_func");
+	KYTY_PROFILER_BLOCK("StorageTextureObject::update_func");
 
 	EXIT_IF(obj == nullptr);
 	EXIT_IF(ctx == nullptr);
 	EXIT_IF(params == nullptr);
 	EXIT_IF(vaddr == nullptr || size == nullptr || vaddr_num != 1);
 
-	auto* vk_obj = static_cast<TextureVulkanImage*>(obj);
+	auto* vk_obj = static_cast<StorageTextureVulkanImage*>(obj);
 
-	auto tile   = params[TextureObject::PARAM_TILE];
-	auto dfmt   = params[TextureObject::PARAM_DFMT_NFMT] >> 32u;
-	auto nfmt   = params[TextureObject::PARAM_DFMT_NFMT] & 0xffffffffu;
-	auto width  = params[TextureObject::PARAM_WIDTH_HEIGHT] >> 32u;
-	auto height = params[TextureObject::PARAM_WIDTH_HEIGHT] & 0xffffffffu;
-	auto levels = params[TextureObject::PARAM_LEVELS];
-	auto pitch  = params[TextureObject::PARAM_PITCH];
+	auto tile   = params[StorageTextureObject::PARAM_TILE];
+	auto dfmt   = params[StorageTextureObject::PARAM_DFMT_NFMT] >> 32u;
+	auto nfmt   = params[StorageTextureObject::PARAM_DFMT_NFMT] & 0xffffffffu;
+	auto width  = params[StorageTextureObject::PARAM_WIDTH_HEIGHT] >> 32u;
+	auto height = params[StorageTextureObject::PARAM_WIDTH_HEIGHT] & 0xffffffffu;
+	auto levels = params[StorageTextureObject::PARAM_LEVELS];
+	auto pitch  = params[StorageTextureObject::PARAM_PITCH];
 	bool neo    = Config::IsNeo();
 
-	VkImageLayout vk_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	VkImageLayout vk_layout = VK_IMAGE_LAYOUT_GENERAL;
 
 	EXIT_NOT_IMPLEMENTED(levels >= 16);
 
@@ -159,13 +159,15 @@ static void update_func(GraphicContext* ctx, const uint64_t* params, void* obj, 
 	{
 		EXIT_NOT_IMPLEMENTED(level_sizes[i] == 0);
 
+		auto mipmap_offset = UtilCalcMipmapOffset(i, width, height);
+
 		regions[i].offset    = offset;
 		regions[i].width     = mip_width;
 		regions[i].height    = mip_height;
 		regions[i].pitch     = mip_pitch;
-		regions[i].dst_level = i;
-		regions[i].dst_x     = 0;
-		regions[i].dst_y     = 0;
+		regions[i].dst_level = 0;
+		regions[i].dst_x     = mipmap_offset.first;
+		regions[i].dst_y     = mipmap_offset.second;
 
 		offset += level_sizes[i];
 
@@ -196,109 +198,22 @@ static void update_func(GraphicContext* ctx, const uint64_t* params, void* obj, 
 	}
 }
 
-static void update2_func(GraphicContext* ctx, const uint64_t* params, void* obj, const Vector<GpuMemoryObject>& objects)
-{
-	KYTY_PROFILER_BLOCK("TextureObject::update2_func");
-
-	EXIT_IF(obj == nullptr);
-	EXIT_IF(ctx == nullptr);
-	EXIT_IF(params == nullptr);
-	EXIT_IF(objects.IsEmpty());
-
-	auto* vk_obj = static_cast<TextureVulkanImage*>(obj);
-
-	auto width  = params[TextureObject::PARAM_WIDTH_HEIGHT] >> 32u;
-	auto height = params[TextureObject::PARAM_WIDTH_HEIGHT] & 0xffffffffu;
-	auto levels = params[TextureObject::PARAM_LEVELS];
-
-	VkImageLayout vk_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-	EXIT_NOT_IMPLEMENTED(levels >= 16);
-
-	uint32_t mip_width  = width;
-	uint32_t mip_height = height;
-
-	Vector<ImageImageCopy> regions(levels);
-
-	if (objects.Size() == 1 && objects.At(0).type == GpuMemoryObjectType::StorageTexture)
-	{
-		auto* src_obj = static_cast<TextureVulkanImage*>(objects.At(0).obj);
-
-		for (uint32_t i = 0; i < levels; i++)
-		{
-			auto mipmap_offset = UtilCalcMipmapOffset(i, width, height);
-
-			regions[i].src_image = src_obj;
-			regions[i].src_level = 0;
-			regions[i].dst_level = i;
-			regions[i].width     = mip_width;
-			regions[i].height    = mip_height;
-			regions[i].src_x     = mipmap_offset.first;
-			regions[i].src_y     = mipmap_offset.second;
-			regions[i].dst_x     = 0;
-			regions[i].dst_y     = 0;
-
-			if (mip_width > 1)
-			{
-				mip_width /= 2;
-			}
-			if (mip_height > 1)
-			{
-				mip_height /= 2;
-			}
-		}
-	} else
-	{
-		EXIT_NOT_IMPLEMENTED(levels != objects.Size());
-
-		for (uint32_t i = 0; i < levels; i++)
-		{
-			const auto& object = objects.At(i);
-
-			EXIT_NOT_IMPLEMENTED(object.type != GpuMemoryObjectType::RenderTexture);
-
-			auto* src_obj = static_cast<RenderTextureVulkanImage*>(object.obj);
-
-			regions[i].src_image = src_obj;
-			regions[i].src_level = 0;
-			regions[i].dst_level = i;
-			regions[i].width     = mip_width;
-			regions[i].height    = mip_height;
-			regions[i].src_x     = 0;
-			regions[i].src_y     = 0;
-			regions[i].dst_x     = 0;
-			regions[i].dst_y     = 0;
-
-			if (mip_width > 1)
-			{
-				mip_width /= 2;
-			}
-			if (mip_height > 1)
-			{
-				mip_height /= 2;
-			}
-		}
-	}
-
-	UtilFillImage(ctx, regions, vk_obj, static_cast<uint64_t>(vk_layout));
-}
-
 static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint64_t* vaddr, const uint64_t* size, int vaddr_num,
                          VulkanMemory* mem)
 {
-	KYTY_PROFILER_BLOCK("TextureObject::Create");
+	KYTY_PROFILER_BLOCK("StorageTextureObject::Create");
 
 	EXIT_IF(size == nullptr || vaddr == nullptr);
 	EXIT_IF(mem == nullptr);
 	EXIT_IF(ctx == nullptr);
 	EXIT_IF(params == nullptr);
 
-	auto dfmt    = params[TextureObject::PARAM_DFMT_NFMT] >> 32u;
-	auto nfmt    = params[TextureObject::PARAM_DFMT_NFMT] & 0xffffffffu;
-	auto width   = params[TextureObject::PARAM_WIDTH_HEIGHT] >> 32u;
-	auto height  = params[TextureObject::PARAM_WIDTH_HEIGHT] & 0xffffffffu;
-	auto levels  = params[TextureObject::PARAM_LEVELS];
-	auto swizzle = params[TextureObject::PARAM_SWIZZLE];
+	auto dfmt    = params[StorageTextureObject::PARAM_DFMT_NFMT] >> 32u;
+	auto nfmt    = params[StorageTextureObject::PARAM_DFMT_NFMT] & 0xffffffffu;
+	auto width   = params[StorageTextureObject::PARAM_WIDTH_HEIGHT] >> 32u;
+	auto height  = params[StorageTextureObject::PARAM_WIDTH_HEIGHT] & 0xffffffffu;
+	auto levels  = params[StorageTextureObject::PARAM_LEVELS];
+	auto swizzle = params[StorageTextureObject::PARAM_SWIZZLE];
 
 	VkImageUsageFlags vk_usage = get_usage();
 
@@ -315,7 +230,12 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 	EXIT_NOT_IMPLEMENTED(width == 0);
 	EXIT_NOT_IMPLEMENTED(height == 0);
 
-	auto* vk_obj = new TextureVulkanImage;
+	if (levels > 1)
+	{
+		height += (height > 1 ? height / 2 : 1);
+	}
+
+	auto* vk_obj = new StorageTextureVulkanImage;
 
 	VkImageCreateInfo image_info {};
 	image_info.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -325,7 +245,7 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 	image_info.extent.width  = width;
 	image_info.extent.height = height;
 	image_info.extent.depth  = 1;
-	image_info.mipLevels     = levels;
+	image_info.mipLevels     = 1;
 	image_info.arrayLayers   = 1;
 	image_info.format        = pixel_format;
 	image_info.tiling        = VK_IMAGE_TILING_OPTIMAL;
@@ -390,117 +310,11 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 	return vk_obj;
 }
 
-static void* create2_func(GraphicContext* ctx, const uint64_t* params, const Vector<GpuMemoryObject>& objects, VulkanMemory* mem)
-{
-	KYTY_PROFILER_BLOCK("TextureObject::CreateFromObjects");
-
-	EXIT_IF(objects.IsEmpty());
-	EXIT_IF(mem == nullptr);
-	EXIT_IF(ctx == nullptr);
-	EXIT_IF(params == nullptr);
-
-	auto dfmt    = params[TextureObject::PARAM_DFMT_NFMT] >> 32u;
-	auto nfmt    = params[TextureObject::PARAM_DFMT_NFMT] & 0xffffffffu;
-	auto width   = params[TextureObject::PARAM_WIDTH_HEIGHT] >> 32u;
-	auto height  = params[TextureObject::PARAM_WIDTH_HEIGHT] & 0xffffffffu;
-	auto levels  = params[TextureObject::PARAM_LEVELS];
-	auto swizzle = params[TextureObject::PARAM_SWIZZLE];
-
-	VkImageUsageFlags vk_usage = get_usage();
-
-	VkComponentMapping components {};
-
-	components.r = get_swizzle(swizzle & 0xffu);
-	components.g = get_swizzle((swizzle >> 8u) & 0xffu);
-	components.b = get_swizzle((swizzle >> 16u) & 0xffu);
-	components.a = get_swizzle((swizzle >> 24u) & 0xffu);
-
-	auto pixel_format = get_texture_format(dfmt, nfmt);
-
-	EXIT_NOT_IMPLEMENTED(pixel_format == VK_FORMAT_UNDEFINED);
-	EXIT_NOT_IMPLEMENTED(width == 0);
-	EXIT_NOT_IMPLEMENTED(height == 0);
-
-	auto* vk_obj = new TextureVulkanImage;
-
-	VkImageCreateInfo image_info {};
-	image_info.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-	image_info.pNext         = nullptr;
-	image_info.flags         = 0;
-	image_info.imageType     = VK_IMAGE_TYPE_2D;
-	image_info.extent.width  = width;
-	image_info.extent.height = height;
-	image_info.extent.depth  = 1;
-	image_info.mipLevels     = levels;
-	image_info.arrayLayers   = 1;
-	image_info.format        = pixel_format;
-	image_info.tiling        = VK_IMAGE_TILING_OPTIMAL;
-	image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	image_info.usage         = vk_usage;
-	image_info.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
-	image_info.samples       = VK_SAMPLE_COUNT_1_BIT;
-
-	if (!CheckSwizzle(ctx, &image_info, &components))
-	{
-		EXIT("swizzle is not supported");
-	}
-
-	if (!CheckFormat(ctx, &image_info))
-	{
-		EXIT("format is not supported");
-	}
-
-	vk_obj->extent.width  = width;
-	vk_obj->extent.height = height;
-	vk_obj->format        = image_info.format;
-	vk_obj->image         = nullptr;
-	vk_obj->image_view    = nullptr;
-	vk_obj->layout        = image_info.initialLayout;
-
-	vkCreateImage(ctx->device, &image_info, nullptr, &vk_obj->image);
-
-	EXIT_NOT_IMPLEMENTED(vk_obj->image == nullptr);
-
-	vkGetImageMemoryRequirements(ctx->device, vk_obj->image, &mem->requirements);
-
-	mem->property = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-
-	bool allocated = VulkanAllocate(ctx, mem);
-
-	EXIT_NOT_IMPLEMENTED(!allocated);
-
-	VulkanBindImageMemory(ctx, vk_obj, mem);
-
-	vk_obj->memory = *mem;
-
-	update2_func(ctx, params, vk_obj, objects);
-
-	VkImageViewCreateInfo create_info {};
-	create_info.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-	create_info.pNext                           = nullptr;
-	create_info.flags                           = 0;
-	create_info.image                           = vk_obj->image;
-	create_info.viewType                        = VK_IMAGE_VIEW_TYPE_2D;
-	create_info.format                          = vk_obj->format;
-	create_info.components                      = components;
-	create_info.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
-	create_info.subresourceRange.baseArrayLayer = 0;
-	create_info.subresourceRange.baseMipLevel   = 0;
-	create_info.subresourceRange.layerCount     = 1;
-	create_info.subresourceRange.levelCount     = VK_REMAINING_MIP_LEVELS;
-
-	vkCreateImageView(ctx->device, &create_info, nullptr, &vk_obj->image_view);
-
-	EXIT_NOT_IMPLEMENTED(vk_obj->image_view == nullptr);
-
-	return vk_obj;
-}
-
 static void delete_func(GraphicContext* ctx, void* obj, VulkanMemory* mem)
 {
-	KYTY_PROFILER_BLOCK("TextureObject::delete_func");
+	KYTY_PROFILER_BLOCK("StorageTextureObject::delete_func");
 
-	auto* vk_obj = reinterpret_cast<TextureVulkanImage*>(obj);
+	auto* vk_obj = reinterpret_cast<StorageTextureVulkanImage*>(obj);
 
 	EXIT_IF(vk_obj == nullptr);
 	EXIT_IF(ctx == nullptr);
@@ -516,7 +330,7 @@ static void delete_func(GraphicContext* ctx, void* obj, VulkanMemory* mem)
 	delete vk_obj;
 }
 
-bool TextureObject::Equal(const uint64_t* other) const
+bool StorageTextureObject::Equal(const uint64_t* other) const
 {
 	return (params[PARAM_DFMT_NFMT] == other[PARAM_DFMT_NFMT] && params[PARAM_PITCH] == other[PARAM_PITCH] &&
 	        params[PARAM_WIDTH_HEIGHT] == other[PARAM_WIDTH_HEIGHT] && params[PARAM_LEVELS] == other[PARAM_LEVELS] &&
@@ -524,22 +338,17 @@ bool TextureObject::Equal(const uint64_t* other) const
 	        params[PARAM_SWIZZLE] == other[PARAM_SWIZZLE]);
 }
 
-GpuObject::create_func_t TextureObject::GetCreateFunc() const
+GpuObject::create_func_t StorageTextureObject::GetCreateFunc() const
 {
 	return create_func;
 }
 
-GpuObject::create_from_objects_func_t TextureObject::GetCreateFromObjectsFunc() const
-{
-	return create2_func;
-}
-
-GpuObject::delete_func_t TextureObject::GetDeleteFunc() const
+GpuObject::delete_func_t StorageTextureObject::GetDeleteFunc() const
 {
 	return delete_func;
 }
 
-GpuObject::update_func_t TextureObject::GetUpdateFunc() const
+GpuObject::update_func_t StorageTextureObject::GetUpdateFunc() const
 {
 	return update_func;
 }

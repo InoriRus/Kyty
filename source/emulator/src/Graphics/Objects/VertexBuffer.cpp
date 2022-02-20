@@ -12,8 +12,8 @@
 
 namespace Kyty::Libs::Graphics {
 
-void* VertexBufferGpuObject::Create(GraphicContext* ctx, const uint64_t* vaddr, const uint64_t* size, int vaddr_num,
-                                    VulkanMemory* mem) const
+static void* create_func(GraphicContext* ctx, const uint64_t* /*params*/, const uint64_t* vaddr, const uint64_t* size, int vaddr_num,
+                         VulkanMemory* mem)
 {
 	KYTY_PROFILER_BLOCK("VertexBufferGpuObject::Create");
 
@@ -59,11 +59,6 @@ static void update_func(GraphicContext* /*ctx*/, const uint64_t* /*params*/, voi
 	KYTY_NOT_IMPLEMENTED;
 }
 
-bool VertexBufferGpuObject::Equal(const uint64_t* /*other*/) const
-{
-	return true;
-}
-
 static void delete_func(GraphicContext* ctx, void* obj, VulkanMemory* /*mem*/)
 {
 	KYTY_PROFILER_BLOCK("VertexBufferGpuObject::delete_func");
@@ -77,6 +72,16 @@ static void delete_func(GraphicContext* ctx, void* obj, VulkanMemory* /*mem*/)
 	VulkanDeleteBuffer(ctx, vk_obj);
 
 	delete vk_obj;
+}
+
+bool VertexBufferGpuObject::Equal(const uint64_t* /*other*/) const
+{
+	return true;
+}
+
+GpuObject::create_func_t VertexBufferGpuObject::GetCreateFunc() const
+{
+	return create_func;
 }
 
 GpuObject::delete_func_t VertexBufferGpuObject::GetDeleteFunc() const
