@@ -42,6 +42,7 @@ enum class ShaderInstructionType
 	Exp,
 	ImageLoad,
 	ImageSample,
+	ImageStore,
 	ImageStoreMip,
 	SAddcU32,
 	SAddI32,
@@ -137,6 +138,7 @@ enum class ShaderInstructionType
 	VCmpxGeU32,
 	VCmpxGtU32,
 	VCmpxNeU32,
+	VCmpxNeqF32,
 	VCndmaskB32,
 	VCosF32,
 	VCvtF32F16,
@@ -394,18 +396,24 @@ public:
 		                   { return m_instructions.Contains(type, [](auto inst, auto type) { return inst.type == type; }); });
 	}
 
-	[[nodiscard]] bool     IsEmbedded() const { return m_embedded; }
-	void                   SetEmbedded(bool embedded) { this->m_embedded = embedded; }
-	[[nodiscard]] uint32_t GetEmbeddedId() const { return m_embedded_id; }
-	void                   SetEmbeddedId(uint32_t embedded_id) { m_embedded_id = embedded_id; }
+	[[nodiscard]] bool     IsVsEmbedded() const { return m_vs_embedded; }
+	void                   SetVsEmbedded(bool embedded) { this->m_vs_embedded = embedded; }
+	[[nodiscard]] uint32_t GetVsEmbeddedId() const { return m_vs_embedded_id; }
+	void                   SetVsEmbeddedId(uint32_t embedded_id) { m_vs_embedded_id = embedded_id; }
+	[[nodiscard]] bool     IsPsEmbedded() const { return m_ps_embedded; }
+	void                   SetPsEmbedded(bool embedded) { this->m_ps_embedded = embedded; }
+	[[nodiscard]] uint32_t GetPsEmbeddedId() const { return m_ps_embedded_id; }
+	void                   SetPsEmbeddedId(uint32_t embedded_id) { m_ps_embedded_id = embedded_id; }
 
 private:
 	Vector<ShaderInstruction> m_instructions;
 	Vector<ShaderLabel>       m_labels;
 	ShaderType                m_type = ShaderType::Unknown;
 	Vector<ShaderDebugPrintf> m_debug_printfs;
-	uint32_t                  m_embedded_id = 0;
-	bool                      m_embedded    = false;
+	uint32_t                  m_vs_embedded_id = 0;
+	uint32_t                  m_ps_embedded_id = 0;
+	bool                      m_vs_embedded    = false;
+	bool                      m_ps_embedded    = false;
 };
 
 struct ShaderId

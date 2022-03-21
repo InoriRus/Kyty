@@ -802,6 +802,7 @@ KYTY_SHADER_PARSER(shader_parse_vopc)
 		case 0x0d: inst.type = ShaderInstructionType::VCmpNeqF32; break;
 		case 0x0e: inst.type = ShaderInstructionType::VCmpNltF32; break;
 		case 0x0f: inst.type = ShaderInstructionType::VCmpTruF32; break;
+		case 0x1d: inst.type = ShaderInstructionType::VCmpxNeqF32; break;
 		case 0x80: inst.type = ShaderInstructionType::VCmpFI32; break;
 		case 0x81: inst.type = ShaderInstructionType::VCmpLtI32; break;
 		case 0x82: inst.type = ShaderInstructionType::VCmpEqI32; break;
@@ -1096,6 +1097,7 @@ KYTY_SHADER_PARSER(shader_parse_vop3)
 		case 0x0d: inst.type = ShaderInstructionType::VCmpNeqF32; break;
 		case 0x0e: inst.type = ShaderInstructionType::VCmpNltF32; break;
 		case 0x0f: inst.type = ShaderInstructionType::VCmpTruF32; break;
+		case 0x1d: inst.type = ShaderInstructionType::VCmpxNeqF32; break;
 		case 0x80: inst.type = ShaderInstructionType::VCmpFI32; break;
 		case 0x81: inst.type = ShaderInstructionType::VCmpLtI32; break;
 		case 0x82: inst.type = ShaderInstructionType::VCmpEqI32; break;
@@ -1546,6 +1548,17 @@ KYTY_SHADER_PARSER(shader_parse_mimg)
 	{
 		case 0x00:
 			inst.type        = ShaderInstructionType::ImageLoad;
+			inst.src[0].size = 3;
+			inst.src[1].size = 8;
+			inst.src_num     = 2;
+			if (dmask == 0xf)
+			{
+				inst.format   = ShaderInstructionFormat::Vdata4Vaddr3StDmaskF;
+				inst.dst.size = 4;
+			}
+			break;
+		case 0x08:
+			inst.type        = ShaderInstructionType::ImageStore;
 			inst.src[0].size = 3;
 			inst.src[1].size = 8;
 			inst.src_num     = 2;
@@ -2046,6 +2059,8 @@ static ShaderUsageInfo GetUsageSlots(const uint32_t* code)
 
 static void ShaderDetectBuffers(ShaderVertexInputInfo* info)
 {
+	KYTY_PROFILER_FUNCTION();
+
 	EXIT_IF(info == nullptr);
 
 	info->buffers_num = 0;
@@ -2104,13 +2119,21 @@ static void ShaderDetectBuffers(ShaderVertexInputInfo* info)
 
 static void ShaderParseFetch(ShaderVertexInputInfo* info, const uint32_t* fetch, const uint32_t* buffer)
 {
+	KYTY_PROFILER_FUNCTION();
+
 	EXIT_IF(info == nullptr || fetch == nullptr || buffer == nullptr);
+
+	KYTY_PROFILER_BLOCK("ShaderParseFetch::parse_code");
 
 	ShaderCode code;
 	code.SetType(ShaderType::Fetch);
 	shader_parse(0, fetch, nullptr, &code);
 
-	printf("%s", code.DbgDump().C_Str());
+	KYTY_PROFILER_END_BLOCK;
+
+	// printf("%s", code.DbgDump().C_Str());
+
+	KYTY_PROFILER_BLOCK("ShaderParseFetch::check_insts");
 
 	const auto& insts = code.GetInstructions();
 	uint32_t    size  = insts.Size();
@@ -2177,6 +2200,8 @@ static void ShaderParseFetch(ShaderVertexInputInfo* info, const uint32_t* fetch,
 			v_num++;
 		}
 	}
+
+	KYTY_PROFILER_END_BLOCK;
 
 	EXIT_NOT_IMPLEMENTED(s_num != v_num);
 }
@@ -2358,6 +2383,8 @@ void ShaderCalcBindingIndices(ShaderBindResources* bind)
 
 void ShaderGetInputInfoVS(const VertexShaderInfo* regs, ShaderVertexInputInfo* info)
 {
+	KYTY_PROFILER_FUNCTION();
+
 	EXIT_IF(info == nullptr || regs == nullptr);
 
 	info->export_count              = static_cast<int>(1 + ((regs->vs_regs.m_spiVsOutConfig >> 1u) & 0x1Fu));
@@ -2378,6 +2405,8 @@ void ShaderGetInputInfoVS(const VertexShaderInfo* regs, ShaderVertexInputInfo* i
 	int  fetch_reg         = 0;
 	bool vertex_buffer     = false;
 	int  vertex_buffer_reg = 0;
+
+	KYTY_PROFILER_BLOCK("ShaderGetInputInfoVS::usages_cycle");
 
 	for (int i = 0; i < usages.slots_num; i++)
 	{
@@ -2405,6 +2434,10 @@ void ShaderGetInputInfoVS(const VertexShaderInfo* regs, ShaderVertexInputInfo* i
 		}
 	}
 
+	KYTY_PROFILER_END_BLOCK;
+
+	KYTY_PROFILER_BLOCK("ShaderGetInputInfoVS::parse_fetch");
+
 	EXIT_NOT_IMPLEMENTED((fetch && !vertex_buffer) || (!fetch && vertex_buffer));
 
 	if (fetch && vertex_buffer)
@@ -2425,15 +2458,28 @@ void ShaderGetInputInfoVS(const VertexShaderInfo* regs, ShaderVertexInputInfo* i
 		ShaderDetectBuffers(info);
 	}
 
+	KYTY_PROFILER_END_BLOCK;
+
+	KYTY_PROFILER_BLOCK("ShaderGetInputInfoVS::calc_binding");
+
 	ShaderCalcBindingIndices(&info->bind);
+
+	KYTY_PROFILER_END_BLOCK;
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void ShaderGetInputInfoPS(const PixelShaderInfo* regs, const ShaderVertexInputInfo* vs_info, ShaderPixelInputInfo* ps_info)
 {
+	KYTY_PROFILER_FUNCTION();
+
 	EXIT_IF(vs_info == nullptr);
 	EXIT_IF(ps_info == nullptr);
 	EXIT_IF(regs == nullptr);
+
+	if (regs->ps_embedded)
+	{
+		return;
+	}
 
 	ps_info->input_num            = regs->ps_regs.ps_in_control;
 	ps_info->ps_pos_xy            = (regs->ps_regs.ps_input_ena == 0x00000302 && regs->ps_regs.ps_input_addr == 0x00000302);
@@ -2515,6 +2561,7 @@ void ShaderGetInputInfoPS(const PixelShaderInfo* regs, const ShaderVertexInputIn
 	ShaderCalcBindingIndices(&ps_info->bind);
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void ShaderGetInputInfoCS(const ComputeShaderInfo* regs, ShaderComputeInputInfo* info)
 {
 	EXIT_IF(info == nullptr);
@@ -2564,9 +2611,17 @@ void ShaderGetInputInfoCS(const ComputeShaderInfo* regs, ShaderComputeInputInfo*
 				                       regs->cs_user_sgpr, extended_buffer);
 				break;
 			case 0x04:
-				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
-				ShaderGetStorageBuffer(&info->bind.storage_buffers, usage.start_register, usage.slot, ShaderStorageUsage::ReadWrite,
-				                       regs->cs_user_sgpr, extended_buffer);
+				EXIT_NOT_IMPLEMENTED(usage.flags != 0 && usage.flags != 3);
+				if (usage.flags == 0)
+				{
+					ShaderGetStorageBuffer(&info->bind.storage_buffers, usage.start_register, usage.slot, ShaderStorageUsage::ReadWrite,
+					                       regs->cs_user_sgpr, extended_buffer);
+				} else if (usage.flags == 3)
+				{
+					ShaderGetTextureBuffer(&info->bind.textures2D, usage.start_register, usage.slot, ShaderTextureUsage::ReadWrite,
+					                       regs->cs_user_sgpr, extended_buffer);
+					EXIT_NOT_IMPLEMENTED(info->bind.textures2D.textures[info->bind.textures2D.textures_num - 1].Type() != 9);
+				}
 				break;
 			case 0x07:
 				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
@@ -2730,6 +2785,8 @@ static void ShaderDbgDumpResources(const ShaderBindResources& bind)
 
 void ShaderDbgDumpInputInfo(const ShaderVertexInputInfo* info)
 {
+	KYTY_PROFILER_BLOCK("ShaderDbgDumpInputInfo(Vs)");
+
 	printf("ShaderDbgDumpInputInfo()\n");
 
 	printf("\t fetch        = %s\n", info->fetch ? "true" : "false");
@@ -2781,6 +2838,8 @@ void ShaderDbgDumpInputInfo(const ShaderVertexInputInfo* info)
 
 void ShaderDbgDumpInputInfo(const ShaderPixelInputInfo* info)
 {
+	KYTY_PROFILER_BLOCK("ShaderDbgDumpInputInfo(Ps)");
+
 	printf("ShaderDbgDumpInputInfo()\n");
 
 	printf("\t input_num            = %u\n", info->input_num);
@@ -2967,8 +3026,8 @@ ShaderCode ShaderParseVS(const VertexShaderInfo* regs)
 
 	if (regs->vs_embedded)
 	{
-		code.SetEmbedded(true);
-		code.SetEmbeddedId(regs->vs_embedded_id);
+		code.SetVsEmbedded(true);
+		code.SetVsEmbeddedId(regs->vs_embedded_id);
 	} else
 	{
 		const auto* src = reinterpret_cast<const uint32_t*>(regs->vs_regs.GetGpuAddress());
@@ -3007,9 +3066,9 @@ Vector<uint32_t> ShaderRecompileVS(const ShaderCode& code, const ShaderVertexInp
 	Vector<uint32_t> ret;
 	ShaderLogHelper  log("vs");
 
-	if (code.IsEmbedded())
+	if (code.IsVsEmbedded())
 	{
-		source = SpirvGetEmbeddedVs(code.GetEmbeddedId());
+		source = SpirvGetEmbeddedVs(code.GetVsEmbeddedId());
 	} else
 	{
 		for (int i = 0; i < input_info->bind.storage_buffers.buffers_num; i++)
@@ -3039,32 +3098,39 @@ ShaderCode ShaderParsePS(const PixelShaderInfo* regs)
 {
 	KYTY_PROFILER_FUNCTION(profiler::colors::Blue300);
 
-	const auto* src = reinterpret_cast<const uint32_t*>(regs->ps_regs.data_addr);
-
-	EXIT_NOT_IMPLEMENTED(src == nullptr);
-
-	ps_print("ShaderParsePS()", regs->ps_regs);
-	ps_check(regs->ps_regs);
-
-	EXIT_NOT_IMPLEMENTED(regs->ps_regs.user_sgpr > regs->ps_user_sgpr.count);
-
-	const auto* header = GetBinaryInfo(src);
-
-	EXIT_NOT_IMPLEMENTED(header == nullptr);
-
-	bi_print("ShaderParsePS():ShaderBinaryInfo", *header);
-
 	ShaderCode code;
 	code.SetType(ShaderType::Pixel);
 
-	shader_parse(0, src, nullptr, &code);
-
-	if (g_debug_printfs != nullptr)
+	if (regs->ps_embedded)
 	{
-		auto id = (static_cast<uint64_t>(header->hash0) << 32u) | header->crc32;
-		if (auto index = g_debug_printfs->Find(id, [](auto cmd, auto id) { return cmd.id == id; }); g_debug_printfs->IndexValid(index))
+		code.SetPsEmbedded(true);
+		code.SetPsEmbeddedId(regs->ps_embedded_id);
+	} else
+	{
+		const auto* src = reinterpret_cast<const uint32_t*>(regs->ps_regs.data_addr);
+
+		EXIT_NOT_IMPLEMENTED(src == nullptr);
+
+		ps_print("ShaderParsePS()", regs->ps_regs);
+		ps_check(regs->ps_regs);
+
+		EXIT_NOT_IMPLEMENTED(regs->ps_regs.user_sgpr > regs->ps_user_sgpr.count);
+
+		const auto* header = GetBinaryInfo(src);
+
+		EXIT_NOT_IMPLEMENTED(header == nullptr);
+
+		bi_print("ShaderParsePS():ShaderBinaryInfo", *header);
+
+		shader_parse(0, src, nullptr, &code);
+
+		if (g_debug_printfs != nullptr)
 		{
-			code.GetDebugPrintfs() = g_debug_printfs->At(index).cmds;
+			auto id = (static_cast<uint64_t>(header->hash0) << 32u) | header->crc32;
+			if (auto index = g_debug_printfs->Find(id, [](auto cmd, auto id) { return cmd.id == id; }); g_debug_printfs->IndexValid(index))
+			{
+				code.GetDebugPrintfs() = g_debug_printfs->At(index).cmds;
+			}
 		}
 	}
 
@@ -3075,24 +3141,30 @@ Vector<uint32_t> ShaderRecompilePS(const ShaderCode& code, const ShaderPixelInpu
 {
 	KYTY_PROFILER_FUNCTION(profiler::colors::Blue300);
 
-	ShaderLogHelper log("ps");
-
-	for (uint32_t i = 0; i < input_info->input_num; i++)
-	{
-		EXIT_NOT_IMPLEMENTED(input_info->interpolator_settings[i] != i);
-	}
-
-	for (int i = 0; i < input_info->bind.storage_buffers.buffers_num; i++)
-	{
-		const auto& r = input_info->bind.storage_buffers.buffers[i];
-		EXIT_NOT_IMPLEMENTED(((r.Stride() * r.NumRecords()) & 0x3u) != 0);
-	}
-
+	String           source;
 	Vector<uint32_t> ret;
+	ShaderLogHelper  log("ps");
 
-	log.DumpOriginalShader(code);
+	if (code.IsPsEmbedded())
+	{
+		source = SpirvGetEmbeddedPs(code.GetPsEmbeddedId());
+	} else
+	{
+		//		for (uint32_t i = 0; i < input_info->input_num; i++)
+		//		{
+		//			EXIT_NOT_IMPLEMENTED(input_info->interpolator_settings[i] != i);
+		//		}
 
-	auto source = SpirvGenerateSource(code, nullptr, input_info, nullptr);
+		for (int i = 0; i < input_info->bind.storage_buffers.buffers_num; i++)
+		{
+			const auto& r = input_info->bind.storage_buffers.buffers[i];
+			EXIT_NOT_IMPLEMENTED(((r.Stride() * r.NumRecords()) & 0x3u) != 0);
+		}
+
+		log.DumpOriginalShader(code);
+
+		source = SpirvGenerateSource(code, nullptr, input_info, nullptr);
+	}
 
 	log.DumpRecompiledShader(source);
 
@@ -3194,7 +3266,8 @@ static ShaderBindParameters ShaderUpdateBindInfo(const ShaderCode& code, const S
 				break;
 			}
 
-			if (inst.type == ShaderInstructionType::ImageStoreMip || inst.type == ShaderInstructionType::ImageLoad)
+			if (inst.type == ShaderInstructionType::ImageStore || inst.type == ShaderInstructionType::ImageStoreMip ||
+			    inst.type == ShaderInstructionType::ImageLoad)
 			{
 				if (inst.src[1].register_id == s)
 				{
@@ -3389,6 +3462,8 @@ static void ShaderGetBindIds(ShaderId* ret, const ShaderBindResources& bind)
 
 ShaderId ShaderGetIdVS(const VertexShaderInfo* regs, const ShaderVertexInputInfo* input_info)
 {
+	KYTY_PROFILER_FUNCTION();
+
 	ShaderId ret;
 
 	if (regs->vs_embedded)
@@ -3453,6 +3528,16 @@ ShaderId ShaderGetIdVS(const VertexShaderInfo* regs, const ShaderVertexInputInfo
 
 ShaderId ShaderGetIdPS(const PixelShaderInfo* regs, const ShaderPixelInputInfo* input_info)
 {
+	KYTY_PROFILER_FUNCTION();
+
+	ShaderId ret;
+
+	if (regs->ps_embedded)
+	{
+		ret.ids.Add(regs->ps_embedded_id);
+		return ret;
+	}
+
 	const auto* src = reinterpret_cast<const uint32_t*>(regs->ps_regs.data_addr);
 
 	EXIT_NOT_IMPLEMENTED(src == nullptr);
@@ -3461,7 +3546,6 @@ ShaderId ShaderGetIdPS(const PixelShaderInfo* regs, const ShaderPixelInputInfo* 
 
 	EXIT_NOT_IMPLEMENTED(header == nullptr);
 
-	ShaderId ret;
 	ret.ids.Expand(64);
 
 	ret.ids.Add(header->length);

@@ -46,38 +46,68 @@ struct VulkanDescriptor
 };
 
 #pragma pack(push, 1)
-struct PipelineParameters
-{
-	float               viewport_scale[3]        = {};
-	float               viewport_offset[3]       = {};
-	int                 scissor_ltrb[4]          = {0};
-	VkPrimitiveTopology topology                 = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
-	bool                with_depth               = false;
-	bool                depth_test_enable        = false;
-	bool                depth_write_enable       = false;
-	VkCompareOp         depth_compare_op         = VK_COMPARE_OP_NEVER;
-	bool                depth_bounds_test_enable = false;
-	float               depth_min_bounds         = 0.0f;
-	float               depth_max_bounds         = 0.0f;
-	bool                stencil_test_enable      = false;
-	uint32_t            color_mask               = 0;
-	bool                cull_front               = false;
-	bool                cull_back                = false;
-	bool                face                     = false;
-	uint8_t             color_srcblend           = 0;
-	uint8_t             color_comb_fcn           = 0;
-	uint8_t             color_destblend          = 0;
-	uint8_t             alpha_srcblend           = 0;
-	uint8_t             alpha_comb_fcn           = 0;
-	uint8_t             alpha_destblend          = 0;
-	bool                separate_alpha_blend     = false;
-	bool                blend_enable             = false;
-	float               blend_color_red          = 0.0f;
-	float               blend_color_green        = 0.0f;
-	float               blend_color_blue         = 0.0f;
-	float               blend_color_alpha        = 0.0f;
 
-	bool operator==(const PipelineParameters& other) const;
+struct PipelineStencilStaticState
+{
+	VkStencilOp failOp      = VK_STENCIL_OP_KEEP;
+	VkStencilOp passOp      = VK_STENCIL_OP_KEEP;
+	VkStencilOp depthFailOp = VK_STENCIL_OP_KEEP;
+	VkCompareOp compareOp   = VK_COMPARE_OP_NEVER;
+};
+
+struct PipelineStencilDynamicState
+{
+	uint32_t compareMask = 0;
+	uint32_t writeMask   = 0;
+	uint32_t reference   = 0;
+};
+
+struct PipelineStaticParameters
+{
+	float                      viewport_scale[3]        = {};
+	float                      viewport_offset[3]       = {};
+	int                        scissor_ltrb[4]          = {0};
+	VkPrimitiveTopology        topology                 = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+	bool                       with_depth               = false;
+	bool                       depth_test_enable        = false;
+	bool                       depth_write_enable       = false;
+	VkCompareOp                depth_compare_op         = VK_COMPARE_OP_NEVER;
+	bool                       depth_bounds_test_enable = false;
+	float                      depth_min_bounds         = 0.0f;
+	float                      depth_max_bounds         = 0.0f;
+	bool                       stencil_test_enable      = false;
+	PipelineStencilStaticState stencil_front;
+	PipelineStencilStaticState stencil_back;
+	uint32_t                   color_mask           = 0;
+	bool                       cull_front           = false;
+	bool                       cull_back            = false;
+	bool                       face                 = false;
+	uint8_t                    color_srcblend       = 0;
+	uint8_t                    color_comb_fcn       = 0;
+	uint8_t                    color_destblend      = 0;
+	uint8_t                    alpha_srcblend       = 0;
+	uint8_t                    alpha_comb_fcn       = 0;
+	uint8_t                    alpha_destblend      = 0;
+	bool                       separate_alpha_blend = false;
+	bool                       blend_enable         = false;
+	float                      blend_color_red      = 0.0f;
+	float                      blend_color_green    = 0.0f;
+	float                      blend_color_blue     = 0.0f;
+	float                      blend_color_alpha    = 0.0f;
+
+	bool operator==(const PipelineStaticParameters& other) const;
+};
+
+struct PipelineDynamicParameters
+{
+	bool vk_dynamic_state_stencil_compare_mask = false;
+	bool vk_dynamic_state_stencil_write_mask   = false;
+	bool vk_dynamic_state_stencil_reference    = false;
+
+	PipelineStencilDynamicState stencil_front;
+	PipelineStencilDynamicState stencil_back;
+
+	bool operator==(const PipelineDynamicParameters& other) const;
 };
 #pragma pack(pop)
 
@@ -92,6 +122,8 @@ struct VulkanPipeline
 {
 	VkPipelineLayout                    pipeline_layout   = nullptr;
 	VkPipeline                          pipeline          = nullptr;
+	const PipelineStaticParameters*     static_params     = nullptr;
+	PipelineDynamicParameters*          dynamic_params    = nullptr;
 	const PipelineAdditionalParameters* additional_params = nullptr;
 };
 
@@ -117,12 +149,13 @@ private:
 
 	struct Pipeline
 	{
-		uint64_t            render_pass_id = 0;
-		ShaderId            vs_shader_id;
-		ShaderId            ps_shader_id;
-		ShaderId            cs_shader_id;
-		VulkanPipeline*     pipeline = nullptr;
-		PipelineParameters* params   = nullptr;
+		uint64_t                   render_pass_id = 0;
+		ShaderId                   vs_shader_id;
+		ShaderId                   ps_shader_id;
+		ShaderId                   cs_shader_id;
+		VulkanPipeline*            pipeline       = nullptr;
+		PipelineStaticParameters*  static_params  = nullptr;
+		PipelineDynamicParameters* dynamic_params = nullptr;
 	};
 
 	[[nodiscard]] VulkanPipeline* Find(const Pipeline& p) const;
@@ -249,10 +282,11 @@ private:
 
 	struct Framebuffer
 	{
-		VulkanFramebuffer* framebuffer        = nullptr;
-		uint64_t           image_id           = 0;
-		uint64_t           depth_id           = 0;
-		bool               depth_clear_enable = false;
+		VulkanFramebuffer* framebuffer          = nullptr;
+		uint64_t           image_id             = 0;
+		uint64_t           depth_id             = 0;
+		bool               depth_clear_enable   = false;
+		bool               stencil_clear_enable = false;
 	};
 
 	Core::Mutex                  m_mutex;
@@ -324,34 +358,36 @@ private:
 
 struct RenderDepthInfo
 {
-	VkFormat                 format                   = VK_FORMAT_UNDEFINED;
-	uint32_t                 width                    = 0;
-	uint32_t                 height                   = 0;
-	bool                     htile                    = false;
-	bool                     neo                      = false;
-	uint64_t                 depth_buffer_size        = 0;
-	uint64_t                 depth_buffer_vaddr       = 0;
-	uint64_t                 stencil_buffer_size      = 0;
-	uint64_t                 stencil_buffer_vaddr     = 0;
-	uint64_t                 htile_buffer_size        = 0;
-	uint64_t                 htile_buffer_vaddr       = 0;
-	bool                     depth_clear_enable       = false;
-	float                    depth_clear_value        = 0.0f;
-	bool                     depth_test_enable        = false;
-	bool                     depth_write_enable       = false;
-	VkCompareOp              depth_compare_op         = VK_COMPARE_OP_NEVER;
-	bool                     depth_bounds_test_enable = false;
-	float                    depth_min_bounds         = 0.0f;
-	float                    depth_max_bounds         = 0.0f;
-	bool                     stencil_clear_enable     = false;
-	uint8_t                  stencil_clear_value      = 0;
-	bool                     stencil_test_enable      = false;
-	VkStencilOpState         stencil_front            = {};
-	VkStencilOpState         stencil_back             = {};
-	DepthStencilVulkanImage* vulkan_buffer            = nullptr;
-	uint64_t                 vaddr[3]                 = {};
-	uint64_t                 size[3]                  = {};
-	int                      vaddr_num                = 0;
+	VkFormat                    format                   = VK_FORMAT_UNDEFINED;
+	uint32_t                    width                    = 0;
+	uint32_t                    height                   = 0;
+	bool                        htile                    = false;
+	bool                        neo                      = false;
+	uint64_t                    depth_buffer_size        = 0;
+	uint64_t                    depth_buffer_vaddr       = 0;
+	uint64_t                    stencil_buffer_size      = 0;
+	uint64_t                    stencil_buffer_vaddr     = 0;
+	uint64_t                    htile_buffer_size        = 0;
+	uint64_t                    htile_buffer_vaddr       = 0;
+	bool                        depth_clear_enable       = false;
+	float                       depth_clear_value        = 0.0f;
+	bool                        depth_test_enable        = false;
+	bool                        depth_write_enable       = false;
+	VkCompareOp                 depth_compare_op         = VK_COMPARE_OP_NEVER;
+	bool                        depth_bounds_test_enable = false;
+	float                       depth_min_bounds         = 0.0f;
+	float                       depth_max_bounds         = 0.0f;
+	bool                        stencil_clear_enable     = false;
+	uint8_t                     stencil_clear_value      = 0;
+	bool                        stencil_test_enable      = false;
+	PipelineStencilStaticState  stencil_static_front;
+	PipelineStencilStaticState  stencil_static_back;
+	PipelineStencilDynamicState stencil_dynamic_front;
+	PipelineStencilDynamicState stencil_dynamic_back;
+	DepthStencilVulkanImage*    vulkan_buffer = nullptr;
+	uint64_t                    vaddr[3]      = {};
+	uint64_t                    size[3]       = {};
+	int                         vaddr_num     = 0;
 };
 
 enum class RenderColorType
@@ -378,7 +414,8 @@ public:
 	{
 		if (m_pool != nullptr)
 		{
-			Delete();
+			// TODO(): check if destructor is called from std::_Exit()
+			// Delete();
 		}
 	}
 
@@ -420,42 +457,42 @@ static void rt_print(const char* func, const RenderTarget& rt)
 {
 	printf("%s\n", func);
 
-	printf("\t base_addr                       = 0x%016" PRIx64 "\n", rt.base_addr);
-	printf("\t pitch_div8_minus1               = 0x%08" PRIx32 "\n", rt.pitch_div8_minus1);
-	printf("\t fmask_pitch_div8_minus1         = 0x%08" PRIx32 "\n", rt.fmask_pitch_div8_minus1);
-	printf("\t slice_div64_minus1              = 0x%08" PRIx32 "\n", rt.slice_div64_minus1);
-	printf("\t base_array_slice_index          = 0x%08" PRIx32 "\n", rt.base_array_slice_index);
-	printf("\t last_array_slice_index          = 0x%08" PRIx32 "\n", rt.last_array_slice_index);
-	printf("\t fmask_compression_enable        = %s\n", rt.fmask_compression_enable ? "true" : "false");
-	printf("\t fmask_compression_mode          = 0x%08" PRIx32 "\n", rt.fmask_compression_mode);
-	printf("\t cmask_fast_clear_enable         = %s\n", rt.cmask_fast_clear_enable ? "true" : "false");
-	printf("\t dcc_compression_enable          = %s\n", rt.dcc_compression_enable ? "true" : "false");
-	printf("\t neo_mode                        = %s\n", rt.neo_mode ? "true" : "false");
-	printf("\t cmask_tile_mode                 = 0x%08" PRIx32 "\n", rt.cmask_tile_mode);
-	printf("\t cmask_tile_mode_neo             = 0x%08" PRIx32 "\n", rt.cmask_tile_mode_neo);
-	printf("\t format                          = 0x%08" PRIx32 "\n", rt.format);
-	printf("\t channel_type                    = 0x%08" PRIx32 "\n", rt.channel_type);
-	printf("\t channel_order                   = 0x%08" PRIx32 "\n", rt.channel_order);
-	printf("\t force_dest_alpha_to_one         = %s\n", rt.force_dest_alpha_to_one ? "true" : "false");
-	printf("\t tile_mode                       = 0x%08" PRIx32 "\n", rt.tile_mode);
-	printf("\t fmask_tile_mode                 = 0x%08" PRIx32 "\n", rt.fmask_tile_mode);
-	printf("\t num_samples                     = 0x%08" PRIx32 "\n", rt.num_samples);
-	printf("\t num_fragments                   = 0x%08" PRIx32 "\n", rt.num_fragments);
-	printf("\t dcc_max_uncompressed_block_size = 0x%08" PRIx32 "\n", rt.dcc_max_uncompressed_block_size);
-	printf("\t dcc_max_compressed_block_size   = 0x%08" PRIx32 "\n", rt.dcc_max_compressed_block_size);
-	printf("\t dcc_min_compressed_block_size   = 0x%08" PRIx32 "\n", rt.dcc_min_compressed_block_size);
-	printf("\t dcc_color_transform             = 0x%08" PRIx32 "\n", rt.dcc_color_transform);
-	printf("\t dcc_enable_overwrite_combiner   = %s\n", rt.dcc_enable_overwrite_combiner ? "true" : "false");
-	printf("\t dcc_force_independent_blocks    = %s\n", rt.dcc_force_independent_blocks ? "true" : "false");
-	printf("\t cmask_addr                      = 0x%016" PRIx64 "\n", rt.cmask_addr);
-	printf("\t cmask_slice_minus1              = 0x%08" PRIx32 "\n", rt.cmask_slice_minus1);
-	printf("\t fmask_addr                      = 0x%016" PRIx64 "\n", rt.fmask_addr);
-	printf("\t fmask_slice_minus1              = 0x%08" PRIx32 "\n", rt.fmask_slice_minus1);
-	printf("\t clear_color_word0               = 0x%08" PRIx32 "\n", rt.clear_color_word0);
-	printf("\t clear_color_word1               = 0x%08" PRIx32 "\n", rt.clear_color_word1);
-	printf("\t dcc_addr                        = 0x%016" PRIx64 "\n", rt.dcc_addr);
-	printf("\t width                           = 0x%08" PRIx32 "\n", rt.width);
-	printf("\t height                          = 0x%08" PRIx32 "\n", rt.height);
+	printf("\t base_addr                           = 0x%016" PRIx64 "\n", rt.base_addr);
+	printf("\t pitch_div8_minus1                   = 0x%08" PRIx32 "\n", rt.pitch_div8_minus1);
+	printf("\t fmask_pitch_div8_minus1             = 0x%08" PRIx32 "\n", rt.fmask_pitch_div8_minus1);
+	printf("\t slice_div64_minus1                  = 0x%08" PRIx32 "\n", rt.slice_div64_minus1);
+	printf("\t base_array_slice_index              = 0x%08" PRIx32 "\n", rt.base_array_slice_index);
+	printf("\t last_array_slice_index              = 0x%08" PRIx32 "\n", rt.last_array_slice_index);
+	printf("\t color_info.fmask_compression_enable = %s\n", rt.color_info.fmask_compression_enable ? "true" : "false");
+	printf("\t color_info.fmask_compression_mode   = 0x%08" PRIx32 "\n", rt.color_info.fmask_compression_mode);
+	printf("\t color_info.cmask_fast_clear_enable  = %s\n", rt.color_info.cmask_fast_clear_enable ? "true" : "false");
+	printf("\t color_info.dcc_compression_enable   = %s\n", rt.color_info.dcc_compression_enable ? "true" : "false");
+	printf("\t color_info.neo_mode                 = %s\n", rt.color_info.neo_mode ? "true" : "false");
+	printf("\t color_info.cmask_tile_mode          = 0x%08" PRIx32 "\n", rt.color_info.cmask_tile_mode);
+	printf("\t color_info.cmask_tile_mode_neo      = 0x%08" PRIx32 "\n", rt.color_info.cmask_tile_mode_neo);
+	printf("\t color_info.format                   = 0x%08" PRIx32 "\n", rt.color_info.format);
+	printf("\t color_info.channel_type             = 0x%08" PRIx32 "\n", rt.color_info.channel_type);
+	printf("\t color_info.channel_order            = 0x%08" PRIx32 "\n", rt.color_info.channel_order);
+	printf("\t force_dest_alpha_to_one             = %s\n", rt.force_dest_alpha_to_one ? "true" : "false");
+	printf("\t tile_mode                           = 0x%08" PRIx32 "\n", rt.tile_mode);
+	printf("\t fmask_tile_mode                     = 0x%08" PRIx32 "\n", rt.fmask_tile_mode);
+	printf("\t num_samples                         = 0x%08" PRIx32 "\n", rt.num_samples);
+	printf("\t num_fragments                       = 0x%08" PRIx32 "\n", rt.num_fragments);
+	printf("\t dcc_max_uncompressed_block_size     = 0x%08" PRIx32 "\n", rt.dcc_max_uncompressed_block_size);
+	printf("\t dcc_max_compressed_block_size       = 0x%08" PRIx32 "\n", rt.dcc_max_compressed_block_size);
+	printf("\t dcc_min_compressed_block_size       = 0x%08" PRIx32 "\n", rt.dcc_min_compressed_block_size);
+	printf("\t dcc_color_transform                 = 0x%08" PRIx32 "\n", rt.dcc_color_transform);
+	printf("\t dcc_enable_overwrite_combiner       = %s\n", rt.dcc_enable_overwrite_combiner ? "true" : "false");
+	printf("\t dcc_force_independent_blocks        = %s\n", rt.dcc_force_independent_blocks ? "true" : "false");
+	printf("\t cmask_addr                          = 0x%016" PRIx64 "\n", rt.cmask_addr);
+	printf("\t cmask_slice_minus1                  = 0x%08" PRIx32 "\n", rt.cmask_slice_minus1);
+	printf("\t fmask_addr                          = 0x%016" PRIx64 "\n", rt.fmask_addr);
+	printf("\t fmask_slice_minus1                  = 0x%08" PRIx32 "\n", rt.fmask_slice_minus1);
+	printf("\t clear_color_word0                   = 0x%08" PRIx32 "\n", rt.clear_color_word0);
+	printf("\t clear_color_word1                   = 0x%08" PRIx32 "\n", rt.clear_color_word1);
+	printf("\t dcc_addr                            = 0x%016" PRIx64 "\n", rt.dcc_addr);
+	printf("\t width                               = 0x%08" PRIx32 "\n", rt.width);
+	printf("\t height                              = 0x%08" PRIx32 "\n", rt.height);
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
@@ -470,13 +507,13 @@ static void rt_check(const RenderTarget& rt)
 		// EXIT_NOT_IMPLEMENTED(rt.slice_div64_minus1 != 0x000086ff);
 		EXIT_NOT_IMPLEMENTED(rt.base_array_slice_index != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(rt.last_array_slice_index != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(rt.fmask_compression_enable != false);
-		EXIT_NOT_IMPLEMENTED(rt.fmask_compression_mode != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(rt.cmask_fast_clear_enable != false);
-		EXIT_NOT_IMPLEMENTED(rt.dcc_compression_enable != false);
-		EXIT_NOT_IMPLEMENTED(!render_to_texture && rt.neo_mode != Config::IsNeo());
-		EXIT_NOT_IMPLEMENTED(rt.cmask_tile_mode != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(rt.cmask_tile_mode_neo != 0x00000000);
+		EXIT_NOT_IMPLEMENTED(rt.color_info.fmask_compression_enable != false);
+		EXIT_NOT_IMPLEMENTED(rt.color_info.fmask_compression_mode != 0x00000000);
+		EXIT_NOT_IMPLEMENTED(rt.color_info.cmask_fast_clear_enable != false);
+		EXIT_NOT_IMPLEMENTED(rt.color_info.dcc_compression_enable != false);
+		EXIT_NOT_IMPLEMENTED(!render_to_texture && rt.color_info.neo_mode != Config::IsNeo());
+		EXIT_NOT_IMPLEMENTED(rt.color_info.cmask_tile_mode != 0x00000000);
+		EXIT_NOT_IMPLEMENTED(rt.color_info.cmask_tile_mode_neo != 0x00000000);
 		//		 EXIT_NOT_IMPLEMENTED(rt.format != 0x0000000a);
 		// EXIT_NOT_IMPLEMENTED(rt.channel_type != 0x00000006);
 		// EXIT_NOT_IMPLEMENTED(rt.channel_order != 0x00000001);
@@ -560,7 +597,7 @@ static void z_check(const DepthRenderTarget& z)
 	} else
 	{
 		EXIT_NOT_IMPLEMENTED(z.z_info.format != 0x00000003);
-		EXIT_NOT_IMPLEMENTED(z.z_info.tile_mode_index != (Config::IsNeo() ? 0x00000002 : 0));
+		// EXIT_NOT_IMPLEMENTED(z.z_info.tile_mode_index != (Config::IsNeo() ? 0x00000002 : 0));
 		EXIT_NOT_IMPLEMENTED(z.z_info.num_samples != 0x00000000);
 		// EXIT_NOT_IMPLEMENTED(z.z_info.tile_surface_enable != true);
 		EXIT_NOT_IMPLEMENTED(z.z_info.expclear_enabled != false);
@@ -579,8 +616,8 @@ static void z_check(const DepthRenderTarget& z)
 		EXIT_NOT_IMPLEMENTED(z.stencil_info.format != 0x00000001);
 		EXIT_NOT_IMPLEMENTED(z.stencil_info.tile_stencil_disable != true);
 		EXIT_NOT_IMPLEMENTED(z.stencil_info.expclear_enabled != false);
-		EXIT_NOT_IMPLEMENTED(z.stencil_info.tile_mode_index != (Config::IsNeo() ? 0x00000002 : 0));
-		EXIT_NOT_IMPLEMENTED(z.stencil_info.tile_split != (Config::IsNeo() ? 0x00000002 : 0));
+		// EXIT_NOT_IMPLEMENTED(z.stencil_info.tile_mode_index != (Config::IsNeo() ? 0x00000002 : 0));
+		// EXIT_NOT_IMPLEMENTED(z.stencil_info.tile_split != (Config::IsNeo() ? 0x00000002 : 0));
 	}
 
 	if (z.z_info.format != 0 || z.stencil_info.format != 0)
@@ -589,9 +626,9 @@ static void z_check(const DepthRenderTarget& z)
 		EXIT_NOT_IMPLEMENTED(z.depth_info.array_mode != 0x00000004);
 		EXIT_NOT_IMPLEMENTED(z.depth_info.pipe_config != (Config::IsNeo() ? 0x00000012 : 0x0c));
 		EXIT_NOT_IMPLEMENTED(z.depth_info.bank_width != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(z.depth_info.bank_height != (Config::IsNeo() ? 0x00000001 : 2));
-		EXIT_NOT_IMPLEMENTED(z.depth_info.macro_tile_aspect != (Config::IsNeo() ? 0x00000000 : 2));
-		EXIT_NOT_IMPLEMENTED(z.depth_info.num_banks != (Config::IsNeo() ? 0x00000002 : 3));
+		// EXIT_NOT_IMPLEMENTED(z.depth_info.bank_height != (Config::IsNeo() ? 0x00000001 : 2));
+		// EXIT_NOT_IMPLEMENTED(z.depth_info.macro_tile_aspect != (Config::IsNeo() ? 0x00000000 : 2));
+		// EXIT_NOT_IMPLEMENTED(z.depth_info.num_banks != (Config::IsNeo() ? 0x00000002 : 3));
 		EXIT_NOT_IMPLEMENTED(z.depth_view.slice_start != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(z.depth_view.slice_max != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(z.htile_surface.linear != 0x00000000);
@@ -664,7 +701,7 @@ static void rc_print(const char* func, const RenderControl& c)
 static void rc_check(const RenderControl& c)
 {
 	// EXIT_NOT_IMPLEMENTED(c.depth_clear_enable != false);
-	EXIT_NOT_IMPLEMENTED(c.stencil_clear_enable != false);
+	// EXIT_NOT_IMPLEMENTED(c.stencil_clear_enable != false);
 	EXIT_NOT_IMPLEMENTED(c.resummarize_enable != false);
 	EXIT_NOT_IMPLEMENTED(c.stencil_compress_disable != false);
 	EXIT_NOT_IMPLEMENTED(c.depth_compress_disable != false);
@@ -738,30 +775,58 @@ static void bc_check(const BlendControl& c, const BlendColor& color)
 	EXIT_NOT_IMPLEMENTED(color.alpha != 0.0f);
 }
 
-static void d_print(const char* func, const DepthControl& c)
+static void d_print(const char* func, const DepthControl& c, const StencilControl& s, const StencilMask& sm)
 {
 	printf("%s\n", func);
 
-	printf("\t stencil_enable      = %s\n", c.stencil_enable ? "true" : "false");
-	printf("\t z_enable            = %s\n", c.z_enable ? "true" : "false");
-	printf("\t z_write_enable      = %s\n", c.z_write_enable ? "true" : "false");
-	printf("\t depth_bounds_enable = %s\n", c.depth_bounds_enable ? "true" : "false");
-	printf("\t zfunc               = %" PRIu8 "\n", c.zfunc);
-	printf("\t backface_enable     = %s\n", c.backface_enable ? "true" : "false");
-	printf("\t stencilfunc         = %" PRIu8 "\n", c.stencilfunc);
-	printf("\t stencilfunc_bf      = %" PRIu8 "\n", c.stencilfunc_bf);
+	printf("\t stencil_enable       = %s\n", c.stencil_enable ? "true" : "false");
+	printf("\t z_enable             = %s\n", c.z_enable ? "true" : "false");
+	printf("\t z_write_enable       = %s\n", c.z_write_enable ? "true" : "false");
+	printf("\t depth_bounds_enable  = %s\n", c.depth_bounds_enable ? "true" : "false");
+	printf("\t zfunc                = %" PRIu8 "\n", c.zfunc);
+	printf("\t backface_enable      = %s\n", c.backface_enable ? "true" : "false");
+	printf("\t stencilfunc          = %" PRIu8 "\n", c.stencilfunc);
+	printf("\t stencilfunc_bf       = %" PRIu8 "\n", c.stencilfunc_bf);
+	printf("\t stencil_fail         = %" PRIu8 "\n", s.stencil_fail);
+	printf("\t stencil_zpass        = %" PRIu8 "\n", s.stencil_zpass);
+	printf("\t stencil_zfail        = %" PRIu8 "\n", s.stencil_zfail);
+	printf("\t stencil_fail_bf      = %" PRIu8 "\n", s.stencil_fail_bf);
+	printf("\t stencil_zpass_bf     = %" PRIu8 "\n", s.stencil_zpass_bf);
+	printf("\t stencil_zfail_bf     = %" PRIu8 "\n", s.stencil_zfail_bf);
+	printf("\t stencil_testval      = %" PRIu8 "\n", sm.stencil_testval);
+	printf("\t stencil_mask         = %" PRIu8 "\n", sm.stencil_mask);
+	printf("\t stencil_writemask    = %" PRIu8 "\n", sm.stencil_writemask);
+	printf("\t stencil_opval        = %" PRIu8 "\n", sm.stencil_opval);
+	printf("\t stencil_testval_bf   = %" PRIu8 "\n", sm.stencil_testval_bf);
+	printf("\t stencil_mask_bf      = %" PRIu8 "\n", sm.stencil_mask_bf);
+	printf("\t stencil_writemask_bf = %" PRIu8 "\n", sm.stencil_writemask_bf);
+	printf("\t stencil_opval_bf     = %" PRIu8 "\n", sm.stencil_opval_bf);
 }
 
-static void d_check(const DepthControl& c)
+static void d_check(const DepthControl& c, const StencilControl& s, const StencilMask& /*sm*/)
 {
-	EXIT_NOT_IMPLEMENTED(c.stencil_enable != false);
+	// EXIT_NOT_IMPLEMENTED(c.stencil_enable != false);
 	// EXIT_NOT_IMPLEMENTED(c.z_enable != false);
 	// EXIT_NOT_IMPLEMENTED(c.z_write_enable != false);
 	EXIT_NOT_IMPLEMENTED(c.depth_bounds_enable != false);
 	// EXIT_NOT_IMPLEMENTED(c.zfunc != 0);
 	EXIT_NOT_IMPLEMENTED(c.backface_enable != false);
-	EXIT_NOT_IMPLEMENTED(c.stencilfunc != 0);
-	EXIT_NOT_IMPLEMENTED(c.stencilfunc_bf != 0);
+	// EXIT_NOT_IMPLEMENTED(c.stencilfunc != 0);
+	// EXIT_NOT_IMPLEMENTED(c.stencilfunc_bf != 0);
+	// EXIT_NOT_IMPLEMENTED(s.stencil_fail != 0);
+	// EXIT_NOT_IMPLEMENTED(s.stencil_zpass != 0);
+	// EXIT_NOT_IMPLEMENTED(s.stencil_zfail != 0);
+	EXIT_NOT_IMPLEMENTED(s.stencil_fail_bf != 0);
+	EXIT_NOT_IMPLEMENTED(s.stencil_zpass_bf != 0);
+	EXIT_NOT_IMPLEMENTED(s.stencil_zfail_bf != 0);
+	// EXIT_NOT_IMPLEMENTED(sm.stencil_testval != 0);
+	// EXIT_NOT_IMPLEMENTED(sm.stencil_mask != 0);
+	// EXIT_NOT_IMPLEMENTED(sm.stencil_writemask != 0);
+	// EXIT_NOT_IMPLEMENTED(sm.stencil_opval != 0);
+	// EXIT_NOT_IMPLEMENTED(sm.stencil_testval_bf != 0);
+	// EXIT_NOT_IMPLEMENTED(sm.stencil_mask_bf != 0);
+	// EXIT_NOT_IMPLEMENTED(sm.stencil_writemask_bf != 0);
+	// EXIT_NOT_IMPLEMENTED(sm.stencil_opval_bf != 0);
 }
 
 static void eqaa_print(const char* func, const EqaaControl& c)
@@ -848,6 +913,8 @@ static void hw_check(const HardwareContext& hw)
 	const auto& c    = hw.GetClipControl();
 	const auto& rc   = hw.GetRenderControl();
 	const auto& d    = hw.GetDepthControl();
+	const auto& s    = hw.GetStencilControl();
+	const auto& sm   = hw.GetStencilMask();
 	const auto& mc   = hw.GetModeControl();
 	const auto& eqaa = hw.GetEqaaControl();
 
@@ -856,13 +923,14 @@ static void hw_check(const HardwareContext& hw)
 	z_check(z);
 	clip_check(c);
 	rc_check(rc);
-	d_check(d);
+	d_check(d, s, sm);
 	mc_check(mc);
 	bc_check(bc, bclr);
 	eqaa_check(eqaa);
 
 	EXIT_NOT_IMPLEMENTED(hw.GetRenderTargetMask() != 0xF && hw.GetRenderTargetMask() != 0x0);
 	EXIT_NOT_IMPLEMENTED(hw.GetDepthClearValue() != 0.0f && hw.GetDepthClearValue() != 1.0f);
+	// EXIT_NOT_IMPLEMENTED(hw.GetStencilClearValue() != 0);
 }
 
 static void hw_print(const HardwareContext& hw)
@@ -875,19 +943,22 @@ static void hw_print(const HardwareContext& hw)
 	const auto& c    = hw.GetClipControl();
 	const auto& rc   = hw.GetRenderControl();
 	const auto& d    = hw.GetDepthControl();
+	const auto& s    = hw.GetStencilControl();
+	const auto& sm   = hw.GetStencilMask();
 	const auto& mc   = hw.GetModeControl();
 	const auto& eqaa = hw.GetEqaaControl();
 
 	printf("HardwareContext\n");
 	printf("\t GetRenderTargetMask() = 0x%08" PRIx32 "\n", hw.GetRenderTargetMask());
 	printf("\t GetDepthClearValue()  = %f\n", hw.GetDepthClearValue());
+	printf("\t GetStencilClearValue()  = %" PRIu8 "\n", hw.GetStencilClearValue());
 
 	rt_print("RenderTraget:", rt);
 	z_print("DepthRenderTraget:", z);
 	vp_print("ScreenViewport:", vp);
 	clip_print("ClipControl:", c);
 	rc_print("RenderControl:", rc);
-	d_print("DepthControl:", d);
+	d_print("DepthStencilControlMask:", d, s, sm);
 	mc_print("ModeControl:", mc);
 	bc_print("BlendControl:", bc, bclr);
 	eqaa_print("EqaaControl:", eqaa);
@@ -1121,6 +1192,8 @@ void CommandPool::Delete()
 
 VulkanFramebuffer* FramebufferCache::CreateFramebuffer(RenderColorInfo* color, RenderDepthInfo* depth)
 {
+	KYTY_PROFILER_FUNCTION();
+
 	static std::atomic<uint64_t> seq = 0;
 
 	Core::LockGuard lock(m_mutex);
@@ -1135,7 +1208,8 @@ VulkanFramebuffer* FramebufferCache::CreateFramebuffer(RenderColorInfo* color, R
 	for (auto& f: m_framebuffers)
 	{
 		if (f.framebuffer != nullptr && f.image_id == (with_color ? color->vulkan_buffer->memory.unique_id : 0) &&
-		    f.depth_id == (with_depth ? depth->vulkan_buffer->memory.unique_id : 0) && f.depth_clear_enable == depth->depth_clear_enable)
+		    f.depth_id == (with_depth ? depth->vulkan_buffer->memory.unique_id : 0) && f.depth_clear_enable == depth->depth_clear_enable &&
+		    f.stencil_clear_enable == depth->stencil_clear_enable)
 		{
 			return f.framebuffer;
 		}
@@ -1174,8 +1248,8 @@ VulkanFramebuffer* FramebufferCache::CreateFramebuffer(RenderColorInfo* color, R
 	attachments[1].samples        = VK_SAMPLE_COUNT_1_BIT;
 	attachments[1].loadOp         = (depth->depth_clear_enable ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD);
 	attachments[1].storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
-	attachments[1].stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-	attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	attachments[1].stencilLoadOp  = (depth->stencil_clear_enable ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD);
+	attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
 	attachments[1].initialLayout  = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 	attachments[1].finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
@@ -1234,10 +1308,11 @@ VulkanFramebuffer* FramebufferCache::CreateFramebuffer(RenderColorInfo* color, R
 	EXIT_NOT_IMPLEMENTED(framebuffer->framebuffer == nullptr);
 
 	Framebuffer fnew;
-	fnew.framebuffer        = framebuffer;
-	fnew.image_id           = (with_color ? color->vulkan_buffer->memory.unique_id : 0);
-	fnew.depth_id           = (with_depth ? depth->vulkan_buffer->memory.unique_id : 0);
-	fnew.depth_clear_enable = depth->depth_clear_enable;
+	fnew.framebuffer          = framebuffer;
+	fnew.image_id             = (with_color ? color->vulkan_buffer->memory.unique_id : 0);
+	fnew.depth_id             = (with_depth ? depth->vulkan_buffer->memory.unique_id : 0);
+	fnew.depth_clear_enable   = depth->depth_clear_enable;
+	fnew.stencil_clear_enable = depth->stencil_clear_enable;
 
 	bool updated = false;
 
@@ -1611,16 +1686,20 @@ static void CreateLayout(VkDescriptorSetLayout* set_layouts, uint32_t* set_layou
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 static VulkanPipeline* CreatePipelineInternal(VkRenderPass render_pass, const ShaderVertexInputInfo* vs_input_info,
                                               const Vector<uint32_t>& vs_shader, const ShaderPixelInputInfo* ps_input_info,
-                                              const Vector<uint32_t>& ps_shader, const PipelineParameters* params,
+                                              const Vector<uint32_t>& ps_shader, const PipelineStaticParameters* static_params,
+                                              PipelineDynamicParameters*          dynamic_params,
                                               const PipelineAdditionalParameters* additional_params)
 {
 	EXIT_IF(g_render_ctx == nullptr);
 	EXIT_IF(render_pass == nullptr);
-	EXIT_IF(params == nullptr);
+	EXIT_IF(static_params == nullptr);
+	EXIT_IF(dynamic_params == nullptr);
 	EXIT_IF(additional_params == nullptr);
 
 	auto* pipeline              = new VulkanPipeline;
 	pipeline->additional_params = additional_params;
+	pipeline->static_params     = static_params;
+	pipeline->dynamic_params    = dynamic_params;
 
 	auto* gctx = g_render_ctx->GetGraphicCtx();
 
@@ -1706,21 +1785,21 @@ static VulkanPipeline* CreatePipelineInternal(VkRenderPass render_pass, const Sh
 	input_assembly.sType                  = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
 	input_assembly.pNext                  = nullptr;
 	input_assembly.flags                  = 0;
-	input_assembly.topology               = params->topology;
+	input_assembly.topology               = static_params->topology;
 	input_assembly.primitiveRestartEnable = VK_FALSE;
 
 	VkViewport viewport {};
-	viewport.x        = params->viewport_offset[0] - params->viewport_scale[0];
-	viewport.y        = params->viewport_offset[1] - params->viewport_scale[1];
-	viewport.width    = params->viewport_scale[0] * 2.0f;
-	viewport.height   = params->viewport_scale[1] * 2.0f;
-	viewport.minDepth = params->viewport_offset[2];
-	viewport.maxDepth = params->viewport_scale[2] + params->viewport_offset[2];
+	viewport.x        = static_params->viewport_offset[0] - static_params->viewport_scale[0];
+	viewport.y        = static_params->viewport_offset[1] - static_params->viewport_scale[1];
+	viewport.width    = static_params->viewport_scale[0] * 2.0f;
+	viewport.height   = static_params->viewport_scale[1] * 2.0f;
+	viewport.minDepth = static_params->viewport_offset[2];
+	viewport.maxDepth = static_params->viewport_scale[2] + static_params->viewport_offset[2];
 
 	VkRect2D scissor {};
-	scissor.offset = {params->scissor_ltrb[0], params->scissor_ltrb[1]};
-	scissor.extent = {static_cast<uint32_t>(params->scissor_ltrb[2] - params->scissor_ltrb[0]),
-	                  static_cast<uint32_t>(params->scissor_ltrb[3] - params->scissor_ltrb[1])};
+	scissor.offset = {static_params->scissor_ltrb[0], static_params->scissor_ltrb[1]};
+	scissor.extent = {static_cast<uint32_t>(static_params->scissor_ltrb[2] - static_params->scissor_ltrb[0]),
+	                  static_cast<uint32_t>(static_params->scissor_ltrb[3] - static_params->scissor_ltrb[1])};
 
 	VkPipelineViewportStateCreateInfo viewport_state {};
 	viewport_state.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -1732,10 +1811,10 @@ static VulkanPipeline* CreatePipelineInternal(VkRenderPass render_pass, const Sh
 	viewport_state.pScissors     = &scissor;
 
 	VkCullModeFlags cull_mode = VK_CULL_MODE_NONE;
-	cull_mode |= (params->cull_back ? VK_CULL_MODE_BACK_BIT : 0u);
-	cull_mode |= (params->cull_front ? VK_CULL_MODE_FRONT_BIT : 0u);
+	cull_mode |= (static_params->cull_back ? VK_CULL_MODE_BACK_BIT : 0u);
+	cull_mode |= (static_params->cull_front ? VK_CULL_MODE_FRONT_BIT : 0u);
 
-	VkFrontFace front_face = (params->face ? VK_FRONT_FACE_CLOCKWISE : VK_FRONT_FACE_COUNTER_CLOCKWISE);
+	VkFrontFace front_face = (static_params->face ? VK_FRONT_FACE_CLOCKWISE : VK_FRONT_FACE_COUNTER_CLOCKWISE);
 
 	VkPipelineRasterizationDepthClipStateCreateInfoEXT clip_ext {};
 	clip_ext.sType           = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_DEPTH_CLIP_STATE_CREATE_INFO_EXT;
@@ -1771,31 +1850,31 @@ static VulkanPipeline* CreatePipelineInternal(VkRenderPass render_pass, const Sh
 
 	VkColorComponentFlags color_write_mask = 0;
 
-	if (params->color_mask == 0xF)
+	if (static_params->color_mask == 0xF)
 	{
 		color_write_mask =
 		    static_cast<VkColorComponentFlags>(VK_COLOR_COMPONENT_R_BIT) | static_cast<VkColorComponentFlags>(VK_COLOR_COMPONENT_G_BIT) |
 		    static_cast<VkColorComponentFlags>(VK_COLOR_COMPONENT_B_BIT) | static_cast<VkColorComponentFlags>(VK_COLOR_COMPONENT_A_BIT);
-	} else if (params->color_mask == 0x0)
+	} else if (static_params->color_mask == 0x0)
 	{
 		color_write_mask = 0;
 	} else
 	{
-		EXIT("unknown mask: %u\n", params->color_mask);
+		EXIT("unknown mask: %u\n", static_params->color_mask);
 	}
 
 	VkPipelineColorBlendAttachmentState color_blend_attachment {};
 	color_blend_attachment.colorWriteMask      = color_write_mask;
-	color_blend_attachment.blendEnable         = params->blend_enable ? VK_TRUE : VK_FALSE;
-	color_blend_attachment.srcColorBlendFactor = get_blend_factor(params->color_srcblend);
-	color_blend_attachment.dstColorBlendFactor = get_blend_factor(params->color_destblend);
-	color_blend_attachment.colorBlendOp        = get_blend_op(params->color_comb_fcn);
-	color_blend_attachment.srcAlphaBlendFactor =
-	    (params->separate_alpha_blend ? get_blend_factor(params->alpha_srcblend) : color_blend_attachment.srcColorBlendFactor);
-	color_blend_attachment.dstAlphaBlendFactor =
-	    (params->separate_alpha_blend ? get_blend_factor(params->alpha_destblend) : color_blend_attachment.dstColorBlendFactor);
+	color_blend_attachment.blendEnable         = static_params->blend_enable ? VK_TRUE : VK_FALSE;
+	color_blend_attachment.srcColorBlendFactor = get_blend_factor(static_params->color_srcblend);
+	color_blend_attachment.dstColorBlendFactor = get_blend_factor(static_params->color_destblend);
+	color_blend_attachment.colorBlendOp        = get_blend_op(static_params->color_comb_fcn);
+	color_blend_attachment.srcAlphaBlendFactor = (static_params->separate_alpha_blend ? get_blend_factor(static_params->alpha_srcblend)
+	                                                                                  : color_blend_attachment.srcColorBlendFactor);
+	color_blend_attachment.dstAlphaBlendFactor = (static_params->separate_alpha_blend ? get_blend_factor(static_params->alpha_destblend)
+	                                                                                  : color_blend_attachment.dstColorBlendFactor);
 	color_blend_attachment.alphaBlendOp =
-	    (params->separate_alpha_blend ? get_blend_op(params->alpha_comb_fcn) : color_blend_attachment.colorBlendOp);
+	    (static_params->separate_alpha_blend ? get_blend_op(static_params->alpha_comb_fcn) : color_blend_attachment.colorBlendOp);
 
 	VkPipelineColorBlendStateCreateInfo color_blending {};
 	color_blending.sType             = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -1805,10 +1884,10 @@ static VulkanPipeline* CreatePipelineInternal(VkRenderPass render_pass, const Sh
 	color_blending.logicOp           = VK_LOGIC_OP_COPY;
 	color_blending.attachmentCount   = 1;
 	color_blending.pAttachments      = &color_blend_attachment;
-	color_blending.blendConstants[0] = params->blend_color_red;
-	color_blending.blendConstants[1] = params->blend_color_green;
-	color_blending.blendConstants[2] = params->blend_color_blue;
-	color_blending.blendConstants[3] = params->blend_color_alpha;
+	color_blending.blendConstants[0] = static_params->blend_color_red;
+	color_blending.blendConstants[1] = static_params->blend_color_green;
+	color_blending.blendConstants[2] = static_params->blend_color_blue;
+	color_blending.blendConstants[3] = static_params->blend_color_alpha;
 
 	VkDescriptorSetLayout set_layouts[2]  = {};
 	uint32_t              set_layouts_num = 0;
@@ -1840,15 +1919,49 @@ static VulkanPipeline* CreatePipelineInternal(VkRenderPass render_pass, const Sh
 	depth_stencil_info.sType                 = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
 	depth_stencil_info.pNext                 = nullptr;
 	depth_stencil_info.flags                 = 0;
-	depth_stencil_info.depthTestEnable       = (params->depth_test_enable ? VK_TRUE : VK_FALSE);
-	depth_stencil_info.depthWriteEnable      = (params->depth_write_enable ? VK_TRUE : VK_FALSE);
-	depth_stencil_info.depthCompareOp        = params->depth_compare_op;
-	depth_stencil_info.depthBoundsTestEnable = (params->depth_bounds_test_enable ? VK_TRUE : VK_FALSE);
-	depth_stencil_info.stencilTestEnable     = (params->stencil_test_enable ? VK_TRUE : VK_FALSE);
-	depth_stencil_info.front                 = {};
-	depth_stencil_info.back                  = {};
-	depth_stencil_info.minDepthBounds        = params->depth_min_bounds;
-	depth_stencil_info.maxDepthBounds        = params->depth_max_bounds;
+	depth_stencil_info.depthTestEnable       = (static_params->depth_test_enable ? VK_TRUE : VK_FALSE);
+	depth_stencil_info.depthWriteEnable      = (static_params->depth_write_enable ? VK_TRUE : VK_FALSE);
+	depth_stencil_info.depthCompareOp        = static_params->depth_compare_op;
+	depth_stencil_info.depthBoundsTestEnable = (static_params->depth_bounds_test_enable ? VK_TRUE : VK_FALSE);
+	depth_stencil_info.stencilTestEnable     = (static_params->stencil_test_enable ? VK_TRUE : VK_FALSE);
+	depth_stencil_info.front.failOp          = static_params->stencil_front.failOp;
+	depth_stencil_info.front.passOp          = static_params->stencil_front.passOp;
+	depth_stencil_info.front.depthFailOp     = static_params->stencil_front.depthFailOp;
+	depth_stencil_info.front.compareOp       = static_params->stencil_front.compareOp;
+	depth_stencil_info.front.compareMask     = dynamic_params->stencil_front.compareMask;
+	depth_stencil_info.front.writeMask       = dynamic_params->stencil_front.writeMask;
+	depth_stencil_info.front.reference       = dynamic_params->stencil_front.reference;
+	depth_stencil_info.back.failOp           = static_params->stencil_back.failOp;
+	depth_stencil_info.back.passOp           = static_params->stencil_back.passOp;
+	depth_stencil_info.back.depthFailOp      = static_params->stencil_back.depthFailOp;
+	depth_stencil_info.back.compareOp        = static_params->stencil_back.compareOp;
+	depth_stencil_info.back.compareMask      = dynamic_params->stencil_back.compareMask;
+	depth_stencil_info.back.writeMask        = dynamic_params->stencil_back.writeMask;
+	depth_stencil_info.back.reference        = dynamic_params->stencil_back.reference;
+	depth_stencil_info.minDepthBounds        = static_params->depth_min_bounds;
+	depth_stencil_info.maxDepthBounds        = static_params->depth_max_bounds;
+
+	VkDynamicState dynamic_states[8]    = {};
+	uint32_t       dynamic_states_count = 0;
+	if (dynamic_params->vk_dynamic_state_stencil_compare_mask)
+	{
+		dynamic_states[dynamic_states_count++] = VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK;
+	}
+	if (dynamic_params->vk_dynamic_state_stencil_reference)
+	{
+		dynamic_states[dynamic_states_count++] = VK_DYNAMIC_STATE_STENCIL_REFERENCE;
+	}
+	if (dynamic_params->vk_dynamic_state_stencil_write_mask)
+	{
+		dynamic_states[dynamic_states_count++] = VK_DYNAMIC_STATE_STENCIL_WRITE_MASK;
+	}
+
+	VkPipelineDynamicStateCreateInfo dynamic_state {};
+	dynamic_state.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+	dynamic_state.pNext             = nullptr;
+	dynamic_state.flags             = 0;
+	dynamic_state.dynamicStateCount = dynamic_states_count;
+	dynamic_state.pDynamicStates    = dynamic_states;
 
 	VkGraphicsPipelineCreateInfo pipeline_info {};
 	pipeline_info.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -1862,9 +1975,9 @@ static VulkanPipeline* CreatePipelineInternal(VkRenderPass render_pass, const Sh
 	pipeline_info.pViewportState      = &viewport_state;
 	pipeline_info.pRasterizationState = &rasterizer;
 	pipeline_info.pMultisampleState   = &multisampling;
-	pipeline_info.pDepthStencilState  = (params->with_depth ? &depth_stencil_info : nullptr);
+	pipeline_info.pDepthStencilState  = (static_params->with_depth ? &depth_stencil_info : nullptr);
 	pipeline_info.pColorBlendState    = &color_blending;
-	pipeline_info.pDynamicState       = nullptr;
+	pipeline_info.pDynamicState       = &dynamic_state;
 	pipeline_info.layout              = pipeline->pipeline_layout;
 	pipeline_info.renderPass          = render_pass;
 	pipeline_info.subpass             = 0;
@@ -1885,14 +1998,18 @@ static VulkanPipeline* CreatePipelineInternal(VkRenderPass render_pass, const Sh
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 static VulkanPipeline* CreatePipelineInternal(const ShaderComputeInputInfo* input_info, const Vector<uint32_t>& cs_shader,
-                                              const PipelineParameters* params, const PipelineAdditionalParameters* additional_params)
+                                              const PipelineStaticParameters* static_params, PipelineDynamicParameters* dynamic_params,
+                                              const PipelineAdditionalParameters* additional_params)
 {
 	EXIT_IF(g_render_ctx == nullptr);
-	EXIT_IF(params == nullptr);
+	EXIT_IF(static_params == nullptr);
+	EXIT_IF(dynamic_params == nullptr);
 	EXIT_IF(additional_params == nullptr);
 
 	auto* pipeline              = new VulkanPipeline;
 	pipeline->additional_params = additional_params;
+	pipeline->static_params     = static_params;
+	pipeline->dynamic_params    = dynamic_params;
 
 	auto* gctx = g_render_ctx->GetGraphicCtx();
 
@@ -1970,13 +2087,19 @@ void PipelineCache::DeletePipelineInternal(Pipeline& p)
 	EXIT_IF(p.pipeline == nullptr);
 	EXIT_IF(p.pipeline->pipeline == nullptr);
 	EXIT_IF(p.pipeline->pipeline_layout == nullptr);
-	EXIT_IF(p.params == nullptr);
+	EXIT_IF(p.static_params == nullptr);
+	EXIT_IF(p.dynamic_params == nullptr);
 	EXIT_IF(p.pipeline->additional_params == nullptr);
 
-	delete p.params;
+	EXIT_IF(p.pipeline->static_params != p.static_params);
+	EXIT_IF(p.pipeline->dynamic_params != p.dynamic_params);
+
+	delete p.static_params;
+	delete p.dynamic_params;
 	delete p.pipeline->additional_params;
 
-	p.params                      = nullptr;
+	p.static_params               = nullptr;
+	p.dynamic_params              = nullptr;
 	p.pipeline->additional_params = nullptr;
 
 	auto* gctx = g_render_ctx->GetGraphicCtx();
@@ -1991,9 +2114,39 @@ void PipelineCache::DeletePipelineInternal(Pipeline& p)
 	p.pipeline = nullptr;
 }
 
-bool PipelineParameters::operator==(const PipelineParameters& other) const
+bool PipelineStaticParameters::operator==(const PipelineStaticParameters& other) const
 {
-	return (0 == memcmp(this, &other, sizeof(struct PipelineParameters)));
+	return (0 == memcmp(this, &other, sizeof(struct PipelineStaticParameters)));
+}
+
+bool PipelineDynamicParameters::operator==(const PipelineDynamicParameters& other) const
+{
+	EXIT_IF(vk_dynamic_state_stencil_compare_mask != other.vk_dynamic_state_stencil_compare_mask ||
+	        vk_dynamic_state_stencil_write_mask != other.vk_dynamic_state_stencil_write_mask ||
+	        vk_dynamic_state_stencil_reference != other.vk_dynamic_state_stencil_reference);
+
+	if (!vk_dynamic_state_stencil_compare_mask)
+	{
+		if (stencil_front.compareMask != other.stencil_front.compareMask || stencil_back.compareMask != other.stencil_back.compareMask)
+		{
+			return false;
+		}
+	}
+	if (!vk_dynamic_state_stencil_write_mask)
+	{
+		if (stencil_front.writeMask != other.stencil_front.writeMask || stencil_back.writeMask != other.stencil_back.writeMask)
+		{
+			return false;
+		}
+	}
+	if (!vk_dynamic_state_stencil_reference)
+	{
+		if (stencil_front.reference != other.stencil_front.reference || stencil_back.reference != other.stencil_back.reference)
+		{
+			return false;
+		}
+	}
+	return true;
 }
 
 VulkanPipeline* PipelineCache::Find(const Pipeline& p) const
@@ -2001,7 +2154,8 @@ VulkanPipeline* PipelineCache::Find(const Pipeline& p) const
 	for (const auto& pn: m_pipelines)
 	{
 		if (pn.pipeline != nullptr && p.render_pass_id == pn.render_pass_id && p.vs_shader_id == pn.vs_shader_id &&
-		    p.ps_shader_id == pn.ps_shader_id && p.cs_shader_id == pn.cs_shader_id && *p.params == *pn.params)
+		    p.ps_shader_id == pn.ps_shader_id && p.cs_shader_id == pn.cs_shader_id && *p.static_params == *pn.static_params &&
+		    *p.dynamic_params == *pn.dynamic_params)
 		{
 			return pn.pipeline;
 		}
@@ -2025,8 +2179,11 @@ VulkanPipeline* PipelineCache::CreatePipeline(VulkanFramebuffer* framebuffer, Re
 
 	Core::LockGuard lock(m_mutex);
 
-	ShaderDbgDumpInputInfo(vs_input_info);
-	ShaderDbgDumpInputInfo(ps_input_info);
+	if (Config::GetPrintfDirection() != Log::Direction::Silent)
+	{
+		ShaderDbgDumpInputInfo(vs_input_info);
+		ShaderDbgDumpInputInfo(ps_input_info);
+	}
 
 	auto vs_id = ShaderGetIdVS(vs_regs, vs_input_info);
 	auto ps_id = ShaderGetIdPS(ps_regs, ps_input_info);
@@ -2035,50 +2192,63 @@ VulkanPipeline* PipelineCache::CreatePipeline(VulkanFramebuffer* framebuffer, Re
 	p.render_pass_id = framebuffer->render_pass_id;
 	p.ps_shader_id   = ps_id;
 	p.vs_shader_id   = vs_id;
-	p.params         = new PipelineParameters;
+	p.static_params  = new PipelineStaticParameters;
+	p.dynamic_params = new PipelineDynamicParameters;
+
+	p.dynamic_params->vk_dynamic_state_stencil_compare_mask = true;
+	p.dynamic_params->vk_dynamic_state_stencil_reference    = true;
+	p.dynamic_params->vk_dynamic_state_stencil_write_mask   = true;
 
 	EXIT_NOT_IMPLEMENTED(depth->depth_test_enable && ps_input_info->ps_execute_on_noop);
 
-	p.params->viewport_scale[0]        = vp.viewports[0].xscale;
-	p.params->viewport_scale[1]        = vp.viewports[0].yscale;
-	p.params->viewport_scale[2]        = vp.viewports[0].zscale;
-	p.params->viewport_offset[0]       = vp.viewports[0].xoffset;
-	p.params->viewport_offset[1]       = vp.viewports[0].yoffset;
-	p.params->viewport_offset[2]       = vp.viewports[0].zoffset;
-	p.params->scissor_ltrb[0]          = vp.scissor_left;
-	p.params->scissor_ltrb[1]          = vp.scissor_top;
-	p.params->scissor_ltrb[2]          = vp.scissor_right;
-	p.params->scissor_ltrb[3]          = vp.scissor_bottom;
-	p.params->topology                 = topology;
-	p.params->with_depth               = (depth->format != VK_FORMAT_UNDEFINED && depth->vulkan_buffer != nullptr);
-	p.params->depth_test_enable        = depth->depth_test_enable;
-	p.params->depth_write_enable       = (depth->depth_write_enable && !depth->depth_clear_enable);
-	p.params->depth_compare_op         = depth->depth_compare_op;
-	p.params->depth_bounds_test_enable = depth->depth_bounds_test_enable;
-	p.params->depth_min_bounds         = depth->depth_min_bounds;
-	p.params->depth_max_bounds         = depth->depth_max_bounds;
-	p.params->stencil_test_enable      = depth->stencil_test_enable;
-	p.params->color_mask               = color_mask;
-	p.params->cull_back                = mc.cull_back;
-	p.params->cull_front               = mc.cull_front;
-	p.params->face                     = mc.face;
-	p.params->color_srcblend           = bc.color_srcblend;
-	p.params->color_comb_fcn           = bc.color_comb_fcn;
-	p.params->color_destblend          = bc.color_destblend;
-	p.params->alpha_srcblend           = bc.alpha_srcblend;
-	p.params->alpha_comb_fcn           = bc.alpha_comb_fcn;
-	p.params->alpha_destblend          = bc.alpha_destblend;
-	p.params->separate_alpha_blend     = bc.separate_alpha_blend;
-	p.params->blend_enable             = bc.enable;
-	p.params->blend_color_red          = bclr.red;
-	p.params->blend_color_green        = bclr.green;
-	p.params->blend_color_blue         = bclr.blue;
-	p.params->blend_color_alpha        = bclr.alpha;
+	p.static_params->viewport_scale[0]        = vp.viewports[0].xscale;
+	p.static_params->viewport_scale[1]        = vp.viewports[0].yscale;
+	p.static_params->viewport_scale[2]        = vp.viewports[0].zscale;
+	p.static_params->viewport_offset[0]       = vp.viewports[0].xoffset;
+	p.static_params->viewport_offset[1]       = vp.viewports[0].yoffset;
+	p.static_params->viewport_offset[2]       = vp.viewports[0].zoffset;
+	p.static_params->scissor_ltrb[0]          = vp.scissor_left;
+	p.static_params->scissor_ltrb[1]          = vp.scissor_top;
+	p.static_params->scissor_ltrb[2]          = vp.scissor_right;
+	p.static_params->scissor_ltrb[3]          = vp.scissor_bottom;
+	p.static_params->topology                 = topology;
+	p.static_params->with_depth               = (depth->format != VK_FORMAT_UNDEFINED && depth->vulkan_buffer != nullptr);
+	p.static_params->depth_test_enable        = depth->depth_test_enable;
+	p.static_params->depth_write_enable       = (depth->depth_write_enable && !depth->depth_clear_enable);
+	p.static_params->depth_compare_op         = depth->depth_compare_op;
+	p.static_params->depth_bounds_test_enable = depth->depth_bounds_test_enable;
+	p.static_params->depth_min_bounds         = depth->depth_min_bounds;
+	p.static_params->depth_max_bounds         = depth->depth_max_bounds;
+	p.static_params->stencil_test_enable      = depth->stencil_test_enable;
+	p.static_params->stencil_front            = depth->stencil_static_front;
+	p.static_params->stencil_back             = depth->stencil_static_back;
+	p.static_params->color_mask               = color_mask;
+	p.static_params->cull_back                = mc.cull_back;
+	p.static_params->cull_front               = mc.cull_front;
+	p.static_params->face                     = mc.face;
+	p.static_params->color_srcblend           = bc.color_srcblend;
+	p.static_params->color_comb_fcn           = bc.color_comb_fcn;
+	p.static_params->color_destblend          = bc.color_destblend;
+	p.static_params->alpha_srcblend           = bc.alpha_srcblend;
+	p.static_params->alpha_comb_fcn           = bc.alpha_comb_fcn;
+	p.static_params->alpha_destblend          = bc.alpha_destblend;
+	p.static_params->separate_alpha_blend     = bc.separate_alpha_blend;
+	p.static_params->blend_enable             = bc.enable;
+	p.static_params->blend_color_red          = bclr.red;
+	p.static_params->blend_color_green        = bclr.green;
+	p.static_params->blend_color_blue         = bclr.blue;
+	p.static_params->blend_color_alpha        = bclr.alpha;
+
+	p.dynamic_params->stencil_front = depth->stencil_dynamic_front;
+	p.dynamic_params->stencil_back  = depth->stencil_dynamic_back;
 
 	auto* found = Find(p);
 
 	if (found != nullptr)
 	{
+		*found->dynamic_params = *p.dynamic_params;
+		delete p.static_params;
+		delete p.dynamic_params;
 		return found;
 	}
 
@@ -2096,7 +2266,8 @@ VulkanPipeline* PipelineCache::CreatePipeline(VulkanFramebuffer* framebuffer, Re
 	EXIT_IF(vs_shader.IsEmpty());
 	EXIT_IF(ps_shader.IsEmpty());
 
-	p.pipeline = CreatePipelineInternal(framebuffer->render_pass, vs_input_info, vs_shader, ps_input_info, ps_shader, p.params, params2);
+	p.pipeline = CreatePipelineInternal(framebuffer->render_pass, vs_input_info, vs_shader, ps_input_info, ps_shader, p.static_params,
+	                                    p.dynamic_params, params2);
 
 	EXIT_NOT_IMPLEMENTED(p.pipeline == nullptr);
 
@@ -2140,13 +2311,21 @@ VulkanPipeline* PipelineCache::CreatePipeline(const ShaderComputeInputInfo* inpu
 	auto cs_id = ShaderGetIdCS(cs_regs, input_info);
 
 	Pipeline p {};
-	p.cs_shader_id = cs_id;
-	p.params       = new PipelineParameters;
+	p.cs_shader_id   = cs_id;
+	p.static_params  = new PipelineStaticParameters;
+	p.dynamic_params = new PipelineDynamicParameters;
+
+	p.dynamic_params->vk_dynamic_state_stencil_compare_mask = true;
+	p.dynamic_params->vk_dynamic_state_stencil_reference    = true;
+	p.dynamic_params->vk_dynamic_state_stencil_write_mask   = true;
 
 	auto* found = Find(p);
 
 	if (found != nullptr)
 	{
+		*found->dynamic_params = *p.dynamic_params;
+		delete p.static_params;
+		delete p.dynamic_params;
 		return found;
 	}
 
@@ -2159,7 +2338,7 @@ VulkanPipeline* PipelineCache::CreatePipeline(const ShaderComputeInputInfo* inpu
 	auto cs_shader = ShaderRecompileCS(cs_code, input_info);
 	EXIT_IF(cs_shader.IsEmpty());
 
-	p.pipeline = CreatePipelineInternal(input_info, cs_shader, p.params, params2);
+	p.pipeline = CreatePipelineInternal(input_info, cs_shader, p.static_params, p.dynamic_params, params2);
 
 	EXIT_NOT_IMPLEMENTED(p.pipeline == nullptr);
 
@@ -2485,6 +2664,8 @@ VulkanDescriptorSet* DescriptorCache::GetDescriptor(Stage stage, VulkanBuffer** 
                                                     VulkanImage** textures2d_storage, uint64_t* samplers, VulkanBuffer** gds_buffers,
                                                     const ShaderBindResources& bind, const ShaderBindParameters& bind_params)
 {
+	KYTY_PROFILER_BLOCK("DescriptorCache::GetDescriptor");
+
 	int storage_buffers_num    = bind.storage_buffers.buffers_num;
 	int textures2d_sampled_num = bind_params.textures2d_sampled_num;
 	int textures2d_storage_num = bind_params.textures2d_storage_num;
@@ -2803,7 +2984,8 @@ VkDescriptorSetLayout DescriptorCache::GetDescriptorSetLayout(Stage stage, const
 	EXIT_IF(samplers_num < 0 || samplers_num > SAMPLERS_MAX);
 	EXIT_IF(gds_buffers_num < 0 || gds_buffers_num > GDS_BUFFER_MAX);
 
-	EXIT_NOT_IMPLEMENTED(stage != Stage::Pixel && (textures2d_sampled_num > 0 || textures2d_storage_num > 0 || samplers_num > 0));
+	EXIT_NOT_IMPLEMENTED(stage != Stage::Pixel && stage != Stage::Compute &&
+	                     (textures2d_sampled_num > 0 || textures2d_storage_num > 0 || samplers_num > 0));
 
 	Core::LockGuard lock(m_mutex);
 	Init();
@@ -2858,14 +3040,93 @@ void DeleteDescriptor(RenderTextureVulkanImage* image)
 	g_render_ctx->GetDescriptorCache()->FreeDescriptor(image);
 }
 
-static void FindRenderDepthInfo(const HardwareContext& hw, RenderDepthInfo* r)
+static bool get_stencil_op(VkStencilOp* f, uint32_t* ref, uint8_t op, uint8_t testval, uint8_t opval)
 {
+	VkStencilOp vk      = VK_STENCIL_OP_KEEP;
+	uint32_t    r       = opval;
+	bool        use_ref = true;
+
+	switch (op)
+	{
+		case 0x00:
+			vk      = VK_STENCIL_OP_KEEP;
+			use_ref = false;
+			break; /* Keep           */
+		case 0x01:
+			vk      = VK_STENCIL_OP_ZERO;
+			use_ref = false;
+			break; /* Zero           */
+		case 0x02:
+			vk = VK_STENCIL_OP_REPLACE;
+			r  = 0xFF;
+			break; /* Ones           */
+		case 0x03:
+			vk = VK_STENCIL_OP_REPLACE;
+			r  = testval;
+			break;                                                /* ReplaceTest    */
+		case 0x04: vk = VK_STENCIL_OP_REPLACE; break;             /* ReplaceOp      */
+		case 0x05: vk = VK_STENCIL_OP_INCREMENT_AND_CLAMP; break; /* AddClamp       */
+		case 0x06: vk = VK_STENCIL_OP_DECREMENT_AND_CLAMP; break; /* SubClamp       */
+		case 0x07: vk = VK_STENCIL_OP_INVERT; break;              /* Invert         */
+		case 0x08: vk = VK_STENCIL_OP_INCREMENT_AND_WRAP; break;  /* AddWrap        */
+		case 0x09: vk = VK_STENCIL_OP_DECREMENT_AND_WRAP; break;  /* SubWrap        */
+		case 0x0a:                                                /* And            */
+		case 0x0b:                                                /* Or             */
+		case 0x0c:                                                /* Xor            */
+		case 0x0d:                                                /* Nand           */
+		case 0x0e:                                                /* Nor            */
+		case 0x0f:                                                /* Xnor           */
+		default: EXIT("invalid op");
+	}
+	*f   = vk;
+	*ref = r;
+	return use_ref;
+}
+
+static void get_stencil_state(PipelineStencilStaticState* s, PipelineStencilDynamicState* d, uint8_t func, uint8_t fail, uint8_t zpass,
+                              uint8_t zfail, uint8_t testval, uint8_t mask, uint8_t writemask, uint8_t opval)
+{
+	EXIT_IF(s == nullptr || d == nullptr);
+
+	uint32_t ref[3]     = {};
+	bool     use_ref[3] = {};
+
+	use_ref[0]     = get_stencil_op(&s->failOp, ref + 0, fail, testval, opval);
+	use_ref[1]     = get_stencil_op(&s->passOp, ref + 1, zpass, testval, opval);
+	use_ref[2]     = get_stencil_op(&s->depthFailOp, ref + 2, zfail, testval, opval);
+	s->compareOp   = static_cast<VkCompareOp>(func);
+	d->compareMask = mask;
+	d->writeMask   = writemask;
+
+	if (use_ref[0])
+	{
+		EXIT_NOT_IMPLEMENTED((ref[0] != ref[1] && use_ref[1]) || (ref[0] != ref[2] && use_ref[2]));
+		d->reference = ref[0];
+	} else if (use_ref[1])
+	{
+		EXIT_NOT_IMPLEMENTED(ref[1] != ref[2] && use_ref[2]);
+		d->reference = ref[1];
+	} else if (use_ref[2])
+	{
+		d->reference = ref[2];
+	} else
+	{
+		d->reference = 0;
+	}
+}
+
+static void FindRenderDepthInfo(CommandBuffer* /*buffer*/, const HardwareContext& hw, RenderDepthInfo* r)
+{
+	KYTY_PROFILER_FUNCTION();
+
 	EXIT_IF(r == nullptr);
 
 	bool        neo = Config::IsNeo();
 	const auto& z   = hw.GetDepthRenderTarget();
 	const auto& rc  = hw.GetRenderControl();
 	const auto& dc  = hw.GetDepthControl();
+	const auto& sc  = hw.GetStencilControl();
+	const auto& sm  = hw.GetStencilMask();
 
 	uint32_t size         = 0;
 	uint32_t stencil_size = 0;
@@ -2928,13 +3189,31 @@ static void FindRenderDepthInfo(const HardwareContext& hw, RenderDepthInfo* r)
 	EXIT_NOT_IMPLEMENTED(r->depth_bounds_test_enable);
 
 	r->stencil_clear_enable = rc.stencil_clear_enable;
-	r->stencil_clear_value  = 0;
-	EXIT_NOT_IMPLEMENTED(r->stencil_clear_enable);
+	r->stencil_clear_value  = hw.GetStencilClearValue();
+	// EXIT_NOT_IMPLEMENTED(r->stencil_clear_enable);
 
 	r->stencil_test_enable = dc.stencil_enable;
-	// r->stencil_front       = {};
-	// r->stencil_back        = {};
-	EXIT_NOT_IMPLEMENTED(r->stencil_test_enable);
+	if (r->stencil_test_enable)
+	{
+		get_stencil_state(&r->stencil_static_front, &r->stencil_dynamic_front, dc.stencilfunc, sc.stencil_fail, sc.stencil_zpass,
+		                  sc.stencil_zfail, sm.stencil_testval, sm.stencil_mask, sm.stencil_writemask, sm.stencil_opval);
+		if (dc.backface_enable)
+		{
+			get_stencil_state(&r->stencil_static_back, &r->stencil_dynamic_back, dc.stencilfunc_bf, sc.stencil_fail_bf, sc.stencil_zpass_bf,
+			                  sc.stencil_zfail_bf, sm.stencil_testval_bf, sm.stencil_mask_bf, sm.stencil_writemask_bf, sm.stencil_opval_bf);
+		} else
+		{
+			r->stencil_static_back  = r->stencil_static_front;
+			r->stencil_dynamic_back = r->stencil_dynamic_front;
+		}
+	} else
+	{
+		r->stencil_static_front  = {};
+		r->stencil_static_back   = {};
+		r->stencil_dynamic_front = {};
+		r->stencil_dynamic_back  = {};
+	}
+	// EXIT_NOT_IMPLEMENTED(r->stencil_test_enable);
 	EXIT_NOT_IMPLEMENTED(dc.backface_enable);
 
 	r->vulkan_buffer = nullptr;
@@ -2969,15 +3248,17 @@ static void FindRenderDepthInfo(const HardwareContext& hw, RenderDepthInfo* r)
 		EXIT_NOT_IMPLEMENTED(r->vaddr_num == 0);
 
 		r->vulkan_buffer = static_cast<DepthStencilVulkanImage*>(
-		    GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), r->vaddr, r->size, r->vaddr_num, vulkan_buffer_info));
+		    GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), nullptr, r->vaddr, r->size, r->vaddr_num, vulkan_buffer_info));
 
 		EXIT_NOT_IMPLEMENTED(r->vulkan_buffer == nullptr);
 	}
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-static void FindRenderColorInfo(const HardwareContext& hw, RenderColorInfo* r)
+static void FindRenderColorInfo(CommandBuffer* buffer, const HardwareContext& hw, RenderColorInfo* r)
 {
+	KYTY_PROFILER_FUNCTION();
+
 	EXIT_IF(r == nullptr);
 
 	const auto& rt   = hw.GetRenderTargets(0);
@@ -3018,12 +3299,12 @@ static void FindRenderColorInfo(const HardwareContext& hw, RenderColorInfo* r)
 
 	if (render_to_texture)
 	{
-		if (rt.format == 0xa && rt.channel_type == 0x0 && rt.channel_order == 0x0)
+		if (rt.color_info.format == 0xa && rt.color_info.channel_type == 0x0 && rt.color_info.channel_order == 0x0)
 		{
 			// Render to texture
-			RenderTextureObject vulkan_buffer_info(RenderTextureFormat::R8G8B8A8Unorm, width, height, tile, rt.neo_mode, pitch);
+			RenderTextureObject vulkan_buffer_info(RenderTextureFormat::R8G8B8A8Unorm, width, height, tile, rt.color_info.neo_mode, pitch);
 			auto*               buffer_vulkan = static_cast<Graphics::RenderTextureVulkanImage*>(
-                Graphics::GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), rt.base_addr, size, vulkan_buffer_info));
+                Graphics::GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), buffer, rt.base_addr, size, vulkan_buffer_info));
 			EXIT_NOT_IMPLEMENTED(buffer_vulkan == nullptr);
 			r->type          = RenderColorType::RenderTexture;
 			r->base_addr     = rt.base_addr;
@@ -3035,7 +3316,7 @@ static void FindRenderColorInfo(const HardwareContext& hw, RenderColorInfo* r)
 		}
 	} else
 	{
-		if (rt.format == 0xa && rt.channel_type == 0x6 && rt.channel_order == 0x1)
+		if (rt.color_info.format == 0xa && rt.color_info.channel_type == 0x6 && rt.color_info.channel_order == 0x1)
 		{
 			format = 0x80000000;
 		} else
@@ -3049,7 +3330,7 @@ static void FindRenderColorInfo(const HardwareContext& hw, RenderColorInfo* r)
 			// Offscreen buffer
 			VideoOutBufferObject vulkan_buffer_info(format, width, height, tile, Config::IsNeo(), pitch);
 			auto*                buffer_vulkan = static_cast<Graphics::VideoOutVulkanImage*>(
-                Graphics::GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), rt.base_addr, size, vulkan_buffer_info));
+                Graphics::GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), nullptr, rt.base_addr, size, vulkan_buffer_info));
 			EXIT_NOT_IMPLEMENTED(buffer_vulkan == nullptr);
 			r->type          = RenderColorType::OffscreenBuffer;
 			r->base_addr     = rt.base_addr;
@@ -3094,23 +3375,30 @@ static void InvalidateMemoryObject(const RenderDepthInfo& r)
 	}
 }
 
-static RenderTextureVulkanImage* FindRenderTexture(uint64_t vaddr, uint64_t size)
+static Vector<RenderTextureVulkanImage*> FindRenderTexture(uint64_t vaddr, uint64_t size, bool exact)
 {
-	auto objects = GpuMemoryFindObjects(vaddr, size);
+	KYTY_PROFILER_FUNCTION();
+
+	Vector<RenderTextureVulkanImage*> ret;
+
+	auto objects = GpuMemoryFindObjects(vaddr, size, exact);
 
 	for (const auto& obj: objects)
 	{
 		if (obj.type == GpuMemoryObjectType::RenderTexture)
 		{
-			return static_cast<RenderTextureVulkanImage*>(obj.obj);
+			ret.Add(static_cast<RenderTextureVulkanImage*>(obj.obj));
 		}
 	}
 
-	return nullptr;
+	return ret;
 }
 
-static void PrepareStorageBuffers(const ShaderStorageResources& storage_buffers, VulkanBuffer** buffers, uint32_t** sgprs)
+static void PrepareStorageBuffers(CommandBuffer* buffer, const ShaderStorageResources& storage_buffers, VulkanBuffer** buffers,
+                                  uint32_t** sgprs)
 {
+	KYTY_PROFILER_FUNCTION();
+
 	EXIT_IF(buffers == nullptr);
 	EXIT_IF(sgprs == nullptr);
 	EXIT_IF(*sgprs == nullptr);
@@ -3145,9 +3433,11 @@ static void PrepareStorageBuffers(const ShaderStorageResources& storage_buffers,
 
 		StorageBufferGpuObject buf_info(stride, num_records, read_only);
 
-		auto* buf = static_cast<VulkanBuffer*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), addr, size, buf_info));
+		auto* buf = static_cast<StorageVulkanBuffer*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), nullptr, addr, size, buf_info));
 
 		EXIT_NOT_IMPLEMENTED(buf == nullptr);
+
+		StorageBufferSet(buffer, buf);
 
 		buffers[i] = buf;
 
@@ -3165,9 +3455,11 @@ static void PrepareStorageBuffers(const ShaderStorageResources& storage_buffers,
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-static void PrepareTextures(const ShaderTextureResources& textures, VulkanImage** images_sampled, VulkanImage** images_storage,
-                            uint32_t** sgprs, const bool* without_sampler)
+static void PrepareTextures(CommandBuffer* buffer, const ShaderTextureResources& textures, VulkanImage** images_sampled,
+                            VulkanImage** images_storage, uint32_t** sgprs, const bool* without_sampler)
 {
+	KYTY_PROFILER_FUNCTION();
+
 	EXIT_IF(images_sampled == nullptr);
 	EXIT_IF(images_storage == nullptr);
 	EXIT_IF(sgprs == nullptr);
@@ -3193,10 +3485,10 @@ static void PrepareTextures(const ShaderTextureResources& textures, VulkanImage*
 		// EXIT_NOT_IMPLEMENTED(r.DstSelY() != 5);
 		// EXIT_NOT_IMPLEMENTED(r.DstSelZ() != 6);
 		// EXIT_NOT_IMPLEMENTED(r.DstSelW() != 7);
-		EXIT_NOT_IMPLEMENTED(r.BaseLevel() != 0);
-		EXIT_NOT_IMPLEMENTED(r.LastLevel() != 0 && r.LastLevel() != 9);
+		// EXIT_NOT_IMPLEMENTED(r.BaseLevel() != 0);
+		// EXIT_NOT_IMPLEMENTED(r.LastLevel() != 0 && r.LastLevel() != 9);
 		EXIT_NOT_IMPLEMENTED(!(r.TilingIdx() == 8 || r.TilingIdx() == 13 || r.TilingIdx() == 14));
-		EXIT_NOT_IMPLEMENTED(!(r.LastLevel() == 0 && r.Pow2Pad() == false) && !(r.LastLevel() == 9 && r.Pow2Pad() == true));
+		// EXIT_NOT_IMPLEMENTED(!(r.LastLevel() == 0 && r.Pow2Pad() == false) && !(r.LastLevel() == 9 && r.Pow2Pad() == true));
 		EXIT_NOT_IMPLEMENTED(r.Type() != 9);
 		EXIT_NOT_IMPLEMENTED(r.Depth() != 0);
 		// EXIT_NOT_IMPLEMENTED(r.Pitch() != 511);
@@ -3212,36 +3504,41 @@ static void PrepareTextures(const ShaderTextureResources& textures, VulkanImage*
 		EXIT_NOT_IMPLEMENTED(read_only && !(textures.usages[i] == ShaderTextureUsage::ReadOnly));
 		// EXIT_NOT_IMPLEMENTED(!read_only && !(textures.usages[i] == ShaderTextureUsage::ReadWrite));
 
-		auto     addr    = r.Base();
-		uint32_t size    = 0;
-		bool     neo     = Config::IsNeo();
-		auto     width   = r.Width() + 1;
-		auto     height  = r.Height() + 1;
-		auto     pitch   = r.Pitch() + 1;
-		auto     levels  = r.LastLevel() - r.BaseLevel() + 1;
-		auto     tile    = r.TilingIdx();
-		uint32_t swizzle = static_cast<uint32_t>(r.DstSelX()) | (static_cast<uint32_t>(r.DstSelY()) << 8u) |
+		auto     addr       = r.Base();
+		uint32_t size       = 0;
+		bool     neo        = Config::IsNeo();
+		auto     width      = r.Width() + 1;
+		auto     height     = r.Height() + 1;
+		auto     pitch      = r.Pitch() + 1;
+		auto     base_level = r.BaseLevel();
+		auto     levels     = r.LastLevel() + 1;
+		auto     tile       = r.TilingIdx();
+		uint32_t swizzle    = static_cast<uint32_t>(r.DstSelX()) | (static_cast<uint32_t>(r.DstSelY()) << 8u) |
 		                   (static_cast<uint32_t>(r.DstSelZ()) << 16u) | (static_cast<uint32_t>(r.DstSelW()) << 24u);
 
 		TileGetTextureSize(r.Dfmt(), r.Nfmt(), width, height, pitch, levels, tile, neo, &size, nullptr, nullptr, nullptr);
 		EXIT_NOT_IMPLEMENTED(size == 0);
 
-		VulkanImage* tex = FindRenderTexture(addr, size);
+		auto rtex = FindRenderTexture(addr, size, true);
+
+		EXIT_NOT_IMPLEMENTED(rtex.Size() > 1);
+
+		VulkanImage* tex = (!rtex.IsEmpty() ? rtex.At(0) : nullptr);
 
 		if (tex == nullptr)
 		{
 			if (without_sampler[i])
 			{
-				StorageTextureObject vulkan_texture_info(r.Dfmt(), r.Nfmt(), width, height, pitch, levels, tile, neo, swizzle);
+				StorageTextureObject vulkan_texture_info(r.Dfmt(), r.Nfmt(), width, height, pitch, base_level, levels, tile, neo, swizzle);
 
 				tex = static_cast<StorageTextureVulkanImage*>(
-				    GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), addr, size, vulkan_texture_info));
+				    GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), buffer, addr, size, vulkan_texture_info));
 			} else
 			{
-				TextureObject vulkan_texture_info(r.Dfmt(), r.Nfmt(), width, height, pitch, levels, tile, neo, swizzle);
+				TextureObject vulkan_texture_info(r.Dfmt(), r.Nfmt(), width, height, pitch, base_level, levels, tile, neo, swizzle);
 
-				tex =
-				    static_cast<TextureVulkanImage*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), addr, size, vulkan_texture_info));
+				tex = static_cast<TextureVulkanImage*>(
+				    GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), buffer, addr, size, vulkan_texture_info));
 			}
 		}
 
@@ -3277,6 +3574,8 @@ static void PrepareTextures(const ShaderTextureResources& textures, VulkanImage*
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 static void PrepareSamplers(const ShaderSamplerResources& samplers, uint64_t* sampler_ids, uint32_t** sgprs)
 {
+	KYTY_PROFILER_FUNCTION();
+
 	EXIT_IF(sampler_ids == nullptr);
 	EXIT_IF(sgprs == nullptr);
 	EXIT_IF(*sgprs == nullptr);
@@ -3288,7 +3587,7 @@ static void PrepareSamplers(const ShaderSamplerResources& samplers, uint64_t* sa
 		EXIT_NOT_IMPLEMENTED(r.ClampX() != 0);
 		EXIT_NOT_IMPLEMENTED(r.ClampY() != 0);
 		EXIT_NOT_IMPLEMENTED(r.ClampZ() != 0);
-		EXIT_NOT_IMPLEMENTED(r.MaxAnisoRatio() != 0);
+		// EXIT_NOT_IMPLEMENTED(r.MaxAnisoRatio() != 0);
 		EXIT_NOT_IMPLEMENTED(r.DepthCompareFunc() != 0);
 		EXIT_NOT_IMPLEMENTED(r.ForceUnormCoords() != false);
 		EXIT_NOT_IMPLEMENTED(r.AnisoThreshold() != 0);
@@ -3326,6 +3625,8 @@ static void PrepareSamplers(const ShaderSamplerResources& samplers, uint64_t* sa
 
 static void PrepareGdsPointers(const ShaderGdsResources& gds_pointers, uint32_t** sgprs)
 {
+	KYTY_PROFILER_FUNCTION();
+
 	EXIT_IF(sgprs == nullptr);
 	EXIT_IF(*sgprs == nullptr);
 
@@ -3344,10 +3645,12 @@ static void PrepareGdsPointers(const ShaderGdsResources& gds_pointers, uint32_t*
 	}
 }
 
-static void BindDescriptors(VkCommandBuffer vk_buffer, VkPipelineBindPoint pipeline_bind_point, VkPipelineLayout layout,
+static void BindDescriptors(CommandBuffer* buffer, VkPipelineBindPoint pipeline_bind_point, VkPipelineLayout layout,
                             const ShaderBindResources& bind, const ShaderBindParameters& bind_params, VkShaderStageFlags vk_stage,
                             DescriptorCache::Stage stage)
 {
+	KYTY_PROFILER_FUNCTION();
+
 	if (bind.push_constant_size > 0)
 	{
 		EXIT_NOT_IMPLEMENTED(bind.push_constant_size > DescriptorCache::PUSH_CONSTANTS_MAX * 4);
@@ -3369,11 +3672,12 @@ static void BindDescriptors(VkCommandBuffer vk_buffer, VkPipelineBindPoint pipel
 
 		if (bind.storage_buffers.buffers_num > 0)
 		{
-			PrepareStorageBuffers(bind.storage_buffers, storage_buffers, &sgprs_ptr);
+			PrepareStorageBuffers(buffer, bind.storage_buffers, storage_buffers, &sgprs_ptr);
 		}
 		if (bind.textures2D.textures_num > 0)
 		{
-			PrepareTextures(bind.textures2D, textures2d_sampled, textures2d_storage, &sgprs_ptr, bind_params.textures2d_without_sampler);
+			PrepareTextures(buffer, bind.textures2D, textures2d_sampled, textures2d_storage, &sgprs_ptr,
+			                bind_params.textures2d_without_sampler);
 		}
 		if (bind.samplers.samplers_num > 0)
 		{
@@ -3391,8 +3695,39 @@ static void BindDescriptors(VkCommandBuffer vk_buffer, VkPipelineBindPoint pipel
 		    stage, storage_buffers, textures2d_sampled, textures2d_storage, samplers, &gds_buffer, bind, bind_params);
 
 		EXIT_IF(descriptor_set == nullptr);
+
+		auto* vk_buffer = buffer->GetPool()->buffers[buffer->GetIndex()];
+
 		vkCmdBindDescriptorSets(vk_buffer, pipeline_bind_point, layout, bind.descriptor_set_slot, 1, &descriptor_set->set, 0, nullptr);
 		vkCmdPushConstants(vk_buffer, layout, vk_stage, bind.push_constant_offset, bind.push_constant_size, sgprs);
+	}
+}
+
+static void SetDynamicParams(VkCommandBuffer vk_buffer, VulkanPipeline* pipeline)
+{
+	KYTY_PROFILER_FUNCTION();
+
+	EXIT_IF(pipeline == nullptr);
+	EXIT_IF(pipeline->static_params == nullptr);
+	EXIT_IF(pipeline->dynamic_params == nullptr);
+
+	if (pipeline->static_params->stencil_test_enable)
+	{
+		if (pipeline->dynamic_params->vk_dynamic_state_stencil_compare_mask)
+		{
+			vkCmdSetStencilCompareMask(vk_buffer, VK_STENCIL_FACE_FRONT_BIT, pipeline->dynamic_params->stencil_front.compareMask);
+			vkCmdSetStencilCompareMask(vk_buffer, VK_STENCIL_FACE_BACK_BIT, pipeline->dynamic_params->stencil_back.compareMask);
+		}
+		if (pipeline->dynamic_params->vk_dynamic_state_stencil_write_mask)
+		{
+			vkCmdSetStencilWriteMask(vk_buffer, VK_STENCIL_FACE_FRONT_BIT, pipeline->dynamic_params->stencil_front.writeMask);
+			vkCmdSetStencilWriteMask(vk_buffer, VK_STENCIL_FACE_BACK_BIT, pipeline->dynamic_params->stencil_back.writeMask);
+		}
+		if (pipeline->dynamic_params->vk_dynamic_state_stencil_reference)
+		{
+			vkCmdSetStencilReference(vk_buffer, VK_STENCIL_FACE_FRONT_BIT, pipeline->dynamic_params->stencil_front.reference);
+			vkCmdSetStencilReference(vk_buffer, VK_STENCIL_FACE_BACK_BIT, pipeline->dynamic_params->stencil_back.reference);
+		}
 	}
 }
 
@@ -3409,8 +3744,12 @@ void GraphicsRenderDrawIndex(CommandBuffer* buffer, HardwareContext* ctx, UserCo
 
 	Core::LockGuard lock(g_render_ctx->GetMutex());
 
-	if (const auto& vs = ctx->GetVs();
-	    ShaderIsDisabled(ctx->GetPs().ps_regs.data_addr) || (!vs.vs_embedded && ShaderIsDisabled(vs.vs_regs.GetGpuAddress())))
+	if (const auto& vs = ctx->GetVs(); !vs.vs_embedded && ShaderIsDisabled(vs.vs_regs.GetGpuAddress()))
+	{
+		return;
+	}
+
+	if (const auto& ps = ctx->GetPs(); !ps.ps_embedded && ShaderIsDisabled(ps.ps_regs.data_addr))
 	{
 		return;
 	}
@@ -3453,12 +3792,12 @@ void GraphicsRenderDrawIndex(CommandBuffer* buffer, HardwareContext* ctx, UserCo
 	EXIT_NOT_IMPLEMENTED(type != 1);
 
 	RenderDepthInfo depth_info;
-	FindRenderDepthInfo(*ctx, &depth_info);
+	FindRenderDepthInfo(buffer, *ctx, &depth_info);
 
 	RenderColorInfo color_info;
-	FindRenderColorInfo(*ctx, &color_info);
+	FindRenderColorInfo(buffer, *ctx, &color_info);
 
-	auto* framebuffer = buffer->BeginRenderPass(&color_info, &depth_info);
+	auto* framebuffer = g_render_ctx->GetFramebufferCache()->CreateFramebuffer(&color_info, &depth_info);
 
 	EXIT_NOT_IMPLEMENTED(framebuffer == nullptr);
 	EXIT_NOT_IMPLEMENTED(framebuffer->render_pass == nullptr);
@@ -3480,6 +3819,8 @@ void GraphicsRenderDrawIndex(CommandBuffer* buffer, HardwareContext* ctx, UserCo
 
 	vkCmdBindPipeline(vk_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
 
+	SetDynamicParams(vk_buffer, pipeline);
+
 	for (int i = 0; i < vs_input_info.buffers_num; i++)
 	{
 		const auto& b    = vs_input_info.buffers[i];
@@ -3487,25 +3828,27 @@ void GraphicsRenderDrawIndex(CommandBuffer* buffer, HardwareContext* ctx, UserCo
 		uint64_t    size = b.stride * b.num_records;
 
 		auto* vertices =
-		    static_cast<VulkanBuffer*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), addr, size, VertexBufferGpuObject()));
+		    static_cast<VulkanBuffer*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), nullptr, addr, size, VertexBufferGpuObject()));
 
 		VkDeviceSize offset = 0;
 
 		vkCmdBindVertexBuffers(vk_buffer, i, 1, &vertices->buffer, &offset);
 	}
 
-	BindDescriptors(vk_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline_layout, vs_input_info.bind,
+	BindDescriptors(buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline_layout, vs_input_info.bind,
 	                pipeline->additional_params->vs_bind, VK_SHADER_STAGE_VERTEX_BIT, DescriptorCache::Stage::Vertex);
 
-	BindDescriptors(vk_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline_layout, ps_input_info.bind,
+	BindDescriptors(buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline_layout, ps_input_info.bind,
 	                pipeline->additional_params->ps_bind, VK_SHADER_STAGE_FRAGMENT_BIT, DescriptorCache::Stage::Pixel);
 
-	VulkanBuffer* indices = static_cast<VulkanBuffer*>(
-	    GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(index_addr), index_size, IndexBufferGpuObject()));
+	VulkanBuffer* indices = static_cast<VulkanBuffer*>(GpuMemoryCreateObject(
+	    g_render_ctx->GetGraphicCtx(), nullptr, reinterpret_cast<uint64_t>(index_addr), index_size, IndexBufferGpuObject()));
 
 	EXIT_NOT_IMPLEMENTED(indices == nullptr);
 
 	vkCmdBindIndexBuffer(vk_buffer, indices->buffer, 0, index_type);
+
+	buffer->BeginRenderPass(framebuffer, &color_info, &depth_info);
 
 	vkCmdDrawIndexed(vk_buffer, index_count, 1, 0, 0, 0);
 
@@ -3526,8 +3869,12 @@ void GraphicsRenderDrawIndexAuto(CommandBuffer* buffer, HardwareContext* ctx, Us
 
 	Core::LockGuard lock(g_render_ctx->GetMutex());
 
-	if (const auto& vs = ctx->GetVs();
-	    ShaderIsDisabled(ctx->GetPs().ps_regs.data_addr) || (!vs.vs_embedded && ShaderIsDisabled(vs.vs_regs.GetGpuAddress())))
+	if (const auto& vs = ctx->GetVs(); !vs.vs_embedded && ShaderIsDisabled(vs.vs_regs.GetGpuAddress()))
+	{
+		return;
+	}
+
+	if (const auto& ps = ctx->GetPs(); !ps.ps_embedded && ShaderIsDisabled(ps.ps_regs.data_addr))
 	{
 		return;
 	}
@@ -3548,12 +3895,12 @@ void GraphicsRenderDrawIndexAuto(CommandBuffer* buffer, HardwareContext* ctx, Us
 	EXIT_NOT_IMPLEMENTED(ctx->GetShaderStages() != 0);
 
 	RenderDepthInfo depth_info;
-	FindRenderDepthInfo(*ctx, &depth_info);
+	FindRenderDepthInfo(buffer, *ctx, &depth_info);
 
 	RenderColorInfo color_info;
-	FindRenderColorInfo(*ctx, &color_info);
+	FindRenderColorInfo(buffer, *ctx, &color_info);
 
-	auto* framebuffer = buffer->BeginRenderPass(&color_info, &depth_info);
+	auto* framebuffer = g_render_ctx->GetFramebufferCache()->CreateFramebuffer(&color_info, &depth_info);
 
 	EXIT_NOT_IMPLEMENTED(framebuffer == nullptr);
 	EXIT_NOT_IMPLEMENTED(framebuffer->render_pass == nullptr);
@@ -3587,6 +3934,8 @@ void GraphicsRenderDrawIndexAuto(CommandBuffer* buffer, HardwareContext* ctx, Us
 
 	vkCmdBindPipeline(vk_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
 
+	SetDynamicParams(vk_buffer, pipeline);
+
 	for (int i = 0; i < vs_input_info.buffers_num; i++)
 	{
 		const auto& b    = vs_input_info.buffers[i];
@@ -3594,18 +3943,20 @@ void GraphicsRenderDrawIndexAuto(CommandBuffer* buffer, HardwareContext* ctx, Us
 		uint64_t    size = b.stride * b.num_records;
 
 		auto* vertices =
-		    static_cast<VulkanBuffer*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), addr, size, VertexBufferGpuObject()));
+		    static_cast<VulkanBuffer*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), nullptr, addr, size, VertexBufferGpuObject()));
 
 		VkDeviceSize offset = 0;
 
 		vkCmdBindVertexBuffers(vk_buffer, i, 1, &vertices->buffer, &offset);
 	}
 
-	BindDescriptors(vk_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline_layout, vs_input_info.bind,
+	BindDescriptors(buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline_layout, vs_input_info.bind,
 	                pipeline->additional_params->vs_bind, VK_SHADER_STAGE_VERTEX_BIT, DescriptorCache::Stage::Vertex);
 
-	BindDescriptors(vk_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline_layout, ps_input_info.bind,
+	BindDescriptors(buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline_layout, ps_input_info.bind,
 	                pipeline->additional_params->ps_bind, VK_SHADER_STAGE_FRAGMENT_BIT, DescriptorCache::Stage::Pixel);
+
+	buffer->BeginRenderPass(framebuffer, &color_info, &depth_info);
 
 	switch (ucfg->GetPrimType())
 	{
@@ -3656,7 +4007,9 @@ void GraphicsRenderDispatchDirect(CommandBuffer* buffer, HardwareContext* ctx, u
 
 	vkCmdBindPipeline(vk_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
 
-	BindDescriptors(vk_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline_layout, input_info.bind,
+	SetDynamicParams(vk_buffer, pipeline);
+
+	BindDescriptors(buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline_layout, input_info.bind,
 	                pipeline->additional_params->cs_bind, VK_SHADER_STAGE_COMPUTE_BIT, DescriptorCache::Stage::Compute);
 
 	vkCmdDispatch(vk_buffer, thread_group_x, thread_group_y, thread_group_z);
@@ -3691,32 +4044,36 @@ void GraphicsRenderRenderTextureBarrier(CommandBuffer* buffer, uint64_t vaddr, u
 
 	auto* vk_buffer = buffer->GetPool()->buffers[buffer->GetIndex()];
 
-	VulkanImage* image = FindRenderTexture(vaddr, size);
+	auto images = FindRenderTexture(vaddr, size, false);
 
-	EXIT_NOT_IMPLEMENTED(image == nullptr);
-	EXIT_NOT_IMPLEMENTED(image->layout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	for (auto* image: images)
+	{
+		EXIT_NOT_IMPLEMENTED(image == nullptr);
+		if (image->layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+		{
+			VkImageMemoryBarrier image_memory_barrier {};
+			image_memory_barrier.sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			image_memory_barrier.pNext                           = nullptr;
+			image_memory_barrier.srcAccessMask                   = VK_ACCESS_MEMORY_WRITE_BIT;
+			image_memory_barrier.dstAccessMask                   = VK_ACCESS_MEMORY_READ_BIT;
+			image_memory_barrier.oldLayout                       = image->layout;
+			image_memory_barrier.newLayout                       = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			image_memory_barrier.srcQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+			image_memory_barrier.dstQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+			image_memory_barrier.image                           = image->image;
+			image_memory_barrier.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+			image_memory_barrier.subresourceRange.baseMipLevel   = 0;
+			image_memory_barrier.subresourceRange.levelCount     = VK_REMAINING_MIP_LEVELS;
+			image_memory_barrier.subresourceRange.baseArrayLayer = 0;
+			image_memory_barrier.subresourceRange.layerCount     = 1;
 
-	VkImageMemoryBarrier image_memory_barrier {};
-	image_memory_barrier.sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-	image_memory_barrier.pNext                           = nullptr;
-	image_memory_barrier.srcAccessMask                   = VK_ACCESS_MEMORY_WRITE_BIT;
-	image_memory_barrier.dstAccessMask                   = VK_ACCESS_MEMORY_READ_BIT;
-	image_memory_barrier.oldLayout                       = image->layout;
-	image_memory_barrier.newLayout                       = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	image_memory_barrier.srcQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
-	image_memory_barrier.dstQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
-	image_memory_barrier.image                           = image->image;
-	image_memory_barrier.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
-	image_memory_barrier.subresourceRange.baseMipLevel   = 0;
-	image_memory_barrier.subresourceRange.levelCount     = VK_REMAINING_MIP_LEVELS;
-	image_memory_barrier.subresourceRange.baseArrayLayer = 0;
-	image_memory_barrier.subresourceRange.layerCount     = 1;
+			vkCmdPipelineBarrier(vk_buffer, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+			                     VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1,
+			                     &image_memory_barrier);
 
-	vkCmdPipelineBarrier(vk_buffer, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-	                     VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1,
-	                     &image_memory_barrier);
-
-	image->layout = image_memory_barrier.newLayout;
+			image->layout = image_memory_barrier.newLayout;
+		}
+	}
 }
 
 void GraphicsRenderWriteAtEndOfPipe(CommandBuffer* buffer, uint32_t* dst_gpu_addr, uint32_t value)
@@ -3730,8 +4087,8 @@ void GraphicsRenderWriteAtEndOfPipe(CommandBuffer* buffer, uint32_t* dst_gpu_add
 
 	Graphics::LabelGpuObject label_info(value, nullptr, nullptr);
 
-	auto* label =
-	    static_cast<Label*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(dst_gpu_addr), 4, label_info));
+	auto* label = static_cast<Label*>(
+	    GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), nullptr, reinterpret_cast<uint64_t>(dst_gpu_addr), 4, label_info));
 
 	LabelSet(buffer, label);
 }
@@ -3759,8 +4116,8 @@ void GraphicsRenderWriteAtEndOfPipeGds(CommandBuffer* buffer, uint32_t* dst_gpu_
 	    },
 	    nullptr, args);
 
-	auto* label =
-	    static_cast<Label*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(dst_gpu_addr), 4, label_info));
+	auto* label = static_cast<Label*>(
+	    GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), nullptr, reinterpret_cast<uint64_t>(dst_gpu_addr), 4, label_info));
 
 	LabelSet(buffer, label);
 }
@@ -3776,8 +4133,8 @@ void GraphicsRenderWriteAtEndOfPipe(CommandBuffer* buffer, uint64_t* dst_gpu_add
 
 	Graphics::LabelGpuObject label_info(value, nullptr, nullptr);
 
-	auto* label =
-	    static_cast<Label*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(dst_gpu_addr), 8, label_info));
+	auto* label = static_cast<Label*>(
+	    GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), nullptr, reinterpret_cast<uint64_t>(dst_gpu_addr), 8, label_info));
 
 	LabelSet(buffer, label);
 }
@@ -3806,8 +4163,8 @@ void GraphicsRenderWriteAtEndOfPipeClockCounter(CommandBuffer* buffer, uint64_t*
 	    },
 	    nullptr, args);
 
-	auto* label =
-	    static_cast<Label*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(dst_gpu_addr), 8, label_info));
+	auto* label = static_cast<Label*>(
+	    GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), nullptr, reinterpret_cast<uint64_t>(dst_gpu_addr), 8, label_info));
 
 	LabelSet(buffer, label);
 }
@@ -3831,8 +4188,8 @@ void GraphicsRenderWriteAtEndOfPipeWithWriteBack(CommandBuffer* buffer, uint64_t
 	    },
 	    nullptr);
 
-	auto* label =
-	    static_cast<Label*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(dst_gpu_addr), 8, label_info));
+	auto* label = static_cast<Label*>(
+	    GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), nullptr, reinterpret_cast<uint64_t>(dst_gpu_addr), 8, label_info));
 
 	LabelSet(buffer, label);
 }
@@ -3861,8 +4218,8 @@ void GraphicsRenderWriteAtEndOfPipeWithInterruptWriteBack(CommandBuffer* buffer,
 		    return true;
 	    });
 
-	auto* label =
-	    static_cast<Label*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(dst_gpu_addr), 8, label_info));
+	auto* label = static_cast<Label*>(
+	    GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), nullptr, reinterpret_cast<uint64_t>(dst_gpu_addr), 8, label_info));
 
 	LabelSet(buffer, label);
 }
@@ -3884,8 +4241,8 @@ void GraphicsRenderWriteAtEndOfPipeWithInterrupt(CommandBuffer* buffer, uint64_t
 		                                    return true;
 	                                    });
 
-	auto* label =
-	    static_cast<Label*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(dst_gpu_addr), 8, label_info));
+	auto* label = static_cast<Label*>(
+	    GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), nullptr, reinterpret_cast<uint64_t>(dst_gpu_addr), 8, label_info));
 
 	LabelSet(buffer, label);
 }
@@ -3926,8 +4283,8 @@ void GraphicsRenderWriteAtEndOfPipeWithInterruptWriteBackFlip(CommandBuffer* buf
 	    },
 	    args);
 
-	auto* label =
-	    static_cast<Label*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(dst_gpu_addr), 4, label_info));
+	auto* label = static_cast<Label*>(
+	    GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), nullptr, reinterpret_cast<uint64_t>(dst_gpu_addr), 4, label_info));
 
 	LabelSet(buffer, label);
 }
@@ -3959,8 +4316,8 @@ void GraphicsRenderWriteAtEndOfPipeWithFlip(CommandBuffer* buffer, uint32_t* dst
 	    },
 	    nullptr, args);
 
-	auto* label =
-	    static_cast<Label*>(GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), reinterpret_cast<uint64_t>(dst_gpu_addr), 4, label_info));
+	auto* label = static_cast<Label*>(
+	    GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), nullptr, reinterpret_cast<uint64_t>(dst_gpu_addr), 4, label_info));
 
 	LabelSet(buffer, label);
 }
@@ -4051,6 +4408,11 @@ void GraphicsRenderReadGds(uint32_t* dst, uint32_t dw_offset, uint32_t dw_size)
 	EXIT_IF(g_render_ctx->GetGdsBuffer() == nullptr);
 
 	g_render_ctx->GetGdsBuffer()->Read(g_render_ctx->GetGraphicCtx(), dst, dw_offset, dw_size);
+}
+
+void GraphicsRenderMemoryFree(uint64_t vaddr, uint64_t size)
+{
+	GpuMemoryFree(g_render_ctx->GetGraphicCtx(), vaddr, size, false);
 }
 
 bool CommandBuffer::IsInvalid() const
@@ -4222,13 +4584,11 @@ void CommandBuffer::WaitForFenceAndReset()
 	}
 }
 
-VulkanFramebuffer* CommandBuffer::BeginRenderPass(RenderColorInfo* color, RenderDepthInfo* depth) const
+void CommandBuffer::BeginRenderPass(VulkanFramebuffer* framebuffer, RenderColorInfo* color, RenderDepthInfo* depth) const
 {
 	EXIT_IF(IsInvalid());
 
 	auto* buffer = m_pool->buffers[m_index];
-
-	auto* framebuffer = g_render_ctx->GetFramebufferCache()->CreateFramebuffer(color, depth);
 
 	EXIT_IF(framebuffer == nullptr);
 
@@ -4239,7 +4599,7 @@ VulkanFramebuffer* CommandBuffer::BeginRenderPass(RenderColorInfo* color, Render
 
 	VkClearValue clears[2];
 	clears[0].color        = {{0.0f, 0.0f, 0.0f, 1.0f}};
-	clears[1].depthStencil = {depth->depth_clear_value, 0};
+	clears[1].depthStencil = {depth->depth_clear_value, depth->stencil_clear_value};
 
 	VkExtent2D extent = (with_color ? color->vulkan_buffer->extent : depth->vulkan_buffer->extent);
 
@@ -4279,8 +4639,6 @@ VulkanFramebuffer* CommandBuffer::BeginRenderPass(RenderColorInfo* color, Render
 	}
 
 	vkCmdBeginRenderPass(buffer, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
-
-	return framebuffer;
 }
 
 void CommandBuffer::EndRenderPass() const

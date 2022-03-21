@@ -9,6 +9,7 @@
 
 #include "Emulator/Graphics/GraphicContext.h"
 #include "Emulator/Profiler.h"
+#include "Emulator/VirtualMemory.h"
 
 #include <algorithm>
 #include <atomic>
@@ -20,6 +21,8 @@
 #ifdef KYTY_EMU_ENABLED
 
 namespace Kyty::Libs::Graphics {
+
+constexpr int VADDR_BLOCKS_MAX = 3;
 
 enum class OverlapType : uint64_t
 {
@@ -38,8 +41,15 @@ constexpr uint64_t ObjectsRelation(GpuMemoryObjectType b, OverlapType relation, 
 	       static_cast<uint64_t>(b) * static_cast<uint64_t>(OverlapType::Max) + static_cast<uint64_t>(relation);
 }
 
-OverlapType GetOverlapType(uint64_t vaddr_a, uint64_t size_a, uint64_t vaddr_b, uint64_t size_b)
+static bool addr_in_block(uint64_t block_addr, uint64_t block_size, uint64_t addr)
 {
+	return addr >= block_addr && addr < block_addr + block_size;
+};
+
+static OverlapType GetOverlapType(uint64_t vaddr_a, uint64_t size_a, uint64_t vaddr_b, uint64_t size_b)
+{
+	// KYTY_PROFILER_FUNCTION();
+
 	EXIT_IF(size_a == 0 || size_b == 0);
 
 	if (vaddr_a == vaddr_b && size_a == size_b)
@@ -50,8 +60,8 @@ OverlapType GetOverlapType(uint64_t vaddr_a, uint64_t size_a, uint64_t vaddr_b, 
 	uint64_t vaddr_last_a = vaddr_a + size_a - 1;
 	uint64_t vaddr_last_b = vaddr_b + size_b - 1;
 
-	auto addr_in_block = [](uint64_t block_addr, uint64_t block_size, uint64_t addr)
-	{ return addr >= block_addr && addr < block_addr + block_size; };
+	//	auto addr_in_block = [](uint64_t block_addr, uint64_t block_size, uint64_t addr)
+	//	{ return addr >= block_addr && addr < block_addr + block_size; };
 
 	bool a_b  = addr_in_block(vaddr_a, size_a, vaddr_b);
 	bool a_lb = addr_in_block(vaddr_a, size_a, vaddr_last_b);
@@ -76,6 +86,54 @@ OverlapType GetOverlapType(uint64_t vaddr_a, uint64_t size_a, uint64_t vaddr_b, 
 	return OverlapType::None;
 }
 
+class MemoryWatcher
+{
+public:
+	MemoryWatcher() { EXIT_NOT_IMPLEMENTED(!Core::Thread::IsMainThread()); }
+	virtual ~MemoryWatcher() { KYTY_NOT_IMPLEMENTED; }
+	KYTY_CLASS_NO_COPY(MemoryWatcher);
+
+	using callback_func_t = void (*)(void*, void*);
+
+	void Watch(const uint64_t* vaddr, const uint64_t* size, int vaddr_num, callback_func_t func, void* arg0, void* arg1);
+	void Stop(const uint64_t* vaddr, const uint64_t* size, int vaddr_num);
+	bool AlreadyWatch(const uint64_t* vaddr, const uint64_t* size, int vaddr_num);
+	bool Check(uint64_t vaddr, uint64_t size);
+
+	static bool Enabled()
+	{
+		static const bool enabled = !Core::dbg_is_debugger_present();
+		return enabled;
+	}
+
+private:
+	static constexpr uint64_t PAGES_NUM = 0x400000;
+
+	struct Callback
+	{
+		callback_func_t func = nullptr;
+		void*           arg0 = nullptr;
+		void*           arg1 = nullptr;
+	};
+
+	struct Block
+	{
+		bool     used                         = false;
+		uint64_t vaddr[VADDR_BLOCKS_MAX]      = {};
+		uint64_t size[VADDR_BLOCKS_MAX]       = {};
+		uint64_t page_start[VADDR_BLOCKS_MAX] = {};
+		uint64_t page_end[VADDR_BLOCKS_MAX]   = {};
+		int      vaddr_num                    = 0;
+		Callback cb;
+	};
+
+	void Delete(Block* b);
+
+	Core::Mutex   m_mutex;
+	uint8_t       m_pages[PAGES_NUM] = {};
+	Vector<Block> m_blocks;
+};
+
 class GpuMemory
 {
 public:
@@ -89,13 +147,14 @@ public:
 
 	bool IsAllocated(uint64_t vaddr, uint64_t size);
 	void SetAllocatedRange(uint64_t vaddr, uint64_t size);
-	void Free(GraphicContext* ctx, uint64_t vaddr, uint64_t size);
+	void Free(GraphicContext* ctx, uint64_t vaddr, uint64_t size, bool unmap);
 
-	void* CreateObject(GraphicContext* ctx, const uint64_t* vaddr, const uint64_t* size, int vaddr_num, const GpuObject& info);
+	void* CreateObject(GraphicContext* ctx, CommandBuffer* buffer, const uint64_t* vaddr, const uint64_t* size, int vaddr_num,
+	                   const GpuObject& info);
 	void  ResetHash(GraphicContext* ctx, const uint64_t* vaddr, const uint64_t* size, int vaddr_num, GpuMemoryObjectType type);
 	void  FrameDone();
 
-	Vector<GpuMemoryObject> FindObjects(const uint64_t* vaddr, const uint64_t* size, int vaddr_num);
+	Vector<GpuMemoryObject> FindObjects(const uint64_t* vaddr, const uint64_t* size, int vaddr_num, bool exact);
 
 	// Sync: GPU -> CPU
 	void WriteBack(GraphicContext* ctx);
@@ -106,11 +165,9 @@ public:
 	void DbgInit();
 	void DbgDbDump();
 	void DbgDbSave(const String& file_name);
-	void DbgDump();
 
 private:
 	static constexpr int OBJ_OVERLAPS_MAX = 2;
-	static constexpr int VADDR_BLOCKS_MAX = 3;
 
 	struct AllocatedRange
 	{
@@ -123,6 +180,8 @@ private:
 		GpuMemoryObject              object;
 		uint64_t                     params[GpuObject::PARAMS_MAX] = {};
 		uint64_t                     hash[VADDR_BLOCKS_MAX]        = {};
+		uint64_t                     cpu_update_time               = 0;
+		uint64_t                     gpu_update_time               = 0;
 		GpuObject::write_back_func_t write_back_func               = nullptr;
 		GpuObject::delete_func_t     delete_func                   = nullptr;
 		GpuObject::update_func_t     update_func                   = nullptr;
@@ -152,7 +211,8 @@ private:
 		Block                   block;
 		ObjectInfo              info;
 		Vector<OverlappedBlock> others;
-		bool                    free = true;
+		GpuMemoryScenario       scenario = GpuMemoryScenario::Common;
+		bool                    free     = true;
 	};
 
 	void Free(GraphicContext* ctx, int object_id);
@@ -160,10 +220,17 @@ private:
 	Vector<OverlappedBlock> FindBlocks(const uint64_t* vaddr, const uint64_t* size, int vaddr_num);
 	Block                   CreateBlock(const uint64_t* vaddr, const uint64_t* size, int vaddr_num);
 	void                    DeleteBlock(Block* b);
-	void                    Link(int id1, int id2, OverlapType rel);
+	void                    Link(int id1, int id2, OverlapType rel, GpuMemoryScenario scenario);
 
-	static void Update(GraphicContext* ctx, ObjectInfo& o, const uint64_t* vaddr, const uint64_t* size, int vaddr_num,
-	                   const uint64_t* hash);
+	// Update (CPU -> GPU)
+	void Update(GraphicContext* ctx, int obj_id);
+
+	static void WatchCallback(void* a0, void* a1);
+
+	bool create_generate_mips(const Vector<OverlappedBlock>& others, GpuMemoryObjectType type);
+	bool create_all_the_same(const Vector<OverlappedBlock>& others);
+	void create_dbg_exit(const uint64_t* vaddr, const uint64_t* size, int vaddr_num, const Vector<OverlappedBlock>& others,
+	                     GpuMemoryObjectType type);
 
 	Core::Mutex m_mutex;
 
@@ -216,8 +283,289 @@ private:
 	Vector<Info>  m_infos;
 };
 
-static GpuMemory*    g_gpu_memory    = nullptr;
-static GpuResources* g_gpu_resources = nullptr;
+static GpuMemory*     g_gpu_memory         = nullptr;
+static GpuResources*  g_gpu_resources      = nullptr;
+static MemoryWatcher* g_gpu_memory_watcher = nullptr;
+
+void MemoryWatcher::Watch(const uint64_t* vaddr, const uint64_t* size, int vaddr_num, callback_func_t func, void* arg0, void* arg1)
+{
+	KYTY_PROFILER_BLOCK("MemoryWatcher::Watch");
+
+	if (!Enabled())
+	{
+		return;
+	}
+
+	Core::LockGuard lock(m_mutex);
+
+	if (AlreadyWatch(vaddr, size, vaddr_num))
+	{
+		return;
+	}
+
+	Stop(vaddr, size, vaddr_num);
+
+	EXIT_IF(func == nullptr);
+
+	Block nb;
+	nb.used      = true;
+	nb.cb.func   = func;
+	nb.cb.arg0   = arg0;
+	nb.cb.arg1   = arg1;
+	nb.vaddr_num = vaddr_num;
+	for (int i = 0; i < vaddr_num; i++)
+	{
+		EXIT_IF(size[i] == 0);
+		nb.vaddr[i]      = vaddr[i];
+		nb.size[i]       = size[i];
+		nb.page_start[i] = vaddr[i] >> 12u;
+		nb.page_end[i]   = (vaddr[i] + size[i] - 1) >> 12u;
+
+		EXIT_IF(nb.page_end[i] < nb.page_start[i]);
+
+		struct Region
+		{
+			uint64_t start = 0;
+			uint64_t count = 0;
+		};
+
+		Vector<Region> rs;
+
+		Region r;
+
+		for (uint64_t page = nb.page_start[i]; page <= nb.page_end[i]; page++)
+		{
+			EXIT_NOT_IMPLEMENTED(page >= PAGES_NUM);
+			EXIT_NOT_IMPLEMENTED(m_pages[page] == 0xff);
+
+			if (m_pages[page] == 0)
+			{
+				if (r.count == 0)
+				{
+					r.start = page;
+				}
+				r.count++;
+			} else
+			{
+				if (r.count > 0)
+				{
+					rs.Add(r);
+					r.count = 0;
+				}
+			}
+
+			m_pages[page]++;
+		}
+
+		if (r.count > 0)
+		{
+			rs.Add(r);
+		}
+
+		for (const auto& r: rs)
+		{
+			Kyty::Loader::VirtualMemory::Mode old_mode = Kyty::Loader::VirtualMemory::Mode::NoAccess;
+
+			// printf("protect %016" PRIx64 "\n", page << 12u);
+
+			Kyty::Loader::VirtualMemory::Protect(r.start << 12u, r.count * 0x1000, Kyty::Loader::VirtualMemory::Mode::Read, &old_mode);
+
+			EXIT_NOT_IMPLEMENTED(old_mode != Kyty::Loader::VirtualMemory::Mode::ReadWrite);
+		}
+	}
+
+	for (auto& b: m_blocks)
+	{
+		if (!b.used)
+		{
+			b = nb;
+			return;
+		}
+	}
+
+	m_blocks.Add(nb);
+}
+
+void MemoryWatcher::Delete(Block* b)
+{
+	KYTY_PROFILER_BLOCK("MemoryWatcher::Delete");
+
+	EXIT_IF(!b->used);
+
+	b->used = false;
+
+	for (int i = 0; i < b->vaddr_num; i++)
+	{
+		struct Region
+		{
+			uint64_t start = 0;
+			uint64_t count = 0;
+		};
+
+		Vector<Region> rs;
+
+		Region r;
+
+		for (uint64_t page = b->page_start[i]; page <= b->page_end[i]; page++)
+		{
+			EXIT_NOT_IMPLEMENTED(m_pages[page] == 0);
+
+			m_pages[page]--;
+
+			if (m_pages[page] == 0)
+			{
+				if (r.count == 0)
+				{
+					r.start = page;
+				}
+				r.count++;
+			} else
+			{
+				if (r.count > 0)
+				{
+					rs.Add(r);
+					r.count = 0;
+				}
+			}
+		}
+
+		if (r.count > 0)
+		{
+			rs.Add(r);
+		}
+
+		for (const auto& r: rs)
+		{
+			Kyty::Loader::VirtualMemory::Mode old_mode = Kyty::Loader::VirtualMemory::Mode::NoAccess;
+
+			// printf("unprotect %016" PRIx64 "\n", page << 12u);
+
+			Kyty::Loader::VirtualMemory::Protect(r.start << 12u, r.count * 0x1000, Kyty::Loader::VirtualMemory::Mode::ReadWrite, &old_mode);
+
+			EXIT_NOT_IMPLEMENTED(old_mode != Kyty::Loader::VirtualMemory::Mode::Read);
+		}
+	}
+}
+
+void MemoryWatcher::Stop(const uint64_t* vaddr, const uint64_t* size, int vaddr_num)
+{
+	KYTY_PROFILER_BLOCK("MemoryWatcher::Stop");
+
+	if (!Enabled())
+	{
+		return;
+	}
+
+	Core::LockGuard lock(m_mutex);
+
+	for (auto& b: m_blocks)
+	{
+		if (b.used && b.vaddr_num == vaddr_num)
+		{
+			bool equal = true;
+			for (int i = 0; i < vaddr_num; i++)
+			{
+				if (GetOverlapType(b.vaddr[i], b.size[i], vaddr[i], size[i]) != OverlapType::Equals)
+				{
+					equal = false;
+					break;
+				}
+			}
+			if (equal)
+			{
+				Delete(&b);
+			}
+		}
+	}
+}
+
+bool MemoryWatcher::AlreadyWatch(const uint64_t* vaddr, const uint64_t* size, int vaddr_num)
+{
+	KYTY_PROFILER_BLOCK("MemoryWatcher::AlreadyWatch");
+
+	if (!Enabled())
+	{
+		return false;
+	}
+
+	Core::LockGuard lock(m_mutex);
+
+	for (auto& b: m_blocks)
+	{
+		if (b.used && b.vaddr_num == vaddr_num)
+		{
+			bool equal = true;
+			for (int i = 0; i < vaddr_num; i++)
+			{
+				if (GetOverlapType(b.vaddr[i], b.size[i], vaddr[i], size[i]) != OverlapType::Equals)
+				{
+					equal = false;
+					break;
+				}
+			}
+			if (equal)
+			{
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+bool MemoryWatcher::Check(uint64_t vaddr, uint64_t size)
+{
+	if (!Enabled())
+	{
+		return false;
+	}
+
+	//	printf("check begin\n");
+	//
+	//	Core::DebugStack s;
+	//	Core::DebugStack::Trace(&s);
+	//	s.Print(0);
+
+	m_mutex.Lock();
+
+	uint64_t page_start = vaddr >> 12u;
+	uint64_t page_end   = (vaddr + size - 1) >> 12u;
+
+	Vector<Callback> cbs;
+
+	for (uint64_t page = page_start; page <= page_end; page++)
+	{
+		if (page < PAGES_NUM)
+		{
+			for (auto& b: m_blocks)
+			{
+				if (b.used)
+				{
+					for (int i = 0; i < b.vaddr_num; i++)
+					{
+						if (b.page_start[i] <= page && b.page_end[i] >= page)
+						{
+							cbs.Add(b.cb);
+							Delete(&b);
+							break;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	m_mutex.Unlock();
+
+	for (const auto& cb: cbs)
+	{
+		cb.func(cb.arg0, cb.arg1);
+	}
+
+	// printf("check end\n");
+
+	return !cbs.IsEmpty();
+}
 
 uint32_t GpuResources::AddOwner(const String& name)
 {
@@ -375,13 +723,20 @@ static uint64_t calc_hash(const uint8_t* buf, uint64_t size)
 	return (size > 0 && buf != nullptr ? XXH64(buf, size, 0) : 0);
 }
 
-void GpuMemory::Link(int id1, int id2, OverlapType rel)
+static uint64_t get_current_time()
+{
+	static std::atomic_uint64_t t(0);
+	return ++t;
+}
+
+void GpuMemory::Link(int id1, int id2, OverlapType rel, GpuMemoryScenario scenario)
 {
 	OverlapType other_rel = OverlapType::None;
 	switch (rel)
 	{
 		case OverlapType::Equals: other_rel = OverlapType::Equals; break;
 		case OverlapType::IsContainedWithin: other_rel = OverlapType::Contains; break;
+		case OverlapType::Contains: other_rel = OverlapType::IsContainedWithin; break;
 		default: EXIT("invalid rel: %s\n", Core::EnumName(rel).C_Str());
 	}
 
@@ -391,59 +746,167 @@ void GpuMemory::Link(int id1, int id2, OverlapType rel)
 	auto& h2 = m_objects[id2];
 	EXIT_IF(h2.free);
 
-	// EXIT_NOT_IMPLEMENTED(!h1.others.IsEmpty());
-	// EXIT_NOT_IMPLEMENTED(!h2.others.IsEmpty());
-
 	h1.others.Add({rel, id2});
 	h2.others.Add({other_rel, id1});
+
+	h1.scenario = scenario;
+	h2.scenario = scenario;
 }
 
-void GpuMemory::Update(GraphicContext* ctx, ObjectInfo& o, const uint64_t* vaddr, const uint64_t* size, int vaddr_num, const uint64_t* hash)
+void GpuMemory::Update(GraphicContext* ctx, int obj_id)
 {
-	bool need_update = false;
-	for (int vi = 0; vi < vaddr_num; vi++)
+	KYTY_PROFILER_BLOCK("GpuMemory::Update");
+
+	auto& h           = m_objects[obj_id];
+	auto& o           = h.info;
+	bool  need_update = false;
+
+	bool mem_watch = MemoryWatcher::Enabled();
+
+	if ((mem_watch && o.cpu_update_time > o.gpu_update_time) || !mem_watch)
 	{
-		if (o.hash[vi] != hash[vi])
+		uint64_t hash[VADDR_BLOCKS_MAX] = {};
+
+		for (int vi = 0; vi < h.block.vaddr_num; vi++)
 		{
-			printf("Update (CPU -> GPU): type = %s, vaddr = 0x%016" PRIx64 ", size = 0x%016" PRIx64 "\n",
-			       Core::EnumName(o.object.type).C_Str(), vaddr[vi], size[vi]);
-			need_update = true;
-			o.hash[vi]  = hash[vi];
+			EXIT_IF(h.block.size[vi] == 0);
+
+			if (o.check_hash)
+			{
+				hash[vi] = calc_hash(reinterpret_cast<const uint8_t*>(h.block.vaddr[vi]), h.block.size[vi]);
+			} else
+			{
+				hash[vi] = 0;
+			}
+		}
+
+		for (int vi = 0; vi < h.block.vaddr_num; vi++)
+		{
+			if (o.hash[vi] != hash[vi])
+			{
+				printf("Update (CPU -> GPU): type = %s, vaddr = 0x%016" PRIx64 ", size = 0x%016" PRIx64 "\n",
+				       Core::EnumName(o.object.type).C_Str(), h.block.vaddr[vi], h.block.size[vi]);
+				need_update = true;
+				o.hash[vi]  = hash[vi];
+			}
 		}
 	}
+
 	if (need_update)
 	{
 		EXIT_IF(o.update_func == nullptr);
-		o.update_func(ctx, o.params, o.object.obj, vaddr, size, vaddr_num);
+		o.update_func(ctx, o.params, o.object.obj, h.block.vaddr, h.block.size, h.block.vaddr_num);
+		o.gpu_update_time = get_current_time();
 	}
+
+	g_gpu_memory_watcher->Watch(h.block.vaddr, h.block.size, h.block.vaddr_num, WatchCallback, this,
+	                            reinterpret_cast<void*>(static_cast<intptr_t>(obj_id)));
+}
+
+void GpuMemory::WatchCallback(void* a0, void* a1)
+{
+	auto* m     = static_cast<GpuMemory*>(a0);
+	auto  index = reinterpret_cast<intptr_t>(a1);
+
+	m->m_mutex.Lock();
+
+	EXIT_NOT_IMPLEMENTED(m->m_objects[index].free);
+
+	m->m_objects[index].info.cpu_update_time = get_current_time();
+
+	m->m_mutex.Unlock();
+}
+
+bool GpuMemory::create_generate_mips(const Vector<OverlappedBlock>& others, GpuMemoryObjectType type)
+{
+	if (others.Size() == 2 && type == GpuMemoryObjectType::RenderTexture)
+	{
+		const auto&         b0    = others.At(0);
+		const auto&         b1    = others.At(1);
+		OverlapType         rel0  = b0.relation;
+		OverlapType         rel1  = b1.relation;
+		const auto&         o0    = m_objects[b0.object_id];
+		const auto&         o1    = m_objects[b1.object_id];
+		GpuMemoryObjectType type0 = o0.info.object.type;
+		GpuMemoryObjectType type1 = o1.info.object.type;
+
+		if (rel0 == OverlapType::Contains && rel1 == OverlapType::Contains && type0 == GpuMemoryObjectType::StorageBuffer &&
+		    type1 == GpuMemoryObjectType::StorageTexture &&
+		    ((o0.others.Size() == 1 && o0.scenario == GpuMemoryScenario::Common && o1.others.Size() == 1 &&
+		      o1.scenario == GpuMemoryScenario::Common) ||
+		     (o0.others.Size() >= 2 && o0.scenario == GpuMemoryScenario::GenerateMips && o1.others.Size() >= 2 &&
+		      o1.scenario == GpuMemoryScenario::GenerateMips)))
+		{
+			return true;
+		}
+	} else if (others.Size() >= 2 && type == GpuMemoryObjectType::Texture)
+	{
+		const auto&         b0    = others.At(0);
+		const auto&         b1    = others.At(1);
+		OverlapType         rel0  = b0.relation;
+		OverlapType         rel1  = b1.relation;
+		const auto&         o0    = m_objects[b0.object_id];
+		const auto&         o1    = m_objects[b1.object_id];
+		GpuMemoryObjectType type0 = o0.info.object.type;
+		GpuMemoryObjectType type1 = o1.info.object.type;
+
+		if (((rel0 == OverlapType::Contains && rel1 == OverlapType::Contains) ||
+		     (rel0 == OverlapType::Equals && rel1 == OverlapType::Equals)) &&
+		    type0 == GpuMemoryObjectType::StorageBuffer && type1 == GpuMemoryObjectType::StorageTexture &&
+		    o0.scenario == GpuMemoryScenario::GenerateMips && o1.scenario == GpuMemoryScenario::GenerateMips)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool GpuMemory::create_all_the_same(const Vector<OverlappedBlock>& others)
+{
+	OverlapType         rel  = others.At(0).relation;
+	GpuMemoryObjectType type = m_objects[others.At(0).object_id].info.object.type;
+
+	return std::all_of(others.begin(), others.end(),
+	                   [rel, type, this](auto& r) { return (rel == r.relation && type == m_objects[r.object_id].info.object.type); });
+}
+
+void GpuMemory::create_dbg_exit(const uint64_t* vaddr, const uint64_t* size, int vaddr_num, const Vector<OverlappedBlock>& others,
+                                GpuMemoryObjectType type)
+{
+	printf("Exit:\n");
+
+	for (int vi = 0; vi < vaddr_num; vi++)
+	{
+		printf("\t vaddr = 0x%016" PRIx64 ", size = 0x%016" PRIx64 "\n", vaddr[vi], size[vi]);
+	}
+
+	printf("\t info.type = %s\n", Core::EnumName(type).C_Str());
+	for (const auto& d: others)
+	{
+		printf("\t id = %d, rel = %s\n", d.object_id, Core::EnumName(d.relation).C_Str());
+	}
+	DbgDbDump();
+	DbgDbSave(U"_gpu_memory.db");
+	KYTY_NOT_IMPLEMENTED;
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-void* GpuMemory::CreateObject(GraphicContext* ctx, const uint64_t* vaddr, const uint64_t* size, int vaddr_num, const GpuObject& info)
+void* GpuMemory::CreateObject(GraphicContext* ctx, CommandBuffer* buffer, const uint64_t* vaddr, const uint64_t* size, int vaddr_num,
+                              const GpuObject& info)
 {
+	KYTY_PROFILER_BLOCK("GpuMemory::CreateObject", profiler::colors::Green300);
+
 	EXIT_IF(info.type == GpuMemoryObjectType::Invalid);
 	EXIT_IF(vaddr == nullptr || size == nullptr || vaddr_num > VADDR_BLOCKS_MAX || vaddr_num <= 0);
 
 	Core::LockGuard lock(m_mutex);
 
-	uint64_t hash[VADDR_BLOCKS_MAX] = {};
-
-	for (int vi = 0; vi < vaddr_num; vi++)
-	{
-		EXIT_IF(size[vi] == 0);
-
-		if (info.check_hash)
-		{
-			hash[vi] = calc_hash(reinterpret_cast<const uint8_t*>(vaddr[vi]), size[vi]);
-		} else
-		{
-			hash[vi] = 0;
-		}
-	}
-
 	bool overlap             = false;
 	bool delete_all          = false;
 	bool create_from_objects = false;
+
+	GpuMemoryScenario scenario = GpuMemoryScenario::Common;
 
 	auto others = FindBlocks(vaddr, size, vaddr_num);
 
@@ -456,7 +919,7 @@ void* GpuMemory::CreateObject(GraphicContext* ctx, const uint64_t* vaddr, const 
 			auto& o = h.info;
 			if (obj.relation == OverlapType::Equals && o.object.type == info.type && info.Equal(o.params))
 			{
-				Update(ctx, o, vaddr, size, vaddr_num, hash);
+				Update(ctx, obj.object_id);
 
 				o.use_num++;
 				o.use_last_frame = m_current_frame;
@@ -477,6 +940,7 @@ void* GpuMemory::CreateObject(GraphicContext* ctx, const uint64_t* vaddr, const 
 			switch (ObjectsRelation(o.object.type, obj.relation, info.type))
 			{
 				case ObjectsRelation(GpuMemoryObjectType::StorageBuffer, OverlapType::Equals, GpuMemoryObjectType::RenderTexture):
+				case ObjectsRelation(GpuMemoryObjectType::StorageBuffer, OverlapType::Equals, GpuMemoryObjectType::StorageTexture):
 				case ObjectsRelation(GpuMemoryObjectType::VideoOutBuffer, OverlapType::Equals, GpuMemoryObjectType::StorageBuffer):
 				{
 					overlap = true;
@@ -495,30 +959,40 @@ void* GpuMemory::CreateObject(GraphicContext* ctx, const uint64_t* vaddr, const 
 					break;
 				}
 				default:
-					EXIT("unknown relation: %s - %s - %s\n", Core::EnumName(o.object.type).C_Str(), Core::EnumName(obj.relation).C_Str(),
-					     Core::EnumName(info.type).C_Str());
+					printf("unknown relation: %s - %s - %s\n", Core::EnumName(o.object.type).C_Str(), Core::EnumName(obj.relation).C_Str(),
+					       Core::EnumName(info.type).C_Str());
+					create_dbg_exit(vaddr, size, vaddr_num, others, info.type);
 			}
 		} else
 		{
-			OverlapType         rel  = others.At(0).relation;
-			GpuMemoryObjectType type = m_objects[others.At(0).object_id].info.object.type;
-			for (const auto& obj: others)
+			if (create_generate_mips(others, info.type))
 			{
-				EXIT_NOT_IMPLEMENTED(rel != obj.relation || type != m_objects[obj.object_id].info.object.type);
-			}
+				overlap             = true;
+				create_from_objects = true;
+				scenario            = GpuMemoryScenario::GenerateMips;
+			} else
+			{
+				if (!create_all_the_same(others))
+				{
+					create_dbg_exit(vaddr, size, vaddr_num, others, info.type);
+				}
 
-			switch (ObjectsRelation(type, rel, info.type)) // NOLINT
-			{
-				case ObjectsRelation(GpuMemoryObjectType::Label, OverlapType::IsContainedWithin, GpuMemoryObjectType::StorageBuffer):
-					delete_all = true;
-					break;
-				case ObjectsRelation(GpuMemoryObjectType::RenderTexture, OverlapType::IsContainedWithin, GpuMemoryObjectType::Texture):
-					overlap             = true;
-					create_from_objects = true;
-					break;
-				default:
-					EXIT("unknown relation: %s - %s - %s\n", Core::EnumName(type).C_Str(), Core::EnumName(rel).C_Str(),
-					     Core::EnumName(info.type).C_Str());
+				OverlapType         rel  = others.At(0).relation;
+				GpuMemoryObjectType type = m_objects[others.At(0).object_id].info.object.type;
+
+				switch (ObjectsRelation(type, rel, info.type))
+				{
+					case ObjectsRelation(GpuMemoryObjectType::Label, OverlapType::IsContainedWithin, GpuMemoryObjectType::StorageBuffer):
+						delete_all = true;
+						break;
+					case ObjectsRelation(GpuMemoryObjectType::RenderTexture, OverlapType::IsContainedWithin, GpuMemoryObjectType::Texture):
+						overlap             = true;
+						create_from_objects = true;
+						break;
+					default:
+						EXIT("unknown relation: %s - %s - %s\n", Core::EnumName(type).C_Str(), Core::EnumName(rel).C_Str(),
+						     Core::EnumName(info.type).C_Str());
+				}
 			}
 		}
 	}
@@ -545,12 +1019,29 @@ void* GpuMemory::CreateObject(GraphicContext* ctx, const uint64_t* vaddr, const 
 		o.params[i] = info.params[i];
 	}
 
+	uint64_t hash[VADDR_BLOCKS_MAX] = {};
+
+	for (int vi = 0; vi < vaddr_num; vi++)
+	{
+		EXIT_IF(size[vi] == 0);
+
+		if (info.check_hash)
+		{
+			hash[vi] = calc_hash(reinterpret_cast<const uint8_t*>(vaddr[vi]), size[vi]);
+		} else
+		{
+			hash[vi] = 0;
+		}
+	}
+
 	o.object.type = info.type;
 	o.object.obj  = nullptr;
 	for (int vi = 0; vi < vaddr_num; vi++)
 	{
 		o.hash[vi] = hash[vi];
 	}
+	o.cpu_update_time = get_current_time();
+	o.gpu_update_time = o.cpu_update_time;
 
 	if (create_from_objects)
 	{
@@ -562,7 +1053,7 @@ void* GpuMemory::CreateObject(GraphicContext* ctx, const uint64_t* vaddr, const 
 		}
 		auto create_func = info.GetCreateFromObjectsFunc();
 		EXIT_IF(create_func == nullptr);
-		o.object.obj = create_func(ctx, o.params, objects, &o.mem);
+		o.object.obj = create_func(ctx, buffer, o.params, scenario, objects, &o.mem);
 	} else
 	{
 		o.object.obj = info.GetCreateFunc()(ctx, o.params, vaddr, size, vaddr_num, &o.mem);
@@ -588,7 +1079,8 @@ void* GpuMemory::CreateObject(GraphicContext* ctx, const uint64_t* vaddr, const 
 			u.block = CreateBlock(vaddr, size, vaddr_num);
 			u.info  = o;
 			u.others.Clear();
-			updated = true;
+			u.scenario = scenario;
+			updated    = true;
 			break;
 		}
 		index++;
@@ -600,7 +1092,8 @@ void* GpuMemory::CreateObject(GraphicContext* ctx, const uint64_t* vaddr, const 
 		h.block = CreateBlock(vaddr, size, vaddr_num);
 		h.info  = o;
 		h.others.Clear();
-		h.free = false;
+		h.scenario = scenario;
+		h.free     = false;
 		m_objects.Add(h);
 	}
 
@@ -608,15 +1101,17 @@ void* GpuMemory::CreateObject(GraphicContext* ctx, const uint64_t* vaddr, const 
 	{
 		for (const auto& obj: others)
 		{
-			Link(index, obj.object_id, obj.relation);
+			Link(index, obj.object_id, obj.relation, scenario);
 		}
 	}
 
 	return o.object.obj;
 }
 
-Vector<GpuMemoryObject> GpuMemory::FindObjects(const uint64_t* vaddr, const uint64_t* size, int vaddr_num)
+Vector<GpuMemoryObject> GpuMemory::FindObjects(const uint64_t* vaddr, const uint64_t* size, int vaddr_num, bool exact)
 {
+	KYTY_PROFILER_BLOCK("GpuMemory::FindObjects", profiler::colors::Green200);
+
 	EXIT_IF(vaddr == nullptr || size == nullptr || vaddr_num > VADDR_BLOCKS_MAX || vaddr_num <= 0);
 
 	Core::LockGuard lock(m_mutex);
@@ -625,19 +1120,19 @@ Vector<GpuMemoryObject> GpuMemory::FindObjects(const uint64_t* vaddr, const uint
 
 	Vector<GpuMemoryObject> ret;
 
-	printf("GpuMemory::FindObjects()\n");
+	// printf("GpuMemory::FindObjects()\n");
 
-	for (int i = 0; i < vaddr_num; i++)
-	{
-		printf("\t vaddr = %016" PRIx64 ", size = %016" PRIx64 "\n", vaddr[i], size[i]);
-	}
+	//	for (int i = 0; i < vaddr_num; i++)
+	//	{
+	//		printf("\t vaddr = %016" PRIx64 ", size = %016" PRIx64 "\n", vaddr[i], size[i]);
+	//	}
 
 	for (const auto& obj: objects)
 	{
 		const auto& h = m_objects[obj.object_id];
 		EXIT_IF(h.free);
-		printf("\t %s, %d, %s\n", Core::EnumName(obj.relation).C_Str(), obj.object_id, Core::EnumName(h.info.object.type).C_Str());
-		if (obj.relation == OverlapType::Equals)
+		// printf("\t %s, %d, %s\n", Core::EnumName(obj.relation).C_Str(), obj.object_id, Core::EnumName(h.info.object.type).C_Str());
+		if (obj.relation == OverlapType::Equals || (!exact && obj.relation == OverlapType::IsContainedWithin))
 		{
 			ret.Add(h.info.object);
 		}
@@ -661,14 +1156,14 @@ void GpuMemory::ResetHash(GraphicContext* /*ctx*/, const uint64_t* vaddr, const 
 	{
 		for (const auto& obj: object_ids)
 		{
-			EXIT_NOT_IMPLEMENTED(obj.relation != OverlapType::Equals);
-
 			auto& h = m_objects[obj.object_id];
 			EXIT_IF(h.free);
 
 			auto& o = h.info;
 			if (o.object.type == type)
 			{
+				EXIT_NOT_IMPLEMENTED(obj.relation != OverlapType::Equals);
+
 				for (int vi = 0; vi < vaddr_num; vi++)
 				{
 					printf("ResetHash: type = %s, vaddr = 0x%016" PRIx64 ", size = 0x%016" PRIx64 ", old_hash = 0x%016" PRIx64
@@ -677,12 +1172,15 @@ void GpuMemory::ResetHash(GraphicContext* /*ctx*/, const uint64_t* vaddr, const 
 
 					o.hash[vi] = new_hash;
 				}
+				o.gpu_update_time = get_current_time();
+				g_gpu_memory_watcher->Watch(vaddr, size, vaddr_num, WatchCallback, this,
+				                            reinterpret_cast<void*>(static_cast<intptr_t>(obj.object_id)));
 			}
 		}
 	}
 }
 
-void GpuMemory::Free(GraphicContext* ctx, uint64_t vaddr, uint64_t size)
+void GpuMemory::Free(GraphicContext* ctx, uint64_t vaddr, uint64_t size, bool unmap)
 {
 	Core::LockGuard lock(m_mutex);
 
@@ -690,20 +1188,23 @@ void GpuMemory::Free(GraphicContext* ctx, uint64_t vaddr, uint64_t size)
 	printf("\t gpu_vaddr = 0x%016" PRIx64 "\n", vaddr);
 	printf("\t size   = 0x%016" PRIx64 "\n", size);
 
-	EXIT_NOT_IMPLEMENTED(!IsAllocated(vaddr, size));
-
-	int index = 0;
-	for (auto& a: m_allocated)
+	if (unmap)
 	{
-		if (a.vaddr == vaddr && a.size == size)
-		{
-			m_allocated.RemoveAt(index);
-			break;
-		}
-		index++;
-	}
+		EXIT_NOT_IMPLEMENTED(!IsAllocated(vaddr, size));
 
-	EXIT_NOT_IMPLEMENTED(IsAllocated(vaddr, size));
+		int index = 0;
+		for (auto& a: m_allocated)
+		{
+			if (a.vaddr == vaddr && a.size == size)
+			{
+				m_allocated.RemoveAt(index);
+				break;
+			}
+			index++;
+		}
+
+		EXIT_NOT_IMPLEMENTED(IsAllocated(vaddr, size));
+	}
 
 	auto object_ids = FindBlocks(&vaddr, &size, 1);
 
@@ -722,13 +1223,13 @@ void GpuMemory::Free(GraphicContext* ctx, int object_id)
 {
 	auto& h = m_objects[object_id];
 	EXIT_IF(h.free);
-	auto& o = h.info;
+	auto&       o     = h.info;
+	const auto& block = h.block;
 
 	EXIT_IF(o.delete_func == nullptr);
 
 	if (o.delete_func != nullptr)
 	{
-		const auto& block = h.block;
 		// EXIT_IF(block.free);
 		for (int vi = 0; vi < block.vaddr_num; vi++)
 		{
@@ -737,6 +1238,7 @@ void GpuMemory::Free(GraphicContext* ctx, int object_id)
 		}
 		o.delete_func(ctx, o.object.obj, &o.mem);
 	}
+	g_gpu_memory_watcher->Stop(block.vaddr, block.size, block.vaddr_num);
 	h.free = true;
 	DeleteBlock(&h.block);
 }
@@ -744,6 +1246,8 @@ void GpuMemory::Free(GraphicContext* ctx, int object_id)
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 Vector<GpuMemory::OverlappedBlock> GpuMemory::FindBlocks(const uint64_t* vaddr, const uint64_t* size, int vaddr_num)
 {
+	KYTY_PROFILER_BLOCK("GpuMemory::FindBlocks", profiler::colors::Green100);
+
 	EXIT_IF(vaddr_num <= 0 || vaddr_num > VADDR_BLOCKS_MAX);
 	EXIT_IF(vaddr == nullptr || size == nullptr);
 
@@ -752,7 +1256,7 @@ Vector<GpuMemory::OverlappedBlock> GpuMemory::FindBlocks(const uint64_t* vaddr, 
 	if (vaddr_num != 1)
 	{
 		int index = 0;
-		for (auto& b: m_objects)
+		for (const auto& b: m_objects)
 		{
 			if (!b.free)
 			{
@@ -797,7 +1301,7 @@ Vector<GpuMemory::OverlappedBlock> GpuMemory::FindBlocks(const uint64_t* vaddr, 
 	} else
 	{
 		int index = 0;
-		for (auto& b: m_objects)
+		for (const auto& b: m_objects)
 		{
 			if (!b.free)
 			{
@@ -873,23 +1377,9 @@ void GpuMemory::WriteBack(GraphicContext* ctx)
 				auto& block = h.block;
 				// EXIT_IF(block.free);
 
+				g_gpu_memory_watcher->Stop(block.vaddr, block.size, block.vaddr_num);
 				o.write_back_func(ctx, o.object.obj, block.vaddr, block.size, block.vaddr_num);
-
-				for (int vi = 0; vi < block.vaddr_num; vi++)
-				{
-					uint64_t new_hash = 0;
-
-					if (o.check_hash)
-					{
-						new_hash = calc_hash(reinterpret_cast<const uint8_t*>(block.vaddr[vi]), block.size[vi]);
-					}
-
-					printf("WriteBack (GPU -> CPU): type = %s, vaddr = 0x%016" PRIx64 ", size = 0x%016" PRIx64 ", old_hash = 0x%016" PRIx64
-					       ", new_hash = 0x%016" PRIx64 "\n",
-					       Core::EnumName(o.object.type).C_Str(), block.vaddr[vi], block.size[vi], o.hash[vi], new_hash);
-
-					o.hash[vi] = new_hash;
-				}
+				o.cpu_update_time = get_current_time();
 
 				if (!h.others.IsEmpty())
 				{
@@ -898,7 +1388,35 @@ void GpuMemory::WriteBack(GraphicContext* ctx)
 
 					auto& o2 = m_objects[h.others.At(0).object_id].info;
 
-					Update(ctx, o2, block.vaddr, block.size, block.vaddr_num, o.hash);
+					o2.cpu_update_time = o.cpu_update_time;
+
+					Update(ctx, h.others.At(0).object_id);
+
+					for (int vi = 0; vi < block.vaddr_num; vi++)
+					{
+						printf("WriteBack (GPU -> CPU): type = %s, vaddr = 0x%016" PRIx64 ", size = 0x%016" PRIx64
+						       ", old_hash = 0x%016" PRIx64 ", new_hash = 0x%016" PRIx64 "\n",
+						       Core::EnumName(o.object.type).C_Str(), block.vaddr[vi], block.size[vi], o.hash[vi], o2.hash[vi]);
+
+						o.hash[vi] = o2.hash[vi];
+					}
+				} else
+				{
+					for (int vi = 0; vi < block.vaddr_num; vi++)
+					{
+						uint64_t new_hash = 0;
+
+						if (o.check_hash)
+						{
+							new_hash = calc_hash(reinterpret_cast<const uint8_t*>(block.vaddr[vi]), block.size[vi]);
+						}
+
+						printf("WriteBack (GPU -> CPU): type = %s, vaddr = 0x%016" PRIx64 ", size = 0x%016" PRIx64
+						       ", old_hash = 0x%016" PRIx64 ", new_hash = 0x%016" PRIx64 "\n",
+						       Core::EnumName(o.object.type).C_Str(), block.vaddr[vi], block.size[vi], o.hash[vi], new_hash);
+
+						o.hash[vi] = new_hash;
+					}
 				}
 
 				o.in_use = false;
@@ -912,6 +1430,7 @@ void GpuMemory::Flush(GraphicContext* ctx)
 {
 	Core::LockGuard lock(m_mutex);
 
+	int index = 0;
 	for (auto& h: m_objects)
 	{
 		if (!h.free)
@@ -923,7 +1442,11 @@ void GpuMemory::Flush(GraphicContext* ctx)
 
 			EXIT_IF(o.update_func == nullptr);
 			o.update_func(ctx, o.params, o.object.obj, block.vaddr, block.size, block.vaddr_num);
+			o.gpu_update_time = get_current_time();
+			g_gpu_memory_watcher->Watch(block.vaddr, block.size, block.vaddr_num, WatchCallback, this,
+			                            reinterpret_cast<void*>(static_cast<intptr_t>(index)));
 		}
+		index++;
 	}
 }
 
@@ -954,11 +1477,13 @@ CREATE TABLE [objects](
   [param5] INT64, 
   [param6] INT64, 
   [param7] INT64, 
-  [other_rel] TEXT, 
-  [other_id] INTEGER REFERENCES [objects]([id]), 
+  [scenario] TEXT, 
+  [others] TEXT, 
   [hash] TEXT, 
   [hash2] TEXT, 
   [hash3] TEXT, 
+  [gpu_update_time] INT64, 
+  [cpu_update_time] INT64, 
   [write_back_func] TEXT, 
   [delete_func] TEXT, 
   [update_func] TEXT, 
@@ -986,19 +1511,22 @@ CREATE TABLE [ranges](
 		m_db_add_object = m_db.Prepare(
 		    "insert into objects(dump_id, id, vaddr, vaddr2, vaddr3, size, size2, size3, obj, param0, param1, param2, param3, param4, "
 		    "param5, param6, param7, type, hash, hash2, "
-		    "hash3, other_rel, other_id, write_back_func, delete_func, update_func, use_last_frame, use_num, in_use, read_only, "
+		    "hash3, gpu_update_time, cpu_update_time, scenario, others, write_back_func, delete_func, update_func, use_last_frame, "
+		    "use_num, in_use, read_only, "
 		    "check_hash, vk_mem_size, "
 		    "vk_mem_alignment, vk_mem_memoryTypeBits, vk_mem_property, vk_mem_memory, vk_mem_offset, vk_mem_type, vk_mem_unique_id) "
 		    "values(:dump_id, :id, :vaddr, :vaddr2, :vaddr3, :size, :size2, :size3, :obj, :param0, :param1, :param2, :param3, :param4, "
 		    ":param5, "
 		    ":param6, :param7, :type, :hash, "
-		    ":hash2, :hash3, :other_rel, :other_id, :write_back_func, :delete_func, :update_func, :use_last_frame, :use_num, :in_use, "
+		    ":hash2, :hash3, :gpu_update_time, :cpu_update_time, :scenario, :others, :write_back_func, :delete_func, :update_func, "
+		    ":use_last_frame, :use_num, :in_use, "
 		    ":read_only, :check_hash, "
 		    ":vk_mem_size, :vk_mem_alignment, :vk_mem_memoryTypeBits, :vk_mem_property, :vk_mem_memory, :vk_mem_offset, :vk_mem_type, "
 		    ":vk_mem_unique_id)");
 	}
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void GpuMemory::DbgDbDump()
 {
 	KYTY_PROFILER_FUNCTION();
@@ -1073,15 +1601,21 @@ void GpuMemory::DbgDbDump()
 				m_db_add_object->BindInt64(":vk_mem_offset", static_cast<int64_t>(r.info.mem.offset));
 				m_db_add_object->BindInt(":vk_mem_type", static_cast<int>(r.info.mem.type));
 				m_db_add_object->BindInt64(":vk_mem_unique_id", static_cast<int64_t>(r.info.mem.unique_id));
+				m_db_add_object->BindString(":scenario", Core::EnumName(r.scenario).C_Str());
+				m_db_add_object->BindInt64(":gpu_update_time", static_cast<int64_t>(r.info.gpu_update_time));
+				m_db_add_object->BindInt64(":cpu_update_time", static_cast<int64_t>(r.info.cpu_update_time));
 
 				if (r.others.Size() > 0)
 				{
-					m_db_add_object->BindString(":other_rel", Core::EnumName(r.others.At(0).relation));
-					m_db_add_object->BindInt(":other_id", id(dump_id, r.others.At(0).object_id));
+					Core::StringList others;
+					for (const auto& s: r.others)
+					{
+						others.Add(String::FromPrintf("[%s,%d]", Core::EnumName(s.relation).C_Str(), id(dump_id, s.object_id)));
+					}
+					m_db_add_object->BindString(":others", others.Concat(U','));
 				} else
 				{
-					m_db_add_object->BindNull(":other_rel");
-					m_db_add_object->BindNull(":other_id");
+					m_db_add_object->BindNull(":others");
 				}
 
 				m_db_add_object->Step();
@@ -1114,69 +1648,15 @@ void GpuMemory::DbgDbSave(const String& file_name)
 	}
 }
 
-void GpuMemory::DbgDump()
-{
-	Core::LockGuard lock(m_mutex);
-
-	printf("--- Gpu Memory ---\n");
-
-	for (auto& o: m_allocated)
-	{
-		printf("Allocated block: vaddr = 0x%016" PRIx64 ", size = 0x%016" PRIx64 "\n", o.vaddr, o.size);
-	}
-
-	printf("m_current_frame = %" PRIu64 "\n", m_current_frame);
-	printf("m_objects_size  = %" PRIu64 "\n", m_objects_size);
-
-	for (auto& h: m_objects)
-	{
-		if (!h.free)
-		{
-			auto& block = h.block;
-			// EXIT_IF(block.free);
-
-			printf("Object:\n");
-			for (int vi = 0; vi < block.vaddr_num; vi++)
-			{
-				printf("\t vaddr        = 0x%016" PRIx64 "\n", block.vaddr[vi]);
-				printf("\t size         = 0x%016" PRIx64 "\n", block.size[vi]);
-				GpuResources::Info res_info;
-				if (g_gpu_resources->FindInfo(block.vaddr[vi], &res_info))
-				{
-					printf("\t {\n");
-					printf("\t\t RegisteredResource: %s\n", res_info.name.C_Str());
-					printf("\t\t addr:             %016" PRIx64 "\n", res_info.memory);
-					printf("\t\t size:             %" PRIu64 "\n", res_info.size);
-					printf("\t\t type:             %" PRIu32 "\n", res_info.type);
-					printf("\t\t user_data:        %" PRIu64 "\n", res_info.user_data);
-					printf("\t }\n");
-				}
-			}
-			auto& o = h.info;
-			printf("\t type           = %s\n", Core::EnumName(o.object.type).C_Str());
-			for (int vi = 0; vi < block.vaddr_num; vi++)
-			{
-				printf("\t hash           = 0x%016" PRIx64 "\n", o.hash[vi]);
-			}
-			printf("\t vk_size        = 0x%016" PRIx64 "\n", o.mem.requirements.size);
-			printf("\t vk_align       = 0x%016" PRIx64 "\n", o.mem.requirements.alignment);
-			printf("\t vk_type        = 0x%08" PRIx32 "\n", o.mem.type);
-			printf("\t use_last_frame = %" PRIu64 "\n", o.use_last_frame);
-			printf("\t use_num        = %" PRIu64 "\n", o.use_num);
-			printf("\t in_use         = %s\n", o.in_use ? "true" : "false");
-			printf("\t read_only      = %s\n", o.read_only ? "true" : "false");
-			printf("\t check_hash     = %s\n", o.check_hash ? "true" : "false");
-		}
-	}
-}
-
 void GpuMemoryInit()
 {
 	EXIT_IF(g_gpu_memory != nullptr);
 	EXIT_IF(g_gpu_resources != nullptr);
+	EXIT_IF(g_gpu_memory_watcher != nullptr);
 
-	g_gpu_memory    = new GpuMemory;
-	g_gpu_resources = new GpuResources;
+	g_gpu_memory         = new GpuMemory;
+	g_gpu_resources      = new GpuResources;
+	g_gpu_memory_watcher = new MemoryWatcher;
 }
 
 void GpuMemorySetAllocatedRange(uint64_t vaddr, uint64_t size)
@@ -1186,35 +1666,36 @@ void GpuMemorySetAllocatedRange(uint64_t vaddr, uint64_t size)
 	g_gpu_memory->SetAllocatedRange(vaddr, size);
 }
 
-void GpuMemoryFree(GraphicContext* ctx, uint64_t vaddr, uint64_t size)
+void GpuMemoryFree(GraphicContext* ctx, uint64_t vaddr, uint64_t size, bool unmap)
 {
 	EXIT_IF(g_gpu_memory == nullptr);
 	EXIT_IF(ctx == nullptr);
 
-	g_gpu_memory->Free(ctx, vaddr, size);
+	g_gpu_memory->Free(ctx, vaddr, size, unmap);
 }
 
-void* GpuMemoryCreateObject(GraphicContext* ctx, uint64_t vaddr, uint64_t size, const GpuObject& info)
+void* GpuMemoryCreateObject(GraphicContext* ctx, CommandBuffer* buffer, uint64_t vaddr, uint64_t size, const GpuObject& info)
 {
 	EXIT_IF(g_gpu_memory == nullptr);
 	EXIT_IF(ctx == nullptr);
 
-	return g_gpu_memory->CreateObject(ctx, &vaddr, &size, 1, info);
+	return g_gpu_memory->CreateObject(ctx, buffer, &vaddr, &size, 1, info);
 }
 
-void* GpuMemoryCreateObject(GraphicContext* ctx, const uint64_t* vaddr, const uint64_t* size, int vaddr_num, const GpuObject& info)
+void* GpuMemoryCreateObject(GraphicContext* ctx, CommandBuffer* buffer, const uint64_t* vaddr, const uint64_t* size, int vaddr_num,
+                            const GpuObject& info)
 {
 	EXIT_IF(g_gpu_memory == nullptr);
 	EXIT_IF(ctx == nullptr);
 
-	return g_gpu_memory->CreateObject(ctx, vaddr, size, vaddr_num, info);
+	return g_gpu_memory->CreateObject(ctx, buffer, vaddr, size, vaddr_num, info);
 }
 
-Vector<GpuMemoryObject> GpuMemoryFindObjects(uint64_t vaddr, uint64_t size)
+Vector<GpuMemoryObject> GpuMemoryFindObjects(uint64_t vaddr, uint64_t size, bool exact)
 {
 	EXIT_IF(g_gpu_memory == nullptr);
 
-	return g_gpu_memory->FindObjects(&vaddr, &size, 1);
+	return g_gpu_memory->FindObjects(&vaddr, &size, 1, exact);
 }
 
 void GpuMemoryResetHash(GraphicContext* ctx, const uint64_t* vaddr, const uint64_t* size, int vaddr_num, GpuMemoryObjectType type)
@@ -1230,7 +1711,6 @@ void GpuMemoryDbgDump()
 	EXIT_IF(g_gpu_memory == nullptr);
 
 	// g_gpu_memory->DbgDbDump();
-	// g_gpu_memory->DbgDump();
 	// g_gpu_memory->DbgDbSave(U"_gpu_memory.db");
 }
 
@@ -1257,6 +1737,13 @@ void GpuMemoryWriteBack(GraphicContext* ctx)
 
 	// update CPU memory after GPU-drawing
 	g_gpu_memory->WriteBack(ctx);
+}
+
+bool GpuMemoryCheckAccessViolation(uint64_t vaddr, uint64_t size)
+{
+	EXIT_IF(g_gpu_memory_watcher == nullptr);
+
+	return g_gpu_memory_watcher->Check(vaddr, size);
 }
 
 bool VulkanAllocate(GraphicContext* ctx, VulkanMemory* mem)

@@ -36,16 +36,16 @@ public:
 
 	[[nodiscard]] bool IsInvalid() const;
 
-	void               Allocate();
-	void               Free();
-	void               Begin() const;
-	void               End() const;
-	void               Execute();
-	void               ExecuteWithSemaphore();
-	VulkanFramebuffer* BeginRenderPass(RenderColorInfo* color, RenderDepthInfo* depth) const;
-	void               EndRenderPass() const;
-	void               WaitForFence();
-	void               WaitForFenceAndReset();
+	void Allocate();
+	void Free();
+	void Begin() const;
+	void End() const;
+	void Execute();
+	void ExecuteWithSemaphore();
+	void BeginRenderPass(VulkanFramebuffer* framebuffer, RenderColorInfo* color, RenderDepthInfo* depth) const;
+	void EndRenderPass() const;
+	void WaitForFence();
+	void WaitForFenceAndReset();
 
 	[[nodiscard]] uint32_t GetIndex() const { return m_index; }
 	VulkanCommandPool*     GetPool() { return m_pool; }
@@ -85,6 +85,7 @@ void GraphicsRenderDispatchDirect(CommandBuffer* buffer, HardwareContext* ctx, u
                                   uint32_t thread_group_z, uint32_t mode);
 void GraphicsRenderMemoryBarrier(CommandBuffer* buffer);
 void GraphicsRenderRenderTextureBarrier(CommandBuffer* buffer, uint64_t vaddr, uint64_t size);
+void GraphicsRenderMemoryFree(uint64_t vaddr, uint64_t size);
 
 void DeleteFramebuffer(VideoOutVulkanImage* image);
 void DeleteFramebuffer(DepthStencilVulkanImage* image);

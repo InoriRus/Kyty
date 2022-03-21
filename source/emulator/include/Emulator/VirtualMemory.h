@@ -56,6 +56,7 @@ public:
 		ExceptionType       type                   = ExceptionType::Unknown;
 		AccessViolationType access_violation_type  = AccessViolationType::Unknown;
 		uint64_t            access_violation_vaddr = 0;
+		uint64_t            exception_address      = 0;
 	};
 
 	using handler_func_t = void (*)(const ExceptionInfo*);
@@ -69,6 +70,8 @@ public:
 
 	bool Install(uint64_t base_address, uint64_t handler_addr, uint64_t image_size, handler_func_t func);
 	bool Uninstall();
+
+	static bool InstallVectored(handler_func_t func);
 
 private:
 	ExceptionHandlerPrivate* m_p = nullptr;

@@ -111,6 +111,10 @@ constexpr uint32_t DB_HTILE_DATA_BASE                 = 0x5;
 constexpr uint32_t DB_HTILE_DATA_BASE_BASE_256B_SHIFT = 0;
 constexpr uint32_t DB_HTILE_DATA_BASE_BASE_256B_MASK  = 0xFFFFFFFF;
 
+constexpr uint32_t DB_STENCIL_CLEAR             = 0xA;
+constexpr uint32_t DB_STENCIL_CLEAR_CLEAR_SHIFT = 0;
+constexpr uint32_t DB_STENCIL_CLEAR_CLEAR_MASK  = 0xFF;
+
 constexpr uint32_t DB_DEPTH_CLEAR                   = 0xB;
 constexpr uint32_t DB_DEPTH_CLEAR_DEPTH_CLEAR_SHIFT = 0;
 constexpr uint32_t DB_DEPTH_CLEAR_DEPTH_CLEAR_MASK  = 0xFFFFFFFF;
@@ -180,6 +184,40 @@ constexpr uint32_t CB_BLEND_RED   = 0x105;
 constexpr uint32_t CB_BLEND_GREEN = 0x106;
 constexpr uint32_t CB_BLEND_BLUE  = 0x107;
 constexpr uint32_t CB_BLEND_ALPHA = 0x108;
+
+constexpr uint32_t DB_STENCIL_CONTROL                       = 0x10B;
+constexpr uint32_t DB_STENCIL_CONTROL_STENCILFAIL_SHIFT     = 0;
+constexpr uint32_t DB_STENCIL_CONTROL_STENCILFAIL_MASK      = 0xF;
+constexpr uint32_t DB_STENCIL_CONTROL_STENCILZPASS_SHIFT    = 4;
+constexpr uint32_t DB_STENCIL_CONTROL_STENCILZPASS_MASK     = 0xF;
+constexpr uint32_t DB_STENCIL_CONTROL_STENCILZFAIL_SHIFT    = 8;
+constexpr uint32_t DB_STENCIL_CONTROL_STENCILZFAIL_MASK     = 0xF;
+constexpr uint32_t DB_STENCIL_CONTROL_STENCILFAIL_BF_SHIFT  = 12;
+constexpr uint32_t DB_STENCIL_CONTROL_STENCILFAIL_BF_MASK   = 0xF;
+constexpr uint32_t DB_STENCIL_CONTROL_STENCILZPASS_BF_SHIFT = 16;
+constexpr uint32_t DB_STENCIL_CONTROL_STENCILZPASS_BF_MASK  = 0xF;
+constexpr uint32_t DB_STENCIL_CONTROL_STENCILZFAIL_BF_SHIFT = 20;
+constexpr uint32_t DB_STENCIL_CONTROL_STENCILZFAIL_BF_MASK  = 0xF;
+
+constexpr uint32_t DB_STENCILREFMASK                        = 0x10C;
+constexpr uint32_t DB_STENCILREFMASK_STENCILTESTVAL_SHIFT   = 0;
+constexpr uint32_t DB_STENCILREFMASK_STENCILTESTVAL_MASK    = 0xFF;
+constexpr uint32_t DB_STENCILREFMASK_STENCILMASK_SHIFT      = 8;
+constexpr uint32_t DB_STENCILREFMASK_STENCILMASK_MASK       = 0xFF;
+constexpr uint32_t DB_STENCILREFMASK_STENCILWRITEMASK_SHIFT = 16;
+constexpr uint32_t DB_STENCILREFMASK_STENCILWRITEMASK_MASK  = 0xFF;
+constexpr uint32_t DB_STENCILREFMASK_STENCILOPVAL_SHIFT     = 24;
+constexpr uint32_t DB_STENCILREFMASK_STENCILOPVAL_MASK      = 0xFF;
+
+constexpr uint32_t DB_STENCILREFMASK_BF                           = 0x10D;
+constexpr uint32_t DB_STENCILREFMASK_BF_STENCILTESTVAL_BF_SHIFT   = 0;
+constexpr uint32_t DB_STENCILREFMASK_BF_STENCILTESTVAL_BF_MASK    = 0xFF;
+constexpr uint32_t DB_STENCILREFMASK_BF_STENCILMASK_BF_SHIFT      = 8;
+constexpr uint32_t DB_STENCILREFMASK_BF_STENCILMASK_BF_MASK       = 0xFF;
+constexpr uint32_t DB_STENCILREFMASK_BF_STENCILWRITEMASK_BF_SHIFT = 16;
+constexpr uint32_t DB_STENCILREFMASK_BF_STENCILWRITEMASK_BF_MASK  = 0xFF;
+constexpr uint32_t DB_STENCILREFMASK_BF_STENCILOPVAL_BF_SHIFT     = 24;
+constexpr uint32_t DB_STENCILREFMASK_BF_STENCILOPVAL_BF_MASK      = 0xFF;
 
 constexpr uint32_t PA_CL_VPORT_XSCALE = 0x10F;
 
@@ -282,6 +320,7 @@ constexpr uint32_t DB_HTILE_SURFACE_DST_OUTSIDE_ZERO_TO_ONE_MASK  = 0x1;
 constexpr uint32_t VGT_SHADER_STAGES_EN = 0x2D5;
 
 constexpr uint32_t CB_COLOR0_BASE = 0x318;
+constexpr uint32_t CB_COLOR0_INFO = 0x31C;
 
 constexpr uint32_t SPI_SHADER_PGM_RSRC1_PS             = 0xA;
 constexpr uint32_t SPI_SHADER_PGM_RSRC1_PS_VGPRS_SHIFT = 0;

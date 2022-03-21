@@ -229,6 +229,8 @@ struct WindowContext
 	SurfaceCapabilities* surface_capabilities = nullptr;
 	GameApi*             game                 = nullptr;
 
+	char device_name[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE] = {0};
+
 	Core::Mutex   mutex;
 	bool          graphic_initialized = false;
 	Core::CondVar graphic_initialized_condvar;
@@ -1376,57 +1378,57 @@ static VkPhysicalDevice VulkanFindPhysicalDevice(VkInstance instance, VkSurfaceK
 
 		if (!skip_device && !CheckFormat(device, VK_FORMAT_R8G8B8A8_SRGB, false, VK_FORMAT_FEATURE_BLIT_SRC_BIT))
 		{
-			printf("Format VK_FORMAT_R8G8B8A8_SRGB cannot be used as transfer source");
+			printf("Format VK_FORMAT_R8G8B8A8_SRGB cannot be used as transfer source\n");
 			skip_device = true;
 		}
 
 		if (!skip_device && !CheckFormat(device, VK_FORMAT_D32_SFLOAT, true, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT))
 		{
-			printf("Format VK_FORMAT_D32_SFLOAT cannot be used as depth buffer");
+			printf("Format VK_FORMAT_D32_SFLOAT cannot be used as depth buffer\n");
 			skip_device = true;
 		}
 
 		if (!skip_device && !CheckFormat(device, VK_FORMAT_D32_SFLOAT_S8_UINT, true, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT))
 		{
-			printf("Format VK_FORMAT_D32_SFLOAT_S8_UINT cannot be used as depth buffer");
+			printf("Format VK_FORMAT_D32_SFLOAT_S8_UINT cannot be used as depth buffer\n");
 			skip_device = true;
 		}
 
 		if (!skip_device && !CheckFormat(device, VK_FORMAT_D16_UNORM, true, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT))
 		{
-			printf("Format VK_FORMAT_D16_UNORM cannot be used as depth buffer");
+			printf("Format VK_FORMAT_D16_UNORM cannot be used as depth buffer\n");
 			skip_device = true;
 		}
 
 		if (!skip_device && !CheckFormat(device, VK_FORMAT_D24_UNORM_S8_UINT, true, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT))
 		{
-			printf("Format VK_FORMAT_D24_UNORM_S8_UINT cannot be used as depth buffer");
+			printf("Format VK_FORMAT_D24_UNORM_S8_UINT cannot be used as depth buffer\n");
 			skip_device = true;
 		}
 
 		if (!skip_device &&
 		    !CheckFormat(device, VK_FORMAT_BC3_SRGB_BLOCK, true, VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT))
 		{
-			printf("Format VK_FORMAT_BC3_SRGB_BLOCK cannot be used as texture");
+			printf("Format VK_FORMAT_BC3_SRGB_BLOCK cannot be used as texture\n");
 			skip_device = true;
 		}
 
 		if (!skip_device &&
 		    !CheckFormat(device, VK_FORMAT_R8G8B8A8_SRGB, true, VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT))
 		{
-			printf("Format VK_FORMAT_R8G8B8A8_SRGB cannot be used as texture");
+			printf("Format VK_FORMAT_R8G8B8A8_SRGB cannot be used as texture\n");
 			skip_device = true;
 		}
 
 		if (!skip_device &&
 		    !CheckFormat(device, VK_FORMAT_R8G8B8A8_SRGB, true, VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT))
 		{
-			printf("Format VK_FORMAT_R8G8B8A8_SRGB cannot be used as texture");
+			printf("Format VK_FORMAT_R8G8B8A8_SRGB cannot be used as texture\n");
 
 			if (!skip_device && !CheckFormat(device, VK_FORMAT_R8G8B8A8_UNORM, true,
 			                                 VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT))
 			{
-				printf("Format VK_FORMAT_R8G8B8A8_UNORM cannot be used as texture");
+				printf("Format VK_FORMAT_R8G8B8A8_UNORM cannot be used as texture\n");
 				skip_device = true;
 			}
 		}
@@ -1434,12 +1436,12 @@ static VkPhysicalDevice VulkanFindPhysicalDevice(VkInstance instance, VkSurfaceK
 		if (!skip_device &&
 		    !CheckFormat(device, VK_FORMAT_B8G8R8A8_SRGB, true, VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT))
 		{
-			printf("Format VK_FORMAT_B8G8R8A8_SRGB cannot be used as texture");
+			printf("Format VK_FORMAT_B8G8R8A8_SRGB cannot be used as texture\n");
 
 			if (!skip_device && !CheckFormat(device, VK_FORMAT_B8G8R8A8_UNORM, true,
 			                                 VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT))
 			{
-				printf("Format VK_FORMAT_B8G8R8A8_UNORM cannot be used as texture");
+				printf("Format VK_FORMAT_B8G8R8A8_UNORM cannot be used as texture\n");
 				skip_device = true;
 			}
 		}
@@ -1982,6 +1984,13 @@ static void VulkanCreate(WindowContext* ctx)
 		EXIT("Could not find suitable device");
 	}
 
+	VkPhysicalDeviceProperties device_properties {};
+	vkGetPhysicalDeviceProperties(ctx->graphic_ctx.physical_device, &device_properties);
+
+	printf("Select device: %s\n", device_properties.deviceName);
+
+	memcpy(ctx->device_name, device_properties.deviceName, sizeof(ctx->device_name));
+
 	ctx->graphic_ctx.device =
 	    VulkanCreateDevice(ctx->graphic_ctx.physical_device, ctx->surface, &r, VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT,
 	                       GraphicContext::QUEUES_NUM, &ctx->graphic_ctx.queue_family_index, device_extensions);
@@ -2074,7 +2083,8 @@ void WindowShowFps()
 	EXIT_IF(g_window_ctx == nullptr);
 	EXIT_IF(g_window_ctx->game == nullptr);
 
-	auto fps = String::FromPrintf("frame: %d, fps: %f", g_window_ctx->game->m_frame_num, g_window_ctx->game->m_current_fps);
+	auto fps = String::FromPrintf("[%s], frame: %d, fps: %f", g_window_ctx->device_name, g_window_ctx->game->m_frame_num,
+	                              g_window_ctx->game->m_current_fps);
 
 	SDL_SetWindowTitle(g_window_ctx->window, fps.C_Str());
 }

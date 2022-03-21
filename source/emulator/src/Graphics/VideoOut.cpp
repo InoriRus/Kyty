@@ -846,7 +846,7 @@ KYTY_SYSV_ABI int VideoOutRegisterBuffers(int handle, int start_index, void* con
 		ctx->buffers[i + start_index].buffer_size   = buffer_size;
 		ctx->buffers[i + start_index].buffer_pitch  = buffer_pitch;
 		ctx->buffers[i + start_index].buffer_vulkan = static_cast<Graphics::VideoOutVulkanImage*>(Graphics::GpuMemoryCreateObject(
-		    g_video_out_context->GetGraphicCtx(), reinterpret_cast<uint64_t>(addresses[i]), buffer_size, vulkan_buffer_info));
+		    g_video_out_context->GetGraphicCtx(), nullptr, reinterpret_cast<uint64_t>(addresses[i]), buffer_size, vulkan_buffer_info));
 
 		EXIT_NOT_IMPLEMENTED(ctx->buffers[i + start_index].buffer_vulkan == nullptr);
 

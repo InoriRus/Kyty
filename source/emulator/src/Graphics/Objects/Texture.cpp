@@ -133,7 +133,7 @@ static void update_func(GraphicContext* ctx, const uint64_t* params, void* obj, 
 	auto nfmt   = params[TextureObject::PARAM_DFMT_NFMT] & 0xffffffffu;
 	auto width  = params[TextureObject::PARAM_WIDTH_HEIGHT] >> 32u;
 	auto height = params[TextureObject::PARAM_WIDTH_HEIGHT] & 0xffffffffu;
-	auto levels = params[TextureObject::PARAM_LEVELS];
+	auto levels = params[TextureObject::PARAM_LEVELS] & 0xffffffffu;
 	auto pitch  = params[TextureObject::PARAM_PITCH];
 	bool neo    = Config::IsNeo();
 
@@ -196,7 +196,9 @@ static void update_func(GraphicContext* ctx, const uint64_t* params, void* obj, 
 	}
 }
 
-static void update2_func(GraphicContext* ctx, const uint64_t* params, void* obj, const Vector<GpuMemoryObject>& objects)
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+static void update2_func(GraphicContext* ctx, CommandBuffer* buffer, const uint64_t* params, void* obj, GpuMemoryScenario scenario,
+                         const Vector<GpuMemoryObject>& objects)
 {
 	KYTY_PROFILER_BLOCK("TextureObject::update2_func");
 
@@ -209,7 +211,7 @@ static void update2_func(GraphicContext* ctx, const uint64_t* params, void* obj,
 
 	auto width  = params[TextureObject::PARAM_WIDTH_HEIGHT] >> 32u;
 	auto height = params[TextureObject::PARAM_WIDTH_HEIGHT] & 0xffffffffu;
-	auto levels = params[TextureObject::PARAM_LEVELS];
+	auto levels = params[TextureObject::PARAM_LEVELS] & 0xffffffffu;
 
 	VkImageLayout vk_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
@@ -220,9 +222,9 @@ static void update2_func(GraphicContext* ctx, const uint64_t* params, void* obj,
 
 	Vector<ImageImageCopy> regions(levels);
 
-	if (objects.Size() == 1 && objects.At(0).type == GpuMemoryObjectType::StorageTexture)
+	if (objects.Size() == 1 && objects.At(0).type == GpuMemoryObjectType::StorageTexture && scenario == GpuMemoryScenario::Common)
 	{
-		auto* src_obj = static_cast<TextureVulkanImage*>(objects.At(0).obj);
+		auto* src_obj = static_cast<StorageTextureVulkanImage*>(objects.At(0).obj);
 
 		for (uint32_t i = 0; i < levels; i++)
 		{
@@ -247,10 +249,8 @@ static void update2_func(GraphicContext* ctx, const uint64_t* params, void* obj,
 				mip_height /= 2;
 			}
 		}
-	} else
+	} else if (levels == objects.Size() && scenario == GpuMemoryScenario::Common)
 	{
-		EXIT_NOT_IMPLEMENTED(levels != objects.Size());
-
 		for (uint32_t i = 0; i < levels; i++)
 		{
 			const auto& object = objects.At(i);
@@ -278,9 +278,87 @@ static void update2_func(GraphicContext* ctx, const uint64_t* params, void* obj,
 				mip_height /= 2;
 			}
 		}
+	} else if (objects.Size() >= 2 && objects.At(0).type == GpuMemoryObjectType::StorageBuffer &&
+	           objects.At(1).type == GpuMemoryObjectType::StorageTexture && scenario == GpuMemoryScenario::GenerateMips)
+	{
+
+		for (uint32_t i = 0; i < levels; i++)
+		{
+			VulkanImage* src_image = nullptr;
+			bool         storage   = false;
+
+			for (const auto& o: objects)
+			{
+				if (o.type == GpuMemoryObjectType::StorageTexture)
+				{
+					auto* src_obj = static_cast<StorageTextureVulkanImage*>(o.obj);
+					if (mip_width == src_obj->extent.width && mip_height == src_obj->extent.height)
+					{
+						src_image = src_obj;
+						storage   = true;
+						break;
+					}
+				} else if (o.type == GpuMemoryObjectType::RenderTexture)
+				{
+					auto* src_obj = static_cast<RenderTextureVulkanImage*>(o.obj);
+					if (mip_width == src_obj->extent.width && mip_height == src_obj->extent.height)
+					{
+						src_image = src_obj;
+						storage   = false;
+						break;
+					}
+				}
+			}
+
+			EXIT_NOT_IMPLEMENTED(src_image == nullptr);
+
+			if (storage)
+			{
+				auto mipmap_offset = UtilCalcMipmapOffset(i, width, height);
+
+				regions[i].src_image = src_image;
+				regions[i].src_level = 0;
+				regions[i].dst_level = i;
+				regions[i].width     = mip_width;
+				regions[i].height    = mip_height;
+				regions[i].src_x     = mipmap_offset.first;
+				regions[i].src_y     = mipmap_offset.second;
+				regions[i].dst_x     = 0;
+				regions[i].dst_y     = 0;
+			} else
+			{
+				regions[i].src_image = src_image;
+				regions[i].src_level = 0;
+				regions[i].dst_level = i;
+				regions[i].width     = mip_width;
+				regions[i].height    = mip_height;
+				regions[i].src_x     = 0;
+				regions[i].src_y     = 0;
+				regions[i].dst_x     = 0;
+				regions[i].dst_y     = 0;
+			}
+
+			if (mip_width > 1)
+			{
+				mip_width /= 2;
+			}
+			if (mip_height > 1)
+			{
+				mip_height /= 2;
+			}
+		}
+	} else
+	{
+		KYTY_NOT_IMPLEMENTED;
 	}
 
-	UtilFillImage(ctx, regions, vk_obj, static_cast<uint64_t>(vk_layout));
+	if (buffer == nullptr)
+	{
+		UtilFillImage(ctx, regions, vk_obj, static_cast<uint64_t>(vk_layout));
+	} else
+	{
+		UtilImageToImage(buffer, regions, vk_obj, static_cast<uint64_t>(vk_layout));
+	}
 }
 
 static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint64_t* vaddr, const uint64_t* size, int vaddr_num,
@@ -293,12 +371,13 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 	EXIT_IF(ctx == nullptr);
 	EXIT_IF(params == nullptr);
 
-	auto dfmt    = params[TextureObject::PARAM_DFMT_NFMT] >> 32u;
-	auto nfmt    = params[TextureObject::PARAM_DFMT_NFMT] & 0xffffffffu;
-	auto width   = params[TextureObject::PARAM_WIDTH_HEIGHT] >> 32u;
-	auto height  = params[TextureObject::PARAM_WIDTH_HEIGHT] & 0xffffffffu;
-	auto levels  = params[TextureObject::PARAM_LEVELS];
-	auto swizzle = params[TextureObject::PARAM_SWIZZLE];
+	auto dfmt       = params[TextureObject::PARAM_DFMT_NFMT] >> 32u;
+	auto nfmt       = params[TextureObject::PARAM_DFMT_NFMT] & 0xffffffffu;
+	auto width      = params[TextureObject::PARAM_WIDTH_HEIGHT] >> 32u;
+	auto height     = params[TextureObject::PARAM_WIDTH_HEIGHT] & 0xffffffffu;
+	auto base_level = params[TextureObject::PARAM_LEVELS] >> 32u;
+	auto levels     = params[TextureObject::PARAM_LEVELS] & 0xffffffffu;
+	auto swizzle    = params[TextureObject::PARAM_SWIZZLE];
 
 	VkImageUsageFlags vk_usage = get_usage();
 
@@ -379,7 +458,7 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 	create_info.components                      = components;
 	create_info.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
 	create_info.subresourceRange.baseArrayLayer = 0;
-	create_info.subresourceRange.baseMipLevel   = 0;
+	create_info.subresourceRange.baseMipLevel   = base_level;
 	create_info.subresourceRange.layerCount     = 1;
 	create_info.subresourceRange.levelCount     = VK_REMAINING_MIP_LEVELS;
 
@@ -390,7 +469,8 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 	return vk_obj;
 }
 
-static void* create2_func(GraphicContext* ctx, const uint64_t* params, const Vector<GpuMemoryObject>& objects, VulkanMemory* mem)
+static void* create2_func(GraphicContext* ctx, CommandBuffer* buffer, const uint64_t* params, GpuMemoryScenario scenario,
+                          const Vector<GpuMemoryObject>& objects, VulkanMemory* mem)
 {
 	KYTY_PROFILER_BLOCK("TextureObject::CreateFromObjects");
 
@@ -399,12 +479,13 @@ static void* create2_func(GraphicContext* ctx, const uint64_t* params, const Vec
 	EXIT_IF(ctx == nullptr);
 	EXIT_IF(params == nullptr);
 
-	auto dfmt    = params[TextureObject::PARAM_DFMT_NFMT] >> 32u;
-	auto nfmt    = params[TextureObject::PARAM_DFMT_NFMT] & 0xffffffffu;
-	auto width   = params[TextureObject::PARAM_WIDTH_HEIGHT] >> 32u;
-	auto height  = params[TextureObject::PARAM_WIDTH_HEIGHT] & 0xffffffffu;
-	auto levels  = params[TextureObject::PARAM_LEVELS];
-	auto swizzle = params[TextureObject::PARAM_SWIZZLE];
+	auto dfmt       = params[TextureObject::PARAM_DFMT_NFMT] >> 32u;
+	auto nfmt       = params[TextureObject::PARAM_DFMT_NFMT] & 0xffffffffu;
+	auto width      = params[TextureObject::PARAM_WIDTH_HEIGHT] >> 32u;
+	auto height     = params[TextureObject::PARAM_WIDTH_HEIGHT] & 0xffffffffu;
+	auto base_level = params[TextureObject::PARAM_LEVELS] >> 32u;
+	auto levels     = params[TextureObject::PARAM_LEVELS] & 0xffffffffu;
+	auto swizzle    = params[TextureObject::PARAM_SWIZZLE];
 
 	VkImageUsageFlags vk_usage = get_usage();
 
@@ -473,7 +554,7 @@ static void* create2_func(GraphicContext* ctx, const uint64_t* params, const Vec
 
 	vk_obj->memory = *mem;
 
-	update2_func(ctx, params, vk_obj, objects);
+	update2_func(ctx, buffer, params, vk_obj, scenario, objects);
 
 	VkImageViewCreateInfo create_info {};
 	create_info.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -485,7 +566,7 @@ static void* create2_func(GraphicContext* ctx, const uint64_t* params, const Vec
 	create_info.components                      = components;
 	create_info.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
 	create_info.subresourceRange.baseArrayLayer = 0;
-	create_info.subresourceRange.baseMipLevel   = 0;
+	create_info.subresourceRange.baseMipLevel   = base_level;
 	create_info.subresourceRange.layerCount     = 1;
 	create_info.subresourceRange.levelCount     = VK_REMAINING_MIP_LEVELS;
 

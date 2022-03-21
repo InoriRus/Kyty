@@ -89,6 +89,8 @@ public:
 	{
 		ExceptionHandler::ExceptionInfo info {};
 
+		info.exception_address = reinterpret_cast<uint64_t>(exception_record->ExceptionAddress);
+
 		if (exception_record->ExceptionCode == EXCEPTION_ACCESS_VIOLATION)
 		{
 			info.type = ExceptionHandler::ExceptionType::AccessViolation;
@@ -140,7 +142,11 @@ public:
 	PRUNTIME_FUNCTION function_table = nullptr;
 
 	ExceptionHandler::handler_func_t func = nullptr;
+
+	static ExceptionHandler::handler_func_t g_vec_func;
 };
+
+ExceptionHandler::handler_func_t ExceptionHandlerPrivate::g_vec_func = nullptr;
 
 ExceptionHandler::ExceptionHandler(): m_p(new ExceptionHandlerPrivate) {}
 
@@ -175,6 +181,49 @@ bool ExceptionHandler::Install(uint64_t base_address, uint64_t handler_addr, uin
 		return true;
 	}
 
+	return false;
+}
+
+static LONG WINAPI ExceptionFilter(PEXCEPTION_POINTERS exception)
+{
+	PEXCEPTION_RECORD exception_record = exception->ExceptionRecord;
+
+	ExceptionHandler::ExceptionInfo info {};
+
+	info.exception_address = reinterpret_cast<uint64_t>(exception_record->ExceptionAddress);
+
+	if (exception_record->ExceptionCode == EXCEPTION_ACCESS_VIOLATION)
+	{
+		info.type = ExceptionHandler::ExceptionType::AccessViolation;
+		switch (exception_record->ExceptionInformation[0])
+		{
+			case 0: info.access_violation_type = ExceptionHandler::AccessViolationType::Read; break;
+			case 1: info.access_violation_type = ExceptionHandler::AccessViolationType::Write; break;
+			case 8: info.access_violation_type = ExceptionHandler::AccessViolationType::Execute; break;
+			default: info.access_violation_type = ExceptionHandler::AccessViolationType::Unknown; break;
+		}
+		info.access_violation_vaddr = exception_record->ExceptionInformation[1];
+	}
+
+	ExceptionHandlerPrivate::g_vec_func(&info);
+
+	return EXCEPTION_CONTINUE_EXECUTION;
+}
+
+bool ExceptionHandler::InstallVectored(handler_func_t func)
+{
+	if (ExceptionHandlerPrivate::g_vec_func == nullptr)
+	{
+		ExceptionHandlerPrivate::g_vec_func = func;
+
+		if (AddVectoredExceptionHandler(1, ExceptionFilter) == nullptr)
+		{
+			printf("AddVectoredExceptionHandler() failed\n");
+			return false;
+		}
+
+		return true;
+	}
 	return false;
 }
 
@@ -291,6 +340,8 @@ bool Free(uint64_t address)
 
 bool Protect(uint64_t address, uint64_t size, Mode mode, Mode* old_mode)
 {
+	KYTY_PROFILER_FUNCTION();
+
 	DWORD old_protect = 0;
 	if (VirtualProtect(reinterpret_cast<LPVOID>(static_cast<uintptr_t>(address)), size, get_protection_flag(mode), &old_protect) == 0)
 	{

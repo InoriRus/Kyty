@@ -456,7 +456,7 @@ int KYTY_SYSV_ABI KernelMunmap(uint64_t vaddr, size_t len)
 	if (gpu_mode != Graphics::GpuMemoryMode::NoAccess)
 	{
 		Graphics::GraphicsRunWait();
-		Graphics::GpuMemoryFree(Graphics::WindowGetGraphicContext(), vaddr, len);
+		Graphics::GpuMemoryFree(Graphics::WindowGetGraphicContext(), vaddr, len, true);
 	}
 
 	return OK;
@@ -575,7 +575,7 @@ int KYTY_SYSV_ABI KernelReleaseDirectMemory(int64_t start, size_t len)
 	if (gpu_mode != Graphics::GpuMemoryMode::NoAccess)
 	{
 		Graphics::GraphicsRunWait();
-		Graphics::GpuMemoryFree(Graphics::WindowGetGraphicContext(), vaddr, size);
+		Graphics::GpuMemoryFree(Graphics::WindowGetGraphicContext(), vaddr, size, true);
 	}
 
 	return OK;

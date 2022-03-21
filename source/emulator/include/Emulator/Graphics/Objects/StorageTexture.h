@@ -21,13 +21,13 @@ public:
 	static constexpr int PARAM_NEO          = 5;
 	static constexpr int PARAM_SWIZZLE      = 6;
 
-	StorageTextureObject(uint32_t dfmt, uint32_t nfmt, uint32_t width, uint32_t height, uint32_t pitch, uint32_t levels, uint32_t tile,
-	                     bool neo, uint32_t swizzle)
+	StorageTextureObject(uint32_t dfmt, uint32_t nfmt, uint32_t width, uint32_t height, uint32_t pitch, uint32_t base_level,
+	                     uint32_t levels, uint32_t tile, bool neo, uint32_t swizzle)
 	{
 		params[PARAM_DFMT_NFMT]    = (static_cast<uint64_t>(dfmt) << 32u) | nfmt;
 		params[PARAM_PITCH]        = pitch;
 		params[PARAM_WIDTH_HEIGHT] = (static_cast<uint64_t>(width) << 32u) | height;
-		params[PARAM_LEVELS]       = levels;
+		params[PARAM_LEVELS]       = (static_cast<uint64_t>(base_level) << 32u) | levels;
 		params[PARAM_TILE]         = tile;
 		params[PARAM_NEO]          = neo ? 1 : 0;
 		params[PARAM_SWIZZLE]      = swizzle;

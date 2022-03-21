@@ -614,6 +614,8 @@ void TileGetVideoOutSize(uint32_t width, uint32_t height, bool tile, bool neo, u
 void TileGetTextureSize(uint32_t dfmt, uint32_t nfmt, uint32_t width, uint32_t height, uint32_t pitch, uint32_t levels, uint32_t tile,
                         bool neo, uint32_t* total_size, uint32_t* level_sizes, uint32_t* padded_width, uint32_t* padded_height)
 {
+	KYTY_PROFILER_FUNCTION();
+
 	struct Padded
 	{
 		uint32_t width;
@@ -661,6 +663,11 @@ void TileGetTextureSize(uint32_t dfmt, uint32_t nfmt, uint32_t width, uint32_t h
 			{ {512, 512}, {256, 256}, {128, 128}, {64, 64}, {32, 32}, {16, 16}, {8, 8}, {8, 8}, {8, 8}, {8, 8},  } },
 			{ 10, 0, 512, 512, 10, 13, true, {1048576, 262144, 65536, 16384, 4096, 1024, 256, 256, 256, 256, },
 			{ {512, 512}, {256, 256}, {128, 128}, {64, 64}, {32, 32}, {16, 16}, {8, 8}, {8, 8}, {8, 8}, {8, 8},  } },
+			// kDataFormatB8G8R8A8Unorm, 512, 768, kTileModeThin_1dThin
+			{ 10, 0, 512, 768, 10, 13, false, {1572864, 1048576, 131072, 32768, 8192, 2048, 512, 256, 256, 256, },
+			{ {512, 768}, {256, 512}, {128, 256}, {64, 128}, {32, 64}, {16, 32}, {8, 16}, {8, 8}, {8, 8}, {8, 8},  } },
+			{ 10, 0, 512, 768, 10, 13, true, {1572864, 1048576, 131072, 32768, 8192, 2048, 512, 256, 256, 256, },
+			{ {512, 768}, {256, 512}, {128, 256}, {64, 128}, {32, 64}, {16, 32}, {8, 16}, {8, 8}, {8, 8}, {8, 8},  } },
 			// kDataFormatB8G8R8A8Unorm, 256, 256, kTileModeThin_2dThin
 			{ 10, 0, 256, 256, 9, 14, false, {262144, 65536, 16384, 4096, 1024, 256, 256, 256, 256, },
 			{ {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},  } },

@@ -12,6 +12,8 @@
 
 namespace Kyty::Libs::Graphics {
 
+class CommandBuffer;
+
 struct VulkanSwapchain
 {
 	VkSwapchainKHR swapchain                  = nullptr;
@@ -100,6 +102,11 @@ struct VulkanBuffer
 	VkBuffer           buffer = nullptr;
 	VulkanMemory       memory;
 	VkBufferUsageFlags usage = 0;
+};
+
+struct StorageVulkanBuffer: public VulkanBuffer
+{
+	CommandBuffer* cmd_buffer = nullptr;
 };
 
 } // namespace Kyty::Libs::Graphics

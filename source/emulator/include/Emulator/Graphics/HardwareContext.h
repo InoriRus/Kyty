@@ -9,24 +9,31 @@
 
 namespace Kyty::Libs::Graphics {
 
+struct ColorInfo
+{
+	bool     fmask_compression_enable = false;
+	uint32_t fmask_compression_mode   = 0;
+	bool     cmask_fast_clear_enable  = false;
+	bool     dcc_compression_enable   = false;
+	bool     neo_mode                 = false;
+	uint32_t cmask_tile_mode          = 0;
+	uint32_t cmask_tile_mode_neo      = 0;
+	uint32_t format                   = 0;
+	uint32_t channel_type             = 0;
+	uint32_t channel_order            = 0;
+};
+
 struct RenderTarget
 {
-	uint64_t base_addr                       = 0;
-	uint32_t pitch_div8_minus1               = 0;
-	uint32_t fmask_pitch_div8_minus1         = 0;
-	uint32_t slice_div64_minus1              = 0;
-	uint32_t base_array_slice_index          = 0;
-	uint32_t last_array_slice_index          = 0;
-	bool     fmask_compression_enable        = false;
-	uint32_t fmask_compression_mode          = 0;
-	bool     cmask_fast_clear_enable         = false;
-	bool     dcc_compression_enable          = false;
-	bool     neo_mode                        = false;
-	uint32_t cmask_tile_mode                 = 0;
-	uint32_t cmask_tile_mode_neo             = 0;
-	uint32_t format                          = 0;
-	uint32_t channel_type                    = 0;
-	uint32_t channel_order                   = 0;
+	uint64_t base_addr               = 0;
+	uint32_t pitch_div8_minus1       = 0;
+	uint32_t fmask_pitch_div8_minus1 = 0;
+	uint32_t slice_div64_minus1      = 0;
+	uint32_t base_array_slice_index  = 0;
+	uint32_t last_array_slice_index  = 0;
+
+	ColorInfo color_info;
+
 	bool     force_dest_alpha_to_one         = false;
 	uint32_t tile_mode                       = 0;
 	uint32_t fmask_tile_mode                 = 0;
@@ -153,6 +160,28 @@ struct DepthControl
 	bool    backface_enable     = false;
 	uint8_t stencilfunc         = 0;
 	uint8_t stencilfunc_bf      = 0;
+};
+
+struct StencilControl
+{
+	uint8_t stencil_fail     = 0;
+	uint8_t stencil_zpass    = 0;
+	uint8_t stencil_zfail    = 0;
+	uint8_t stencil_fail_bf  = 0;
+	uint8_t stencil_zpass_bf = 0;
+	uint8_t stencil_zfail_bf = 0;
+};
+
+struct StencilMask
+{
+	uint8_t stencil_testval      = 0;
+	uint8_t stencil_mask         = 0;
+	uint8_t stencil_writemask    = 0;
+	uint8_t stencil_opval        = 0;
+	uint8_t stencil_testval_bf   = 0;
+	uint8_t stencil_mask_bf      = 0;
+	uint8_t stencil_writemask_bf = 0;
+	uint8_t stencil_opval_bf     = 0;
 };
 
 struct ModeControl
@@ -343,7 +372,8 @@ public:
 
 	void Reset() { *this = HardwareContext(); }
 
-	void                              SetRenderTarget(uint32_t slot, const RenderTarget& target) { m_render_targets[slot] = target; }
+	void SetRenderTarget(uint32_t slot, const RenderTarget& target) { m_render_targets[slot] = target; }
+	void SetColorInfo(uint32_t slot, const ColorInfo& color_info) { m_render_targets[slot].color_info = color_info; }
 	[[nodiscard]] const RenderTarget& GetRenderTargets(uint32_t slot) const { return m_render_targets[slot]; }
 
 	void                              SetBlendControl(uint32_t slot, const BlendControl& control) { m_blend_control[slot] = control; }
@@ -411,7 +441,16 @@ public:
 		m_vs.vs_embedded        = true;
 	}
 
-	void SetPsShader(const PsStageRegisters* ps_regs) { m_ps.ps_regs = *ps_regs; }
+	void SetPsShader(const PsStageRegisters* ps_regs)
+	{
+		m_ps.ps_regs     = *ps_regs;
+		m_ps.ps_embedded = false;
+	}
+	void SetPsEmbedded(uint32_t id)
+	{
+		m_ps.ps_embedded_id = id;
+		m_ps.ps_embedded    = true;
+	}
 
 	void SetCsShader(const CsStageRegisters* cs_regs, uint32_t shader_modifier)
 	{
@@ -419,18 +458,22 @@ public:
 		m_cs.cs_shader_modifier = shader_modifier;
 	}
 
-	[[nodiscard]] const BlendColor&    GetBlendColor() const { return m_blend_color; }
-	void                               SetBlendColor(const BlendColor& color) { m_blend_color = color; }
-	[[nodiscard]] const ClipControl&   GetClipControl() const { return m_clip_control; }
-	void                               SetClipControl(const ClipControl& control) { m_clip_control = control; }
-	[[nodiscard]] const RenderControl& GetRenderControl() const { return m_render_control; }
-	void                               SetRenderControl(const RenderControl& control) { m_render_control = control; }
-	[[nodiscard]] const DepthControl&  GetDepthControl() const { return m_depth_control; }
-	void                               SetDepthControl(const DepthControl& control) { m_depth_control = control; }
-	[[nodiscard]] const ModeControl&   GetModeControl() const { return m_mode_control; }
-	void                               SetModeControl(const ModeControl& control) { m_mode_control = control; }
-	[[nodiscard]] const EqaaControl&   GetEqaaControl() const { return m_eqaa_control; }
-	void                               SetEqaaControl(const EqaaControl& control) { m_eqaa_control = control; }
+	[[nodiscard]] const BlendColor&     GetBlendColor() const { return m_blend_color; }
+	void                                SetBlendColor(const BlendColor& color) { m_blend_color = color; }
+	[[nodiscard]] const ClipControl&    GetClipControl() const { return m_clip_control; }
+	void                                SetClipControl(const ClipControl& control) { m_clip_control = control; }
+	[[nodiscard]] const RenderControl&  GetRenderControl() const { return m_render_control; }
+	void                                SetRenderControl(const RenderControl& control) { m_render_control = control; }
+	[[nodiscard]] const DepthControl&   GetDepthControl() const { return m_depth_control; }
+	void                                SetDepthControl(const DepthControl& control) { m_depth_control = control; }
+	[[nodiscard]] const ModeControl&    GetModeControl() const { return m_mode_control; }
+	void                                SetModeControl(const ModeControl& control) { m_mode_control = control; }
+	[[nodiscard]] const EqaaControl&    GetEqaaControl() const { return m_eqaa_control; }
+	void                                SetEqaaControl(const EqaaControl& control) { m_eqaa_control = control; }
+	[[nodiscard]] const StencilControl& GetStencilControl() const { return m_stencil_control; }
+	void                                SetStencilControl(const StencilControl& control) { m_stencil_control = control; }
+	[[nodiscard]] const StencilMask&    GetStencilMask() const { return m_stencil_mask; }
+	void                                SetStencilMask(const StencilMask& mask) { m_stencil_mask = mask; }
 
 	void SetVsUserSgpr(uint32_t id, uint32_t value, UserSgprType type)
 	{
@@ -460,8 +503,10 @@ public:
 	[[nodiscard]] const VertexShaderInfo&  GetVs() const { return m_vs; }
 	[[nodiscard]] const ComputeShaderInfo& GetCs() const { return m_cs; }
 
-	[[nodiscard]] float GetDepthClearValue() const { return m_depth_clear_value; }
-	void                SetDepthClearValue(float clear_value) { m_depth_clear_value = clear_value; }
+	[[nodiscard]] float   GetDepthClearValue() const { return m_depth_clear_value; }
+	void                  SetDepthClearValue(float clear_value) { m_depth_clear_value = clear_value; }
+	[[nodiscard]] uint8_t GetStencilClearValue() const { return m_stencil_clear_value; }
+	void                  SetStencilClearValue(uint8_t clear_value) { m_stencil_clear_value = clear_value; }
 
 private:
 	BlendControl   m_blend_control[8];
@@ -479,7 +524,10 @@ private:
 	DepthRenderTarget m_depth_render_target;
 	RenderControl     m_render_control;
 	DepthControl      m_depth_control;
-	float             m_depth_clear_value = 0.0f;
+	StencilControl    m_stencil_control;
+	StencilMask       m_stencil_mask;
+	float             m_depth_clear_value   = 0.0f;
+	uint8_t           m_stencil_clear_value = 0;
 
 	ModeControl m_mode_control;
 	EqaaControl m_eqaa_control;

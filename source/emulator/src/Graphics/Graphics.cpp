@@ -191,6 +191,8 @@ int KYTY_SYSV_ABI GraphicsSetPsShader350(uint32_t* cmd, uint64_t size, const uin
 		memcpy(&cmd[1], ps_regs, 12 * 4);
 	}
 
+	// printf("ok\n");
+
 	return OK;
 }
 

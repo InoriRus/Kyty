@@ -10,6 +10,7 @@
 #include "Kyty/Sys/SysDbg.h"
 
 #include "Emulator/Elf.h"
+#include "Emulator/Graphics/Objects/GpuMemory.h"
 #include "Emulator/Jit.h"
 #include "Emulator/Kernel/Pthread.h"
 #include "Emulator/Profiler.h"
@@ -152,10 +153,18 @@ static VirtualMemory::Mode get_mode(Elf64_Word flags)
 	}
 }
 
-static void dbg_exception_handler(const VirtualMemory::ExceptionHandler::ExceptionInfo* info)
+static void kyty_exception_handler(const VirtualMemory::ExceptionHandler::ExceptionInfo* info)
 {
+	printf("kyty_exception_handler: %016" PRIx64 "\n", info->exception_address);
+
 	if (info->type == VirtualMemory::ExceptionHandler::ExceptionType::AccessViolation)
 	{
+		if (info->access_violation_type == VirtualMemory::ExceptionHandler::AccessViolationType::Write &&
+		    Libs::Graphics::GpuMemoryCheckAccessViolation(info->access_violation_vaddr, sizeof(uint64_t)))
+		{
+			return;
+		}
+
 		EXIT("Access violation: %s [%016" PRIx64 "] %s\n", Core::EnumName(info->access_violation_type).C_Str(),
 		     info->access_violation_vaddr, (info->access_violation_vaddr == INVALID_MEMORY ? "(Unpatched object)" : ""));
 	}
@@ -1041,12 +1050,14 @@ void RuntimeLinker::LoadProgramToMemory(Program* program)
 	if (is_shared)
 	{
 		program->exception_handler->Install(program->base_vaddr, program->base_vaddr + program->base_size_aligned,
-		                                    program->base_size_aligned + exception_handler_size + tls_handler_size, dbg_exception_handler);
+		                                    program->base_size_aligned + exception_handler_size + tls_handler_size, kyty_exception_handler);
 	} else
 	{
 		program->exception_handler->Install(0, program->base_vaddr + program->base_size_aligned,
 		                                    program->base_vaddr + program->base_size_aligned + exception_handler_size + tls_handler_size,
-		                                    dbg_exception_handler);
+		                                    kyty_exception_handler);
+
+		VirtualMemory::ExceptionHandler::InstallVectored(kyty_exception_handler);
 	}
 
 	// program->elf->SetBaseVAddr(program->base_vaddr);

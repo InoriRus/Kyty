@@ -3,6 +3,7 @@
 #include "Kyty/Core/DbgAssert.h"
 
 #include "Emulator/Graphics/GraphicContext.h"
+#include "Emulator/Graphics/GraphicsRender.h"
 #include "Emulator/Graphics/Utils.h"
 #include "Emulator/Profiler.h"
 
@@ -21,7 +22,7 @@ static void update_func(GraphicContext* ctx, const uint64_t* /*params*/, void* o
 	EXIT_IF(obj == nullptr);
 	EXIT_IF(vaddr == nullptr || size == nullptr || vaddr_num != 1);
 
-	auto* vk_obj = reinterpret_cast<VulkanBuffer*>(obj);
+	auto* vk_obj = reinterpret_cast<StorageVulkanBuffer*>(obj);
 
 	void* data = nullptr;
 	// vkMapMemory(ctx->device, vk_obj->memory.memory, vk_obj->memory.offset, *size, 0, &data);
@@ -41,7 +42,7 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 	EXIT_IF(mem == nullptr);
 	EXIT_IF(ctx == nullptr);
 
-	auto* vk_obj = new VulkanBuffer;
+	auto* vk_obj = new StorageVulkanBuffer;
 
 	vk_obj->usage           = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 	vk_obj->memory.property = static_cast<uint32_t>(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
@@ -60,11 +61,16 @@ static void delete_func(GraphicContext* ctx, void* obj, VulkanMemory* /*mem*/)
 {
 	KYTY_PROFILER_BLOCK("StorageBufferGpuObject::delete_func");
 
-	auto* vk_obj = reinterpret_cast<VulkanBuffer*>(obj);
+	auto* vk_obj = reinterpret_cast<StorageVulkanBuffer*>(obj);
 
 	EXIT_IF(vk_obj == nullptr);
 	EXIT_IF(vk_obj->buffer == nullptr);
 	EXIT_IF(ctx == nullptr);
+
+	EXIT_IF(vk_obj->cmd_buffer == nullptr);
+
+	// All submitted commands that refer to any element of pDescriptorSets must have completed execution
+	vk_obj->cmd_buffer->CommandProcessorWait();
 
 	VulkanDeleteBuffer(ctx, vk_obj);
 
@@ -79,7 +85,7 @@ static void write_back(GraphicContext* ctx, void* obj, const uint64_t* vaddr, co
 	EXIT_IF(obj == nullptr);
 	EXIT_IF(vaddr == nullptr || size == nullptr || vaddr_num != 1);
 
-	auto* vk_obj = reinterpret_cast<VulkanBuffer*>(obj);
+	auto* vk_obj = reinterpret_cast<StorageVulkanBuffer*>(obj);
 
 	void* data = nullptr;
 
@@ -121,6 +127,13 @@ GpuObject::delete_func_t StorageBufferGpuObject::GetDeleteFunc() const
 GpuObject::update_func_t StorageBufferGpuObject::GetUpdateFunc() const
 {
 	return update_func;
+}
+
+void StorageBufferSet(CommandBuffer* cmd_buffer, StorageVulkanBuffer* buffer)
+{
+	// EXIT_IF(buffer->cmd_buffer != nullptr);
+
+	buffer->cmd_buffer = cmd_buffer;
 }
 
 } // namespace Kyty::Libs::Graphics

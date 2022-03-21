@@ -133,7 +133,8 @@ static void update_func(GraphicContext* ctx, const uint64_t* params, void* obj, 
 	auto nfmt   = params[StorageTextureObject::PARAM_DFMT_NFMT] & 0xffffffffu;
 	auto width  = params[StorageTextureObject::PARAM_WIDTH_HEIGHT] >> 32u;
 	auto height = params[StorageTextureObject::PARAM_WIDTH_HEIGHT] & 0xffffffffu;
-	auto levels = params[StorageTextureObject::PARAM_LEVELS];
+	// auto base_level = params[StorageTextureObject::PARAM_LEVELS] >> 32u;
+	auto levels = params[StorageTextureObject::PARAM_LEVELS] & 0xffffffffu;
 	auto pitch  = params[StorageTextureObject::PARAM_PITCH];
 	bool neo    = Config::IsNeo();
 
@@ -208,12 +209,15 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 	EXIT_IF(ctx == nullptr);
 	EXIT_IF(params == nullptr);
 
-	auto dfmt    = params[StorageTextureObject::PARAM_DFMT_NFMT] >> 32u;
-	auto nfmt    = params[StorageTextureObject::PARAM_DFMT_NFMT] & 0xffffffffu;
-	auto width   = params[StorageTextureObject::PARAM_WIDTH_HEIGHT] >> 32u;
-	auto height  = params[StorageTextureObject::PARAM_WIDTH_HEIGHT] & 0xffffffffu;
-	auto levels  = params[StorageTextureObject::PARAM_LEVELS];
-	auto swizzle = params[StorageTextureObject::PARAM_SWIZZLE];
+	auto dfmt       = params[StorageTextureObject::PARAM_DFMT_NFMT] >> 32u;
+	auto nfmt       = params[StorageTextureObject::PARAM_DFMT_NFMT] & 0xffffffffu;
+	auto width      = params[StorageTextureObject::PARAM_WIDTH_HEIGHT] >> 32u;
+	auto height     = params[StorageTextureObject::PARAM_WIDTH_HEIGHT] & 0xffffffffu;
+	auto base_level = params[StorageTextureObject::PARAM_LEVELS] >> 32u;
+	auto levels     = params[StorageTextureObject::PARAM_LEVELS] & 0xffffffffu;
+	auto swizzle    = params[StorageTextureObject::PARAM_SWIZZLE];
+
+	EXIT_NOT_IMPLEMENTED(base_level != 0);
 
 	VkImageUsageFlags vk_usage = get_usage();
 
@@ -230,10 +234,7 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 	EXIT_NOT_IMPLEMENTED(width == 0);
 	EXIT_NOT_IMPLEMENTED(height == 0);
 
-	if (levels > 1)
-	{
-		height += (height > 1 ? height / 2 : 1);
-	}
+	auto real_height = ((levels > 1) ? height + (height > 1 ? height / 2 : 1) : height);
 
 	auto* vk_obj = new StorageTextureVulkanImage;
 
@@ -243,7 +244,7 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 	image_info.flags         = 0;
 	image_info.imageType     = VK_IMAGE_TYPE_2D;
 	image_info.extent.width  = width;
-	image_info.extent.height = height;
+	image_info.extent.height = real_height;
 	image_info.extent.depth  = 1;
 	image_info.mipLevels     = 1;
 	image_info.arrayLayers   = 1;

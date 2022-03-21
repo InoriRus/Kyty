@@ -40,7 +40,7 @@ public:
 	bool Equal(const uint64_t* other) const override;
 
 	[[nodiscard]] create_func_t              GetCreateFunc() const override;
-	[[nodiscard]] create_from_objects_func_t GetCreateFromObjectsFunc() const override { return nullptr; };
+	[[nodiscard]] create_from_objects_func_t GetCreateFromObjectsFunc() const override;
 	[[nodiscard]] write_back_func_t          GetWriteBackFunc() const override { return nullptr; };
 	[[nodiscard]] delete_func_t              GetDeleteFunc() const override;
 	[[nodiscard]] update_func_t              GetUpdateFunc() const override;
