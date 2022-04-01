@@ -1298,10 +1298,17 @@ static VkPhysicalDevice VulkanFindPhysicalDevice(VkInstance instance, VkSurfaceK
 		bool skip_device = true;
 
 		VkPhysicalDeviceProperties device_properties {};
-		VkPhysicalDeviceFeatures   device_features {};
+		VkPhysicalDeviceFeatures2  device_features2 {};
+
+		VkPhysicalDeviceColorWriteEnableFeaturesEXT color_write_ext {};
+		color_write_ext.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COLOR_WRITE_ENABLE_FEATURES_EXT;
+		color_write_ext.pNext = nullptr;
+
+		device_features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+		device_features2.pNext = &color_write_ext;
 
 		vkGetPhysicalDeviceProperties(device, &device_properties);
-		vkGetPhysicalDeviceFeatures(device, &device_features);
+		vkGetPhysicalDeviceFeatures2(device, &device_features2);
 
 		printf("Vulkan device: %s\n", device_properties.deviceName);
 
@@ -1331,7 +1338,14 @@ static VkPhysicalDevice VulkanFindPhysicalDevice(VkInstance instance, VkSurfaceK
 			}
 		}
 
-		if (device_features.fragmentStoresAndAtomics != VK_TRUE)
+		if (color_write_ext.colorWriteEnable != VK_TRUE)
+		{
+
+			printf("colorWriteEnable is not supported\n");
+			skip_device = true;
+		}
+
+		if (device_features2.features.fragmentStoresAndAtomics != VK_TRUE)
 		{
 			printf("fragmentStoresAndAtomics is not supported\n");
 			skip_device = true;
@@ -1529,9 +1543,14 @@ static VkDevice VulkanCreateDevice(VkPhysicalDevice physical_device, VkSurfaceKH
 	VkPhysicalDeviceFeatures device_features {};
 	device_features.fragmentStoresAndAtomics = VK_TRUE;
 
+	VkPhysicalDeviceColorWriteEnableFeaturesEXT color_write_ext {};
+	color_write_ext.sType            = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COLOR_WRITE_ENABLE_FEATURES_EXT;
+	color_write_ext.pNext            = nullptr;
+	color_write_ext.colorWriteEnable = VK_TRUE;
+
 	VkDeviceCreateInfo create_info {};
 	create_info.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-	create_info.pNext                   = nullptr;
+	create_info.pNext                   = &color_write_ext;
 	create_info.flags                   = 0;
 	create_info.pQueueCreateInfos       = &queue_create_info;
 	create_info.queueCreateInfoCount    = 1;
@@ -1965,7 +1984,7 @@ static void VulkanCreate(WindowContext* ctx)
 	}
 
 	Vector<const char*> device_extensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME,
-	                                         "VK_KHR_maintenance1"};
+	                                         VK_EXT_COLOR_WRITE_ENABLE_EXTENSION_NAME, "VK_KHR_maintenance1"};
 
 #ifdef KYTY_ENABLE_DEBUG_PRINTF
 	if (Config::SpirvDebugPrintfEnabled())

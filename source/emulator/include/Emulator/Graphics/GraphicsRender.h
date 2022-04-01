@@ -10,8 +10,11 @@
 
 namespace Kyty::Libs::Graphics {
 
+namespace HW {
 class HardwareContext;
 class UserConfig;
+} // namespace HW
+
 class CommandProcessor;
 struct VideoOutVulkanImage;
 struct DepthStencilVulkanImage;
@@ -66,9 +69,10 @@ private:
 void GraphicsRenderInit();
 void GraphicsRenderCreateContext();
 
-void GraphicsRenderDrawIndex(CommandBuffer* buffer, HardwareContext* ctx, UserConfig* ucfg, uint32_t index_type_and_size,
+void GraphicsRenderDrawIndex(CommandBuffer* buffer, HW::HardwareContext* ctx, HW::UserConfig* ucfg, uint32_t index_type_and_size,
                              uint32_t index_count, const void* index_addr, uint32_t flags, uint32_t type);
-void GraphicsRenderDrawIndexAuto(CommandBuffer* buffer, HardwareContext* ctx, UserConfig* ucfg, uint32_t index_count, uint32_t flags);
+void GraphicsRenderDrawIndexAuto(CommandBuffer* buffer, HW::HardwareContext* ctx, HW::UserConfig* ucfg, uint32_t index_count,
+                                 uint32_t flags);
 void GraphicsRenderWriteAtEndOfPipe(CommandBuffer* buffer, uint64_t* dst_gpu_addr, uint64_t value);
 void GraphicsRenderWriteAtEndOfPipeClockCounter(CommandBuffer* buffer, uint64_t* dst_gpu_addr);
 void GraphicsRenderWriteAtEndOfPipe(CommandBuffer* buffer, uint32_t* dst_gpu_addr, uint32_t value);
@@ -81,7 +85,7 @@ void GraphicsRenderWriteAtEndOfPipeWithWriteBack(CommandBuffer* buffer, uint64_t
 void GraphicsRenderWriteAtEndOfPipeWithInterruptWriteBack(CommandBuffer* buffer, uint64_t* dst_gpu_addr, uint64_t value);
 void GraphicsRenderWriteAtEndOfPipeWithInterrupt(CommandBuffer* buffer, uint64_t* dst_gpu_addr, uint64_t value);
 void GraphicsRenderWriteBack();
-void GraphicsRenderDispatchDirect(CommandBuffer* buffer, HardwareContext* ctx, uint32_t thread_group_x, uint32_t thread_group_y,
+void GraphicsRenderDispatchDirect(CommandBuffer* buffer, HW::HardwareContext* ctx, uint32_t thread_group_x, uint32_t thread_group_y,
                                   uint32_t thread_group_z, uint32_t mode);
 void GraphicsRenderMemoryBarrier(CommandBuffer* buffer);
 void GraphicsRenderRenderTextureBarrier(CommandBuffer* buffer, uint64_t vaddr, uint64_t size);

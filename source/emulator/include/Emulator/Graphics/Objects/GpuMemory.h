@@ -44,6 +44,7 @@ enum class GpuMemoryScenario
 {
 	Common,
 	GenerateMips,
+	TextureTriplet
 };
 
 struct GpuMemoryObject
@@ -98,8 +99,9 @@ void  GpuMemoryFlush(GraphicContext* ctx);
 void  GpuMemoryFrameDone();
 void  GpuMemoryWriteBack(GraphicContext* ctx);
 bool  GpuMemoryCheckAccessViolation(uint64_t vaddr, uint64_t size);
+bool  GpuMemoryWatcherEnabled();
 
-Vector<GpuMemoryObject> GpuMemoryFindObjects(uint64_t vaddr, uint64_t size, bool exact);
+Vector<GpuMemoryObject> GpuMemoryFindObjects(uint64_t vaddr, uint64_t size, bool exact, bool only_first);
 
 bool VulkanAllocate(GraphicContext* ctx, VulkanMemory* mem);
 void VulkanFree(GraphicContext* ctx, VulkanMemory* mem);

@@ -1113,6 +1113,42 @@ constexpr char32_t EMBEDDED_SHADER_VS_0[] = UR"(
                OpFunctionEnd
 )";
 
+constexpr char32_t EMBEDDED_SHADER_PS_0[] = UR"(
+               ; #version 450
+               ; 
+               ; layout(location = 0) out vec4 outColor;
+               ; 
+               ; void main() {
+               ; 	outColor = vec4(0);
+               ; }
+
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %4 "main" %9
+               OpExecutionMode %4 OriginUpperLeft
+
+               ; Annotations
+               OpDecorate %9 Location 0
+
+               ; Types, variables and constants
+       %void = OpTypeVoid
+          %3 = OpTypeFunction %void
+      %float = OpTypeFloat 32
+    %v4float = OpTypeVector %float 4
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+          %9 = OpVariable %_ptr_Output_v4float Output
+    %float_0 = OpConstant %float 0
+         %11 = OpConstantComposite %v4float %float_0 %float_0 %float_0 %float_0
+
+               ; Function 4
+          %4 = OpFunction %void None %3
+          %5 = OpLabel
+               OpStore %9 %11
+               OpReturn
+               OpFunctionEnd
+)";
+
 constexpr char32_t EXECZ[] = UR"(
         %z191_<index> = OpLoad %uint %exec_lo
         %z192_<index> = OpIEqual %bool %z191_<index> %uint_0
@@ -1219,8 +1255,8 @@ public:
 	void                                      SetPsInputInfo(const ShaderPixelInputInfo* input_info) { m_ps_input_info = input_info; }
 	[[nodiscard]] const ShaderPixelInputInfo* GetPsInputInfo() const { return m_ps_input_info; }
 
-	[[nodiscard]] const ShaderBindResources*  GetBindInfo() const { return m_bind; }
-	[[nodiscard]] const ShaderBindParameters& GetBindParams() const { return m_bind_params; }
+	[[nodiscard]] const ShaderBindResources* GetBindInfo() const { return m_bind; }
+	//[[nodiscard]] const ShaderBindParameters& GetBindParams() const { return m_bind_params; }
 
 	void                 AddConstantUint(uint32_t u);
 	void                 AddConstantInt(int i);
@@ -1280,7 +1316,7 @@ private:
 	const ShaderComputeInputInfo* m_cs_input_info = nullptr;
 	const ShaderPixelInputInfo*   m_ps_input_info = nullptr;
 	const ShaderBindResources*    m_bind          = nullptr;
-	ShaderBindParameters          m_bind_params;
+	// ShaderBindParameters          m_bind_params;
 
 	Core::Array2<int, 64, 2> m_extended_mapping {};
 };
@@ -2183,11 +2219,11 @@ KYTY_RECOMPILER_FUNC(Recompile_Exp_Pos0Vsrc0Vsrc1Vsrc2Vsrc3Done)
 
 KYTY_RECOMPILER_FUNC(Recompile_ImageSample_Vdata3Vaddr3StSsDmask7)
 {
-	const auto& inst        = code.GetInstructions().At(index);
-	const auto* bind_info   = spirv->GetBindInfo();
-	const auto& bind_params = spirv->GetBindParams();
+	const auto& inst      = code.GetInstructions().At(index);
+	const auto* bind_info = spirv->GetBindInfo();
+	// const auto& bind_params = spirv->GetBindParams();
 
-	if (bind_info != nullptr && bind_params.textures2d_sampled_num > 0 && bind_info->samplers.samplers_num > 0)
+	if (bind_info != nullptr && bind_info->textures2D.textures2d_sampled_num > 0 && bind_info->samplers.samplers_num > 0)
 	{
 		auto dst_value0  = operand_variable_to_str(inst.dst, 0);
 		auto dst_value1  = operand_variable_to_str(inst.dst, 1);
@@ -2248,11 +2284,11 @@ KYTY_RECOMPILER_FUNC(Recompile_ImageSample_Vdata3Vaddr3StSsDmask7)
 
 KYTY_RECOMPILER_FUNC(Recompile_ImageSample_Vdata4Vaddr3StSsDmaskF)
 {
-	const auto& inst        = code.GetInstructions().At(index);
-	const auto* bind_info   = spirv->GetBindInfo();
-	const auto& bind_params = spirv->GetBindParams();
+	const auto& inst      = code.GetInstructions().At(index);
+	const auto* bind_info = spirv->GetBindInfo();
+	// const auto& bind_params = spirv->GetBindParams();
 
-	if (bind_info != nullptr && bind_params.textures2d_sampled_num > 0 && bind_info->samplers.samplers_num > 0)
+	if (bind_info != nullptr && bind_info->textures2D.textures2d_sampled_num > 0 && bind_info->samplers.samplers_num > 0)
 	{
 		auto dst_value0  = operand_variable_to_str(inst.dst, 0);
 		auto dst_value1  = operand_variable_to_str(inst.dst, 1);
@@ -2318,11 +2354,11 @@ KYTY_RECOMPILER_FUNC(Recompile_ImageSample_Vdata4Vaddr3StSsDmaskF)
 
 KYTY_RECOMPILER_FUNC(Recompile_ImageLoad_Vdata4Vaddr3StDmaskF)
 {
-	const auto& inst        = code.GetInstructions().At(index);
-	const auto* bind_info   = spirv->GetBindInfo();
-	const auto& bind_params = spirv->GetBindParams();
+	const auto& inst      = code.GetInstructions().At(index);
+	const auto* bind_info = spirv->GetBindInfo();
+	// const auto& bind_params = spirv->GetBindParams();
 
-	if (bind_info != nullptr && bind_params.textures2d_storage_num > 0)
+	if (bind_info != nullptr && bind_info->textures2D.textures2d_sampled_num > 0)
 	{
 		auto dst_value0  = operand_variable_to_str(inst.dst, 0);
 		auto dst_value1  = operand_variable_to_str(inst.dst, 1);
@@ -2344,14 +2380,14 @@ KYTY_RECOMPILER_FUNC(Recompile_ImageLoad_Vdata4Vaddr3StDmaskF)
 
 		static const char32_t* text = UR"(
          %t24_<index> = OpLoad %uint %<src1_value0>
-         %t26_<index> = OpAccessChain %_ptr_UniformConstant_ImageL %textures2D_L %t24_<index>
-         %t27_<index> = OpLoad %ImageL %t26_<index>
+         %t26_<index> = OpAccessChain %_ptr_UniformConstant_ImageS %textures2D_S %t24_<index>
+         %t27_<index> = OpLoad %ImageS %t26_<index>
          %t67_<index> = OpLoad %float %<src0_value0>
          %t69_<index> = OpBitcast %uint %t67_<index>
          %t70_<index> = OpLoad %float %<src0_value1>
          %t71_<index> = OpBitcast %uint %t70_<index>
          %t73_<index> = OpCompositeConstruct %v2uint %t69_<index> %t71_<index>
-         %t74_<index> = OpImageRead %v4float %t27_<index> %t73_<index>
+         %t74_<index> = OpImageFetch %v4float %t27_<index> %t73_<index>
                OpStore %temp_v4float %t74_<index>
          %t46_<index> = OpAccessChain %_ptr_Function_float %temp_v4float %uint_0
          %t47_<index> = OpLoad %float %t46_<index>
@@ -2385,11 +2421,11 @@ KYTY_RECOMPILER_FUNC(Recompile_ImageLoad_Vdata4Vaddr3StDmaskF)
 
 KYTY_RECOMPILER_FUNC(Recompile_ImageStore_Vdata4Vaddr3StDmaskF)
 {
-	const auto& inst        = code.GetInstructions().At(index);
-	const auto* bind_info   = spirv->GetBindInfo();
-	const auto& bind_params = spirv->GetBindParams();
+	const auto& inst      = code.GetInstructions().At(index);
+	const auto* bind_info = spirv->GetBindInfo();
+	// const auto& bind_params = spirv->GetBindParams();
 
-	if (bind_info != nullptr && bind_params.textures2d_storage_num > 0)
+	if (bind_info != nullptr && bind_info->textures2D.textures2d_storage_num > 0)
 	{
 		auto dst_value0 = operand_variable_to_str(inst.dst, 0);
 		auto dst_value1 = operand_variable_to_str(inst.dst, 1);
@@ -2453,11 +2489,11 @@ KYTY_RECOMPILER_FUNC(Recompile_ImageStore_Vdata4Vaddr3StDmaskF)
 
 KYTY_RECOMPILER_FUNC(Recompile_ImageStoreMip_Vdata4Vaddr4StDmaskF)
 {
-	const auto& inst        = code.GetInstructions().At(index);
-	const auto* bind_info   = spirv->GetBindInfo();
-	const auto& bind_params = spirv->GetBindParams();
+	const auto& inst      = code.GetInstructions().At(index);
+	const auto* bind_info = spirv->GetBindInfo();
+	// const auto& bind_params = spirv->GetBindParams();
 
-	if (bind_info != nullptr && bind_params.textures2d_storage_num > 0)
+	if (bind_info != nullptr && bind_info->textures2D.textures2d_storage_num > 0)
 	{
 		auto dst_value0 = operand_variable_to_str(inst.dst, 0);
 		auto dst_value1 = operand_variable_to_str(inst.dst, 1);
@@ -5206,20 +5242,20 @@ void Spirv::GenerateSource()
 	switch (m_code.GetType())
 	{
 		case ShaderType::Pixel:
-			m_bind        = (m_ps_input_info != nullptr ? &m_ps_input_info->bind : nullptr);
-			m_bind_params = (m_ps_input_info != nullptr ? ShaderGetBindParametersPS(m_code, m_ps_input_info) : ShaderBindParameters());
+			m_bind = (m_ps_input_info != nullptr ? &m_ps_input_info->bind : nullptr);
+			// m_bind_params = (m_ps_input_info != nullptr ? ShaderGetBindParametersPS(m_code, m_ps_input_info) : ShaderBindParameters());
 			break;
 		case ShaderType::Vertex:
-			m_bind        = (m_vs_input_info != nullptr ? &m_vs_input_info->bind : nullptr);
-			m_bind_params = (m_vs_input_info != nullptr ? ShaderGetBindParametersVS(m_code, m_vs_input_info) : ShaderBindParameters());
+			m_bind = (m_vs_input_info != nullptr ? &m_vs_input_info->bind : nullptr);
+			// m_bind_params = (m_vs_input_info != nullptr ? ShaderGetBindParametersVS(m_code, m_vs_input_info) : ShaderBindParameters());
 			break;
 		case ShaderType::Compute:
-			m_bind        = (m_cs_input_info != nullptr ? &m_cs_input_info->bind : nullptr);
-			m_bind_params = (m_cs_input_info != nullptr ? ShaderGetBindParametersCS(m_code, m_cs_input_info) : ShaderBindParameters());
+			m_bind = (m_cs_input_info != nullptr ? &m_cs_input_info->bind : nullptr);
+			// m_bind_params = (m_cs_input_info != nullptr ? ShaderGetBindParametersCS(m_code, m_cs_input_info) : ShaderBindParameters());
 			break;
 		default:
-			m_bind        = nullptr;
-			m_bind_params = ShaderBindParameters();
+			m_bind = nullptr;
+			// m_bind_params = ShaderBindParameters();
 			break;
 	}
 
@@ -5269,11 +5305,11 @@ void Spirv::WriteHeader()
 		{
 			vars.Add(U"%buf");
 		}
-		if (m_bind_params.textures2d_sampled_num > 0)
+		if (m_bind->textures2D.textures2d_sampled_num > 0)
 		{
 			vars.Add(U"%textures2D_S");
 		}
-		if (m_bind_params.textures2d_storage_num > 0)
+		if (m_bind->textures2D.textures2d_storage_num > 0)
 		{
 			vars.Add(U"%textures2D_L");
 		}
@@ -5473,13 +5509,13 @@ void Spirv::WriteAnnotations()
 			                .ReplaceStr(U"<DescriptorSet>", String::FromPrintf("%u", m_bind->descriptor_set_slot))
 			                .ReplaceStr(U"<BindingIndex>", String::FromPrintf("%d", m_bind->storage_buffers.binding_index));
 		}
-		if (m_bind_params.textures2d_sampled_num > 0)
+		if (m_bind->textures2D.textures2d_sampled_num > 0)
 		{
 			m_source += String(textures_annotations_s)
 			                .ReplaceStr(U"<DescriptorSet>", String::FromPrintf("%u", m_bind->descriptor_set_slot))
 			                .ReplaceStr(U"<BindingIndex>", String::FromPrintf("%d", m_bind->textures2D.binding_sampled_index));
 		}
-		if (m_bind_params.textures2d_storage_num > 0)
+		if (m_bind->textures2D.textures2d_storage_num > 0)
 		{
 			m_source += String(textures_annotations_l)
 			                .ReplaceStr(U"<DescriptorSet>", String::FromPrintf("%u", m_bind->descriptor_set_slot))
@@ -5645,15 +5681,15 @@ void Spirv::WriteTypes()
 			m_source +=
 			    String(storage_buffers_types).ReplaceStr(U"<buffers_num>", String::FromPrintf("%d", m_bind->storage_buffers.buffers_num));
 		}
-		if (m_bind_params.textures2d_sampled_num > 0)
+		if (m_bind->textures2D.textures2d_sampled_num > 0)
 		{
-			m_source +=
-			    String(textures_sampled_types).ReplaceStr(U"<buffers_num>", String::FromPrintf("%d", m_bind_params.textures2d_sampled_num));
+			m_source += String(textures_sampled_types)
+			                .ReplaceStr(U"<buffers_num>", String::FromPrintf("%d", m_bind->textures2D.textures2d_sampled_num));
 		}
-		if (m_bind_params.textures2d_storage_num > 0)
+		if (m_bind->textures2D.textures2d_storage_num > 0)
 		{
-			m_source +=
-			    String(textures_loaded_types).ReplaceStr(U"<buffers_num>", String::FromPrintf("%d", m_bind_params.textures2d_storage_num));
+			m_source += String(textures_loaded_types)
+			                .ReplaceStr(U"<buffers_num>", String::FromPrintf("%d", m_bind->textures2D.textures2d_storage_num));
 		}
 		if (m_bind->samplers.samplers_num > 0)
 		{
@@ -5719,15 +5755,15 @@ void Spirv::WriteGlobalVariables()
 			vars.Add(String::FromPrintf("%%buf = OpVariable %%_ptr_StorageBuffer__arr_BufferObject_uint_%d StorageBuffer",
 			                            m_bind->storage_buffers.buffers_num));
 		}
-		if (m_bind_params.textures2d_sampled_num > 0)
+		if (m_bind->textures2D.textures2d_sampled_num > 0)
 		{
 			vars.Add(String::FromPrintf("%%textures2D_S = OpVariable %%_ptr_UniformConstant__arr_ImageS_uint_%d UniformConstant",
-			                            m_bind_params.textures2d_sampled_num));
+			                            m_bind->textures2D.textures2d_sampled_num));
 		}
-		if (m_bind_params.textures2d_storage_num > 0)
+		if (m_bind->textures2D.textures2d_storage_num > 0)
 		{
 			vars.Add(String::FromPrintf("%%textures2D_L = OpVariable %%_ptr_UniformConstant__arr_ImageL_uint_%d UniformConstant",
-			                            m_bind_params.textures2d_storage_num));
+			                            m_bind->textures2D.textures2d_storage_num));
 		}
 		if (m_bind->samplers.samplers_num > 0)
 		{
@@ -5950,8 +5986,8 @@ void Spirv::WriteLocalVariables()
 
 		for (int i = 0; i < m_bind->textures2D.textures_num; i++)
 		{
-			int  start_reg = m_bind->textures2D.start_register[i];
-			bool extended  = m_bind->textures2D.extended[i];
+			int  start_reg = m_bind->textures2D.desc[i].start_register;
+			bool extended  = m_bind->textures2D.desc[i].extended;
 
 			for (int ti = 0; ti < 2; ti++)
 			{
@@ -6304,7 +6340,7 @@ void Spirv::FindVariables()
 		}
 		for (int i = 0; i < m_bind->textures2D.textures_num; i++)
 		{
-			int storage_start = m_bind->textures2D.start_register[i];
+			int storage_start = m_bind->textures2D.desc[i].start_register;
 			AddVariable(ShaderOperandType::Sgpr, storage_start, 8);
 		}
 		for (int i = 0; i < m_bind->samplers.samplers_num; i++)
@@ -6339,9 +6375,7 @@ String SpirvGetEmbeddedPs(uint32_t id)
 {
 	EXIT_NOT_IMPLEMENTED(id != 0);
 
-	KYTY_NOT_IMPLEMENTED;
-
-	return U"";
+	return EMBEDDED_SHADER_PS_0;
 }
 
 } // namespace Kyty::Libs::Graphics

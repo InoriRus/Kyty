@@ -13,9 +13,11 @@
 
 namespace Kyty::Libs::Graphics {
 
+namespace HW {
 struct VertexShaderInfo;
 struct PixelShaderInfo;
 struct ComputeShaderInfo;
+} // namespace HW
 
 enum class ShaderType
 {
@@ -600,18 +602,26 @@ struct ShaderStorageResources
 	int                  binding_index               = 0;
 };
 
+struct ShaderTextureDescriptor
+{
+	ShaderTextureResource texture;
+	ShaderTextureUsage    usage                      = ShaderTextureUsage::Unknown;
+	int                   slot                       = 0;
+	int                   start_register             = 0;
+	bool                  extended                   = false;
+	bool                  textures2d_without_sampler = false;
+};
+
 struct ShaderTextureResources
 {
 	static constexpr int RES_MAX = 16;
 
-	ShaderTextureResource textures[RES_MAX];
-	ShaderTextureUsage    usages[RES_MAX]         = {};
-	int                   slots[RES_MAX]          = {0};
-	int                   start_register[RES_MAX] = {0};
-	bool                  extended[RES_MAX]       = {};
-	int                   textures_num            = 0;
-	int                   binding_sampled_index   = 0;
-	int                   binding_storage_index   = 0;
+	ShaderTextureDescriptor desc[RES_MAX];
+	int                     textures_num           = 0;
+	int                     textures2d_sampled_num = 0;
+	int                     textures2d_storage_num = 0;
+	int                     binding_sampled_index  = 0;
+	int                     binding_storage_index  = 0;
 };
 
 struct ShaderSamplerResources
@@ -658,12 +668,12 @@ struct ShaderBindResources
 	ShaderExtendedResources extended;
 };
 
-struct ShaderBindParameters
-{
-	bool textures2d_without_sampler[ShaderTextureResources::RES_MAX] = {};
-	int  textures2d_sampled_num                                      = 0;
-	int  textures2d_storage_num                                      = 0;
-};
+// struct ShaderBindParameters
+//{
+//	bool textures2d_without_sampler[ShaderTextureResources::RES_MAX] = {};
+//	int  textures2d_sampled_num                                      = 0;
+//	int  textures2d_storage_num                                      = 0;
+//};
 
 struct ShaderVertexInputInfo
 {
@@ -700,28 +710,28 @@ struct ShaderPixelInputInfo
 	ShaderBindResources bind;
 };
 
-void                 ShaderCalcBindingIndices(ShaderBindResources* bind);
-void                 ShaderGetInputInfoVS(const VertexShaderInfo* regs, ShaderVertexInputInfo* info);
-void                 ShaderGetInputInfoPS(const PixelShaderInfo* regs, const ShaderVertexInputInfo* vs_info, ShaderPixelInputInfo* ps_info);
-void                 ShaderGetInputInfoCS(const ComputeShaderInfo* regs, ShaderComputeInputInfo* info);
-void                 ShaderDbgDumpInputInfo(const ShaderVertexInputInfo* info);
-void                 ShaderDbgDumpInputInfo(const ShaderPixelInputInfo* info);
-void                 ShaderDbgDumpInputInfo(const ShaderComputeInputInfo* info);
-ShaderId             ShaderGetIdVS(const VertexShaderInfo* regs, const ShaderVertexInputInfo* input_info);
-ShaderId             ShaderGetIdPS(const PixelShaderInfo* regs, const ShaderPixelInputInfo* input_info);
-ShaderId             ShaderGetIdCS(const ComputeShaderInfo* regs, const ShaderComputeInputInfo* input_info);
-ShaderCode           ShaderParseVS(const VertexShaderInfo* regs);
-ShaderCode           ShaderParsePS(const PixelShaderInfo* regs);
-ShaderCode           ShaderParseCS(const ComputeShaderInfo* regs);
-ShaderBindParameters ShaderGetBindParametersVS(const ShaderCode& code, const ShaderVertexInputInfo* input_info);
-ShaderBindParameters ShaderGetBindParametersPS(const ShaderCode& code, const ShaderPixelInputInfo* input_info);
-ShaderBindParameters ShaderGetBindParametersCS(const ShaderCode& code, const ShaderComputeInputInfo* input_info);
-Vector<uint32_t>     ShaderRecompileVS(const ShaderCode& code, const ShaderVertexInputInfo* input_info);
-Vector<uint32_t>     ShaderRecompilePS(const ShaderCode& code, const ShaderPixelInputInfo* input_info);
-Vector<uint32_t>     ShaderRecompileCS(const ShaderCode& code, const ShaderComputeInputInfo* input_info);
-bool                 ShaderIsDisabled(uint64_t addr);
-void                 ShaderDisable(uint64_t id);
-void                 ShaderInjectDebugPrintf(uint64_t id, const ShaderDebugPrintf& cmd);
+void       ShaderCalcBindingIndices(ShaderBindResources* bind);
+void       ShaderGetInputInfoVS(const HW::VertexShaderInfo* regs, ShaderVertexInputInfo* info);
+void       ShaderGetInputInfoPS(const HW::PixelShaderInfo* regs, const ShaderVertexInputInfo* vs_info, ShaderPixelInputInfo* ps_info);
+void       ShaderGetInputInfoCS(const HW::ComputeShaderInfo* regs, ShaderComputeInputInfo* info);
+void       ShaderDbgDumpInputInfo(const ShaderVertexInputInfo* info);
+void       ShaderDbgDumpInputInfo(const ShaderPixelInputInfo* info);
+void       ShaderDbgDumpInputInfo(const ShaderComputeInputInfo* info);
+ShaderId   ShaderGetIdVS(const HW::VertexShaderInfo* regs, const ShaderVertexInputInfo* input_info);
+ShaderId   ShaderGetIdPS(const HW::PixelShaderInfo* regs, const ShaderPixelInputInfo* input_info);
+ShaderId   ShaderGetIdCS(const HW::ComputeShaderInfo* regs, const ShaderComputeInputInfo* input_info);
+ShaderCode ShaderParseVS(const HW::VertexShaderInfo* regs);
+ShaderCode ShaderParsePS(const HW::PixelShaderInfo* regs);
+ShaderCode ShaderParseCS(const HW::ComputeShaderInfo* regs);
+// ShaderBindParameters ShaderGetBindParametersVS(const ShaderCode& code, const ShaderVertexInputInfo* input_info);
+// ShaderBindParameters ShaderGetBindParametersPS(const ShaderCode& code, const ShaderPixelInputInfo* input_info);
+// ShaderBindParameters ShaderGetBindParametersCS(const ShaderCode& code, const ShaderComputeInputInfo* input_info);
+Vector<uint32_t> ShaderRecompileVS(const ShaderCode& code, const ShaderVertexInputInfo* input_info);
+Vector<uint32_t> ShaderRecompilePS(const ShaderCode& code, const ShaderPixelInputInfo* input_info);
+Vector<uint32_t> ShaderRecompileCS(const ShaderCode& code, const ShaderComputeInputInfo* input_info);
+bool             ShaderIsDisabled(uint64_t addr);
+void             ShaderDisable(uint64_t id);
+void             ShaderInjectDebugPrintf(uint64_t id, const ShaderDebugPrintf& cmd);
 
 } // namespace Kyty::Libs::Graphics
 

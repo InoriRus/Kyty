@@ -154,7 +154,7 @@ public:
 	void  ResetHash(GraphicContext* ctx, const uint64_t* vaddr, const uint64_t* size, int vaddr_num, GpuMemoryObjectType type);
 	void  FrameDone();
 
-	Vector<GpuMemoryObject> FindObjects(const uint64_t* vaddr, const uint64_t* size, int vaddr_num, bool exact);
+	Vector<GpuMemoryObject> FindObjects(const uint64_t* vaddr, const uint64_t* size, int vaddr_num, bool exact, bool only_first);
 
 	// Sync: GPU -> CPU
 	void WriteBack(GraphicContext* ctx);
@@ -217,7 +217,7 @@ private:
 
 	void Free(GraphicContext* ctx, int object_id);
 
-	Vector<OverlappedBlock> FindBlocks(const uint64_t* vaddr, const uint64_t* size, int vaddr_num);
+	Vector<OverlappedBlock> FindBlocks(const uint64_t* vaddr, const uint64_t* size, int vaddr_num, bool only_first = false);
 	Block                   CreateBlock(const uint64_t* vaddr, const uint64_t* size, int vaddr_num);
 	void                    DeleteBlock(Block* b);
 	void                    Link(int id1, int id2, OverlapType rel, GpuMemoryScenario scenario);
@@ -227,7 +227,9 @@ private:
 
 	static void WatchCallback(void* a0, void* a1);
 
+	bool create_existing(const Vector<OverlappedBlock>& others, const GpuObject& info, int* id);
 	bool create_generate_mips(const Vector<OverlappedBlock>& others, GpuMemoryObjectType type);
+	bool create_texture_triplet(const Vector<OverlappedBlock>& others, GpuMemoryObjectType type);
 	bool create_all_the_same(const Vector<OverlappedBlock>& others);
 	void create_dbg_exit(const uint64_t* vaddr, const uint64_t* size, int vaddr_num, const Vector<OverlappedBlock>& others,
 	                     GpuMemoryObjectType type);
@@ -817,48 +819,125 @@ void GpuMemory::WatchCallback(void* a0, void* a1)
 	m->m_mutex.Unlock();
 }
 
+bool GpuMemory::create_existing(const Vector<OverlappedBlock>& others, const GpuObject& info, int* id)
+{
+	EXIT_IF(id == nullptr);
+
+	uint64_t               max_gpu_update_time = 0;
+	const OverlappedBlock* latest_block        = nullptr;
+
+	for (const auto& obj: others)
+	{
+		auto& h = m_objects[obj.object_id];
+		EXIT_IF(h.free);
+		auto& o = h.info;
+		if (h.scenario == GpuMemoryScenario::Common && obj.relation == OverlapType::Equals && o.object.type == info.type &&
+		    info.Equal(o.params))
+		{
+			*id = obj.object_id;
+			return true;
+		}
+
+		if (o.gpu_update_time > max_gpu_update_time)
+		{
+			max_gpu_update_time = o.gpu_update_time;
+			latest_block        = &obj;
+		}
+	}
+
+	if (latest_block != nullptr)
+	{
+		auto& h = m_objects[latest_block->object_id];
+		auto& o = h.info;
+
+		if (h.scenario == GpuMemoryScenario::GenerateMips && latest_block->relation == OverlapType::Equals && o.object.type == info.type &&
+		    info.Equal(o.params))
+		{
+			*id = latest_block->object_id;
+			return true;
+		}
+	}
+
+	return false;
+}
+
 bool GpuMemory::create_generate_mips(const Vector<OverlappedBlock>& others, GpuMemoryObjectType type)
 {
-	if (others.Size() == 2 && type == GpuMemoryObjectType::RenderTexture)
+	if (others.Size() == 3 && type == GpuMemoryObjectType::RenderTexture)
 	{
 		const auto&         b0    = others.At(0);
 		const auto&         b1    = others.At(1);
+		const auto&         b2    = others.At(2);
 		OverlapType         rel0  = b0.relation;
 		OverlapType         rel1  = b1.relation;
+		OverlapType         rel2  = b2.relation;
 		const auto&         o0    = m_objects[b0.object_id];
 		const auto&         o1    = m_objects[b1.object_id];
+		const auto&         o2    = m_objects[b2.object_id];
 		GpuMemoryObjectType type0 = o0.info.object.type;
 		GpuMemoryObjectType type1 = o1.info.object.type;
+		GpuMemoryObjectType type2 = o2.info.object.type;
 
-		if (rel0 == OverlapType::Contains && rel1 == OverlapType::Contains && type0 == GpuMemoryObjectType::StorageBuffer &&
-		    type1 == GpuMemoryObjectType::StorageTexture &&
-		    ((o0.others.Size() == 1 && o0.scenario == GpuMemoryScenario::Common && o1.others.Size() == 1 &&
-		      o1.scenario == GpuMemoryScenario::Common) ||
-		     (o0.others.Size() >= 2 && o0.scenario == GpuMemoryScenario::GenerateMips && o1.others.Size() >= 2 &&
-		      o1.scenario == GpuMemoryScenario::GenerateMips)))
+		if (rel0 == OverlapType::Contains && rel1 == OverlapType::Contains && rel2 == OverlapType::Contains &&
+		    type0 == GpuMemoryObjectType::StorageBuffer && type1 == GpuMemoryObjectType::Texture &&
+		    type2 == GpuMemoryObjectType::StorageTexture &&
+		    ((o0.others.Size() == 2 && o0.scenario == GpuMemoryScenario::TextureTriplet && o1.others.Size() == 2 &&
+		      o1.scenario == GpuMemoryScenario::TextureTriplet && o2.others.Size() == 2 &&
+		      o2.scenario == GpuMemoryScenario::TextureTriplet) ||
+		     (o0.others.Size() >= 3 && o0.scenario == GpuMemoryScenario::GenerateMips && o1.others.Size() >= 3 &&
+		      o1.scenario == GpuMemoryScenario::GenerateMips && o2.others.Size() >= 3 && o2.scenario == GpuMemoryScenario::GenerateMips)))
 		{
 			return true;
 		}
-	} else if (others.Size() >= 2 && type == GpuMemoryObjectType::Texture)
+	} else if (others.Size() >= 3 && type == GpuMemoryObjectType::Texture)
 	{
 		const auto&         b0    = others.At(0);
 		const auto&         b1    = others.At(1);
+		const auto&         b2    = others.At(2);
 		OverlapType         rel0  = b0.relation;
 		OverlapType         rel1  = b1.relation;
+		OverlapType         rel2  = b2.relation;
 		const auto&         o0    = m_objects[b0.object_id];
 		const auto&         o1    = m_objects[b1.object_id];
+		const auto&         o2    = m_objects[b2.object_id];
 		GpuMemoryObjectType type0 = o0.info.object.type;
 		GpuMemoryObjectType type1 = o1.info.object.type;
+		GpuMemoryObjectType type2 = o2.info.object.type;
 
-		if (((rel0 == OverlapType::Contains && rel1 == OverlapType::Contains) ||
-		     (rel0 == OverlapType::Equals && rel1 == OverlapType::Equals)) &&
-		    type0 == GpuMemoryObjectType::StorageBuffer && type1 == GpuMemoryObjectType::StorageTexture &&
-		    o0.scenario == GpuMemoryScenario::GenerateMips && o1.scenario == GpuMemoryScenario::GenerateMips)
+		if (((rel0 == OverlapType::Contains && rel1 == OverlapType::Contains && rel2 == OverlapType::Contains) ||
+		     (rel0 == OverlapType::Equals && rel1 == OverlapType::Equals && rel2 == OverlapType::Equals)) &&
+		    type0 == GpuMemoryObjectType::StorageBuffer && type1 == GpuMemoryObjectType::Texture &&
+		    type2 == GpuMemoryObjectType::StorageTexture && o0.scenario == GpuMemoryScenario::GenerateMips &&
+		    o1.scenario == GpuMemoryScenario::GenerateMips && o2.scenario == GpuMemoryScenario::GenerateMips)
 		{
 			return true;
 		}
 	}
 
+	return false;
+}
+
+bool GpuMemory::create_texture_triplet(const Vector<OverlappedBlock>& others, GpuMemoryObjectType type)
+{
+	if (others.Size() == 2 && type == GpuMemoryObjectType::StorageTexture)
+	{
+		const auto&         b0    = others.At(0);
+		const auto&         b1    = others.At(1);
+		OverlapType         rel0  = b0.relation;
+		OverlapType         rel1  = b1.relation;
+		const auto&         o0    = m_objects[b0.object_id];
+		const auto&         o1    = m_objects[b1.object_id];
+		GpuMemoryObjectType type0 = o0.info.object.type;
+		GpuMemoryObjectType type1 = o1.info.object.type;
+
+		if (rel0 == OverlapType::Equals && rel1 == OverlapType::Equals && type0 == GpuMemoryObjectType::StorageBuffer &&
+		    type1 == GpuMemoryObjectType::Texture &&
+		    (o0.others.Size() == 1 && o0.scenario == GpuMemoryScenario::Common && o1.others.Size() == 1 &&
+		     o1.scenario == GpuMemoryScenario::Common))
+		{
+			return true;
+		}
+	}
 	return false;
 }
 
@@ -912,22 +991,22 @@ void* GpuMemory::CreateObject(GraphicContext* ctx, CommandBuffer* buffer, const 
 
 	if (!others.IsEmpty())
 	{
-		for (const auto& obj: others)
+		int existing_id = -1;
+		if (create_existing(others, info, &existing_id))
 		{
-			auto& h = m_objects[obj.object_id];
+			auto& h = m_objects[existing_id];
 			EXIT_IF(h.free);
 			auto& o = h.info;
-			if (obj.relation == OverlapType::Equals && o.object.type == info.type && info.Equal(o.params))
-			{
-				Update(ctx, obj.object_id);
 
-				o.use_num++;
-				o.use_last_frame = m_current_frame;
-				o.in_use         = true;
-				o.read_only      = info.read_only;
-				o.check_hash     = info.check_hash;
-				return o.object.obj;
-			}
+			Update(ctx, existing_id);
+
+			o.use_num++;
+			o.use_last_frame = m_current_frame;
+			o.in_use         = true;
+			o.read_only      = info.read_only;
+			o.check_hash     = info.check_hash;
+
+			return o.object.obj;
 		}
 
 		if (others.Size() == 1)
@@ -941,6 +1020,7 @@ void* GpuMemory::CreateObject(GraphicContext* ctx, CommandBuffer* buffer, const 
 			{
 				case ObjectsRelation(GpuMemoryObjectType::StorageBuffer, OverlapType::Equals, GpuMemoryObjectType::RenderTexture):
 				case ObjectsRelation(GpuMemoryObjectType::StorageBuffer, OverlapType::Equals, GpuMemoryObjectType::StorageTexture):
+				case ObjectsRelation(GpuMemoryObjectType::StorageBuffer, OverlapType::Equals, GpuMemoryObjectType::Texture):
 				case ObjectsRelation(GpuMemoryObjectType::VideoOutBuffer, OverlapType::Equals, GpuMemoryObjectType::StorageBuffer):
 				{
 					overlap = true;
@@ -970,6 +1050,10 @@ void* GpuMemory::CreateObject(GraphicContext* ctx, CommandBuffer* buffer, const 
 				overlap             = true;
 				create_from_objects = true;
 				scenario            = GpuMemoryScenario::GenerateMips;
+			} else if (create_texture_triplet(others, info.type))
+			{
+				overlap  = true;
+				scenario = GpuMemoryScenario::TextureTriplet;
 			} else
 			{
 				if (!create_all_the_same(others))
@@ -1108,7 +1192,7 @@ void* GpuMemory::CreateObject(GraphicContext* ctx, CommandBuffer* buffer, const 
 	return o.object.obj;
 }
 
-Vector<GpuMemoryObject> GpuMemory::FindObjects(const uint64_t* vaddr, const uint64_t* size, int vaddr_num, bool exact)
+Vector<GpuMemoryObject> GpuMemory::FindObjects(const uint64_t* vaddr, const uint64_t* size, int vaddr_num, bool exact, bool only_first)
 {
 	KYTY_PROFILER_BLOCK("GpuMemory::FindObjects", profiler::colors::Green200);
 
@@ -1116,7 +1200,7 @@ Vector<GpuMemoryObject> GpuMemory::FindObjects(const uint64_t* vaddr, const uint
 
 	Core::LockGuard lock(m_mutex);
 
-	auto objects = FindBlocks(vaddr, size, vaddr_num);
+	auto objects = FindBlocks(vaddr, size, vaddr_num, only_first);
 
 	Vector<GpuMemoryObject> ret;
 
@@ -1244,12 +1328,13 @@ void GpuMemory::Free(GraphicContext* ctx, int object_id)
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-Vector<GpuMemory::OverlappedBlock> GpuMemory::FindBlocks(const uint64_t* vaddr, const uint64_t* size, int vaddr_num)
+Vector<GpuMemory::OverlappedBlock> GpuMemory::FindBlocks(const uint64_t* vaddr, const uint64_t* size, int vaddr_num, bool only_first)
 {
 	KYTY_PROFILER_BLOCK("GpuMemory::FindBlocks", profiler::colors::Green100);
 
 	EXIT_IF(vaddr_num <= 0 || vaddr_num > VADDR_BLOCKS_MAX);
 	EXIT_IF(vaddr == nullptr || size == nullptr);
+	EXIT_IF(only_first && vaddr_num != 1);
 
 	Vector<GpuMemory::OverlappedBlock> ret;
 
@@ -1305,7 +1390,7 @@ Vector<GpuMemory::OverlappedBlock> GpuMemory::FindBlocks(const uint64_t* vaddr, 
 		{
 			if (!b.free)
 			{
-				if (b.block.vaddr_num == 1)
+				if (b.block.vaddr_num == 1 || only_first)
 				{
 					auto type = GetOverlapType(b.block.vaddr[0], b.block.size[0], vaddr[0], size[0]);
 					if (type != OverlapType::None)
@@ -1691,11 +1776,11 @@ void* GpuMemoryCreateObject(GraphicContext* ctx, CommandBuffer* buffer, const ui
 	return g_gpu_memory->CreateObject(ctx, buffer, vaddr, size, vaddr_num, info);
 }
 
-Vector<GpuMemoryObject> GpuMemoryFindObjects(uint64_t vaddr, uint64_t size, bool exact)
+Vector<GpuMemoryObject> GpuMemoryFindObjects(uint64_t vaddr, uint64_t size, bool exact, bool only_first)
 {
 	EXIT_IF(g_gpu_memory == nullptr);
 
-	return g_gpu_memory->FindObjects(&vaddr, &size, 1, exact);
+	return g_gpu_memory->FindObjects(&vaddr, &size, 1, exact, only_first);
 }
 
 void GpuMemoryResetHash(GraphicContext* ctx, const uint64_t* vaddr, const uint64_t* size, int vaddr_num, GpuMemoryObjectType type)
@@ -1744,6 +1829,11 @@ bool GpuMemoryCheckAccessViolation(uint64_t vaddr, uint64_t size)
 	EXIT_IF(g_gpu_memory_watcher == nullptr);
 
 	return g_gpu_memory_watcher->Check(vaddr, size);
+}
+
+bool GpuMemoryWatcherEnabled()
+{
+	return MemoryWatcher::Enabled();
 }
 
 bool VulkanAllocate(GraphicContext* ctx, VulkanMemory* mem)

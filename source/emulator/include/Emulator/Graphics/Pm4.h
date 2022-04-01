@@ -119,6 +119,18 @@ constexpr uint32_t DB_DEPTH_CLEAR                   = 0xB;
 constexpr uint32_t DB_DEPTH_CLEAR_DEPTH_CLEAR_SHIFT = 0;
 constexpr uint32_t DB_DEPTH_CLEAR_DEPTH_CLEAR_MASK  = 0xFFFFFFFF;
 
+constexpr uint32_t PA_SC_SCREEN_SCISSOR_TL            = 0xC;
+constexpr uint32_t PA_SC_SCREEN_SCISSOR_TL_TL_X_SHIFT = 0;
+constexpr uint32_t PA_SC_SCREEN_SCISSOR_TL_TL_X_MASK  = 0xFFFF;
+constexpr uint32_t PA_SC_SCREEN_SCISSOR_TL_TL_Y_SHIFT = 16;
+constexpr uint32_t PA_SC_SCREEN_SCISSOR_TL_TL_Y_MASK  = 0xFFFF;
+
+constexpr uint32_t PA_SC_SCREEN_SCISSOR_BR            = 0xD;
+constexpr uint32_t PA_SC_SCREEN_SCISSOR_BR_BR_X_SHIFT = 0;
+constexpr uint32_t PA_SC_SCREEN_SCISSOR_BR_BR_X_MASK  = 0xFFFF;
+constexpr uint32_t PA_SC_SCREEN_SCISSOR_BR_BR_Y_SHIFT = 16;
+constexpr uint32_t PA_SC_SCREEN_SCISSOR_BR_BR_Y_MASK  = 0xFFFF;
+
 constexpr uint32_t DB_DEPTH_INFO                          = 0xF;
 constexpr uint32_t DB_DEPTH_INFO_ADDR5_SWIZZLE_MASK_SHIFT = 0;
 constexpr uint32_t DB_DEPTH_INFO_ADDR5_SWIZZLE_MASK_MASK  = 0xF;
@@ -177,6 +189,20 @@ constexpr uint32_t DB_DEPTH_SIZE_HEIGHT_TILE_MAX_MASK  = 0x7FF;
 constexpr uint32_t DB_DEPTH_SLICE                      = 0x17;
 constexpr uint32_t DB_DEPTH_SLICE_SLICE_TILE_MAX_SHIFT = 0;
 constexpr uint32_t DB_DEPTH_SLICE_SLICE_TILE_MAX_MASK  = 0x3FFFFF;
+
+constexpr uint32_t PA_SC_GENERIC_SCISSOR_TL                             = 0x90;
+constexpr uint32_t PA_SC_GENERIC_SCISSOR_TL_TL_X_SHIFT                  = 0;
+constexpr uint32_t PA_SC_GENERIC_SCISSOR_TL_TL_X_MASK                   = 0x7FFF;
+constexpr uint32_t PA_SC_GENERIC_SCISSOR_TL_TL_Y_SHIFT                  = 16;
+constexpr uint32_t PA_SC_GENERIC_SCISSOR_TL_TL_Y_MASK                   = 0x7FFF;
+constexpr uint32_t PA_SC_GENERIC_SCISSOR_TL_WINDOW_OFFSET_DISABLE_SHIFT = 31;
+constexpr uint32_t PA_SC_GENERIC_SCISSOR_TL_WINDOW_OFFSET_DISABLE_MASK  = 0x1;
+
+constexpr uint32_t PA_SC_GENERIC_SCISSOR_BR            = 0x91;
+constexpr uint32_t PA_SC_GENERIC_SCISSOR_BR_BR_X_SHIFT = 0;
+constexpr uint32_t PA_SC_GENERIC_SCISSOR_BR_BR_X_MASK  = 0x7FFF;
+constexpr uint32_t PA_SC_GENERIC_SCISSOR_BR_BR_Y_SHIFT = 16;
+constexpr uint32_t PA_SC_GENERIC_SCISSOR_BR_BR_Y_MASK  = 0x7FFF;
 
 constexpr uint32_t PA_SC_VPORT_ZMIN_0 = 0xB4;
 
@@ -277,6 +303,12 @@ constexpr uint32_t DB_EQAA_INTERPOLATE_COMP_Z_MASK          = 0x1;
 constexpr uint32_t DB_EQAA_STATIC_ANCHOR_ASSOCIATIONS_SHIFT = 20;
 constexpr uint32_t DB_EQAA_STATIC_ANCHOR_ASSOCIATIONS_MASK  = 0x1;
 
+constexpr uint32_t CB_COLOR_CONTROL            = 0x202;
+constexpr uint32_t CB_COLOR_CONTROL_MODE_SHIFT = 4;
+constexpr uint32_t CB_COLOR_CONTROL_MODE_MASK  = 0x7;
+constexpr uint32_t CB_COLOR_CONTROL_ROP3_SHIFT = 16;
+constexpr uint32_t CB_COLOR_CONTROL_ROP3_MASK  = 0xFF;
+
 constexpr uint32_t PA_SU_SC_MODE_CNTL                                = 0x205;
 constexpr uint32_t PA_SU_SC_MODE_CNTL_CULL_FRONT_SHIFT               = 0;
 constexpr uint32_t PA_SU_SC_MODE_CNTL_CULL_FRONT_MASK                = 0x1;
@@ -300,6 +332,10 @@ constexpr uint32_t PA_SU_SC_MODE_CNTL_PROVOKING_VTX_LAST_SHIFT       = 19;
 constexpr uint32_t PA_SU_SC_MODE_CNTL_PROVOKING_VTX_LAST_MASK        = 0x1;
 constexpr uint32_t PA_SU_SC_MODE_CNTL_PERSP_CORR_DIS_SHIFT           = 20;
 constexpr uint32_t PA_SU_SC_MODE_CNTL_PERSP_CORR_DIS_MASK            = 0x1;
+
+constexpr uint32_t PA_SU_LINE_CNTL             = 0x282;
+constexpr uint32_t PA_SU_LINE_CNTL_WIDTH_SHIFT = 0;
+constexpr uint32_t PA_SU_LINE_CNTL_WIDTH_MASK  = 0xFFFF;
 
 constexpr uint32_t DB_HTILE_SURFACE                               = 0x2AF;
 constexpr uint32_t DB_HTILE_SURFACE_LINEAR_SHIFT                  = 0;

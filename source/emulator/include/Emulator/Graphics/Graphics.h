@@ -11,14 +11,16 @@
 
 namespace Kyty::Libs::Graphics {
 
+namespace HW {
 struct VsStageRegisters;
+} // namespace HW
 
 KYTY_SUBSYSTEM_DEFINE(Graphics);
 
 void GraphicsDbgDumpDcb(const char* type, uint32_t num_dw, uint32_t* cmd_buffer);
 
-int KYTY_SYSV_ABI      GraphicsSetVsShader(uint32_t* cmd, uint64_t size, const VsStageRegisters* vs_regs, uint32_t shader_modifier);
-int KYTY_SYSV_ABI      GraphicsUpdateVsShader(uint32_t* cmd, uint64_t size, const VsStageRegisters* vs_regs, uint32_t shader_modifier);
+int KYTY_SYSV_ABI      GraphicsSetVsShader(uint32_t* cmd, uint64_t size, const HW::VsStageRegisters* vs_regs, uint32_t shader_modifier);
+int KYTY_SYSV_ABI      GraphicsUpdateVsShader(uint32_t* cmd, uint64_t size, const HW::VsStageRegisters* vs_regs, uint32_t shader_modifier);
 int KYTY_SYSV_ABI      GraphicsSetPsShader(uint32_t* cmd, uint64_t size, const uint32_t* ps_regs);
 int KYTY_SYSV_ABI      GraphicsSetPsShader350(uint32_t* cmd, uint64_t size, const uint32_t* ps_regs);
 int KYTY_SYSV_ABI      GraphicsUpdatePsShader(uint32_t* cmd, uint64_t size, const uint32_t* ps_regs);

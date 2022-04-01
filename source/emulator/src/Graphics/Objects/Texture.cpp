@@ -278,10 +278,12 @@ static void update2_func(GraphicContext* ctx, CommandBuffer* buffer, const uint6
 				mip_height /= 2;
 			}
 		}
-	} else if (objects.Size() >= 2 && objects.At(0).type == GpuMemoryObjectType::StorageBuffer &&
-	           objects.At(1).type == GpuMemoryObjectType::StorageTexture && scenario == GpuMemoryScenario::GenerateMips)
+		//	} else if (objects.Size() >= 2 && objects.At(0).type == GpuMemoryObjectType::StorageBuffer &&
+		//	           objects.At(1).type == GpuMemoryObjectType::StorageTexture && scenario == GpuMemoryScenario::GenerateMips)
+	} else if (objects.Size() >= 3 && objects.At(0).type == GpuMemoryObjectType::StorageBuffer &&
+	           objects.At(1).type == GpuMemoryObjectType::Texture && objects.At(2).type == GpuMemoryObjectType::StorageTexture &&
+	           scenario == GpuMemoryScenario::GenerateMips)
 	{
-
 		for (uint32_t i = 0; i < levels; i++)
 		{
 			VulkanImage* src_image = nullptr;

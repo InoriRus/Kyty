@@ -35,5 +35,5 @@ Define environment variable named Qt5_DIR pointing to the proper version of Qt
 MSVC compiler (cl.exe) is not supported!
 
 External dependencies:
-* Vulkan SDK 1.2.176.1
+* Vulkan SDK 1.2.198.1
 * Qt 5.15.0

@@ -83,6 +83,8 @@ struct VideoOutVulkanImage: public VulkanImage
 
 struct DepthStencilVulkanImage: public VulkanImage
 {
+	bool        compressed   = false;
+	VkImageView texture_view = nullptr;
 };
 
 struct TextureVulkanImage: public VulkanImage

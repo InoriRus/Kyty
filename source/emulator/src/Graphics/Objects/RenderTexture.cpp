@@ -86,10 +86,15 @@ static void update2_func(GraphicContext* ctx, CommandBuffer* buffer, const uint6
 
 	vk_obj->layout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-	if (objects.Size() == 2 && objects.At(0).type == GpuMemoryObjectType::StorageBuffer &&
-	    objects.At(1).type == GpuMemoryObjectType::StorageTexture && scenario == GpuMemoryScenario::GenerateMips)
+	//	if (objects.Size() == 2 && objects.At(0).type == GpuMemoryObjectType::StorageBuffer &&
+	//	    objects.At(1).type == GpuMemoryObjectType::StorageTexture && scenario == GpuMemoryScenario::GenerateMips)
+	//	{
+	//		auto* src_obj = static_cast<StorageTextureVulkanImage*>(objects.At(1).obj);
+	if (objects.Size() == 3 && objects.At(0).type == GpuMemoryObjectType::StorageBuffer &&
+	    objects.At(1).type == GpuMemoryObjectType::Texture && objects.At(2).type == GpuMemoryObjectType::StorageTexture &&
+	    scenario == GpuMemoryScenario::GenerateMips)
 	{
-		auto* src_obj = static_cast<StorageTextureVulkanImage*>(objects.At(1).obj);
+		auto* src_obj = static_cast<StorageTextureVulkanImage*>(objects.At(2).obj);
 
 		uint32_t mip_width  = src_obj->extent.width;
 		uint32_t mip_height = src_obj->extent.height;

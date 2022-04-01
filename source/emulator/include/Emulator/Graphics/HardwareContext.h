@@ -7,7 +7,29 @@
 
 #ifdef KYTY_EMU_ENABLED
 
-namespace Kyty::Libs::Graphics {
+namespace Kyty::Libs::Graphics::HW {
+
+struct ColorBase
+{
+	uint64_t addr = 0;
+};
+
+struct ColorPitch
+{
+	uint32_t pitch_div8_minus1       = 0;
+	uint32_t fmask_pitch_div8_minus1 = 0;
+};
+
+struct ColorSlice
+{
+	uint32_t slice_div64_minus1 = 0;
+};
+
+struct ColorView
+{
+	uint32_t base_array_slice_index = 0;
+	uint32_t last_array_slice_index = 0;
+};
 
 struct ColorInfo
 {
@@ -23,37 +45,83 @@ struct ColorInfo
 	uint32_t channel_order            = 0;
 };
 
+struct ColorAttrib
+{
+	bool     force_dest_alpha_to_one = false;
+	uint32_t tile_mode               = 0;
+	uint32_t fmask_tile_mode         = 0;
+	uint32_t num_samples             = 0;
+	uint32_t num_fragments           = 0;
+};
+
+struct ColorDcc
+{
+	uint32_t max_uncompressed_block_size = 0;
+	uint32_t max_compressed_block_size   = 0;
+	uint32_t min_compressed_block_size   = 0;
+	uint32_t color_transform             = 0;
+	bool     enable_overwrite_combiner   = false;
+	bool     force_independent_blocks    = false;
+};
+
+struct ColorCmask
+{
+	uint64_t addr = 0;
+};
+
+struct ColorCmaskSlice
+{
+	uint32_t slice_minus1 = 0;
+};
+
+struct ColorFmask
+{
+	uint64_t addr = 0;
+};
+
+struct ColorFmaskSlice
+{
+	uint32_t slice_minus1 = 0;
+};
+
+struct ColorClearWord0
+{
+	uint32_t word0 = 0;
+};
+
+struct ColorClearWord1
+{
+	uint32_t word1 = 0;
+};
+
+struct ColorDccAddr
+{
+	uint64_t addr = 0;
+};
+
+struct ColorSize
+{
+	uint32_t width  = 0;
+	uint32_t height = 0;
+};
+
 struct RenderTarget
 {
-	uint64_t base_addr               = 0;
-	uint32_t pitch_div8_minus1       = 0;
-	uint32_t fmask_pitch_div8_minus1 = 0;
-	uint32_t slice_div64_minus1      = 0;
-	uint32_t base_array_slice_index  = 0;
-	uint32_t last_array_slice_index  = 0;
-
-	ColorInfo color_info;
-
-	bool     force_dest_alpha_to_one         = false;
-	uint32_t tile_mode                       = 0;
-	uint32_t fmask_tile_mode                 = 0;
-	uint32_t num_samples                     = 0;
-	uint32_t num_fragments                   = 0;
-	uint32_t dcc_max_uncompressed_block_size = 0;
-	uint32_t dcc_max_compressed_block_size   = 0;
-	uint32_t dcc_min_compressed_block_size   = 0;
-	uint32_t dcc_color_transform             = 0;
-	bool     dcc_enable_overwrite_combiner   = false;
-	bool     dcc_force_independent_blocks    = false;
-	uint64_t cmask_addr                      = 0;
-	uint32_t cmask_slice_minus1              = 0;
-	uint64_t fmask_addr                      = 0;
-	uint32_t fmask_slice_minus1              = 0;
-	uint32_t clear_color_word0               = 0;
-	uint32_t clear_color_word1               = 0;
-	uint64_t dcc_addr                        = 0;
-	uint32_t width                           = 0;
-	uint32_t height                          = 0;
+	ColorBase       base;
+	ColorPitch      pitch;
+	ColorSlice      slice;
+	ColorView       view;
+	ColorInfo       info;
+	ColorAttrib     attrib;
+	ColorDcc        dcc;
+	ColorCmask      cmask;
+	ColorCmaskSlice cmask_slice;
+	ColorFmask      fmask;
+	ColorFmaskSlice fmask_slice;
+	ColorClearWord0 clear_word0;
+	ColorClearWord1 clear_word1;
+	ColorDccAddr    dcc_addr;
+	ColorSize       size;
 };
 
 struct DepthRenderTargetZInfo
@@ -231,6 +299,12 @@ struct EqaaControl
 	bool    static_anchor_associations = false;
 };
 
+struct ColorControl
+{
+	uint8_t mode = 1;
+	uint8_t op   = 0xCC;
+};
+
 struct Viewport
 {
 	float zmin    = 0.0f;
@@ -246,17 +320,22 @@ struct Viewport
 struct ScreenViewport
 {
 	Viewport viewports[15];
-	uint32_t transform_control       = 0;
-	int      scissor_left            = 0;
-	int      scissor_top             = 0;
-	int      scissor_right           = 0;
-	int      scissor_bottom          = 0;
-	uint32_t hw_offset_x             = 0;
-	uint32_t hw_offset_y             = 0;
-	float    guard_band_horz_clip    = 0.0f;
-	float    guard_band_vert_clip    = 0.0f;
-	float    guard_band_horz_discard = 0.0f;
-	float    guard_band_vert_discard = 0.0f;
+	uint32_t transform_control                    = 0;
+	int      screen_scissor_left                  = 0;
+	int      screen_scissor_top                   = 0;
+	int      screen_scissor_right                 = 0;
+	int      screen_scissor_bottom                = 0;
+	int      generic_scissor_left                 = 0;
+	int      generic_scissor_top                  = 0;
+	int      generic_scissor_right                = 0;
+	int      generic_scissor_bottom               = 0;
+	bool     generic_scissor_window_offset_enable = false;
+	uint32_t hw_offset_x                          = 0;
+	uint32_t hw_offset_y                          = 0;
+	float    guard_band_horz_clip                 = 0.0f;
+	float    guard_band_vert_clip                 = 0.0f;
+	float    guard_band_horz_discard              = 0.0f;
+	float    guard_band_vert_discard              = 0.0f;
 };
 
 struct VsStageRegisters
@@ -372,9 +451,22 @@ public:
 
 	void Reset() { *this = HardwareContext(); }
 
-	void SetRenderTarget(uint32_t slot, const RenderTarget& target) { m_render_targets[slot] = target; }
-	void SetColorInfo(uint32_t slot, const ColorInfo& color_info) { m_render_targets[slot].color_info = color_info; }
-	[[nodiscard]] const RenderTarget& GetRenderTargets(uint32_t slot) const { return m_render_targets[slot]; }
+	void SetColorBase(uint32_t slot, const ColorBase& base) { m_render_targets[slot].base = base; }
+	void SetColorPitch(uint32_t slot, const ColorPitch& pitch) { m_render_targets[slot].pitch = pitch; }
+	void SetColorSlice(uint32_t slot, const ColorSlice& slice) { m_render_targets[slot].slice = slice; }
+	void SetColorView(uint32_t slot, const ColorView& view) { m_render_targets[slot].view = view; }
+	void SetColorInfo(uint32_t slot, const ColorInfo& info) { m_render_targets[slot].info = info; }
+	void SetColorAttrib(uint32_t slot, const ColorAttrib& attrib) { m_render_targets[slot].attrib = attrib; }
+	void SetColorDcc(uint32_t slot, const ColorDcc& dcc) { m_render_targets[slot].dcc = dcc; }
+	void SetColorCmask(uint32_t slot, const ColorCmask& cmask) { m_render_targets[slot].cmask = cmask; }
+	void SetColorCmaskSlice(uint32_t slot, const ColorCmaskSlice& cmask_slice) { m_render_targets[slot].cmask_slice = cmask_slice; }
+	void SetColorFmask(uint32_t slot, const ColorFmask& fmask) { m_render_targets[slot].fmask = fmask; }
+	void SetColorFmaskSlice(uint32_t slot, const ColorFmaskSlice& fmask_slice) { m_render_targets[slot].fmask_slice = fmask_slice; }
+	void SetColorClearWord0(uint32_t slot, const ColorClearWord0& clear_word0) { m_render_targets[slot].clear_word0 = clear_word0; }
+	void SetColorClearWord1(uint32_t slot, const ColorClearWord1& clear_word1) { m_render_targets[slot].clear_word1 = clear_word1; }
+	void SetColorDccAddr(uint32_t slot, const ColorDccAddr& dcc_addr) { m_render_targets[slot].dcc_addr = dcc_addr; }
+	void SetColorSize(uint32_t slot, const ColorSize& size) { m_render_targets[slot].size = size; }
+	[[nodiscard]] const RenderTarget& GetRenderTarget(uint32_t slot) const { return m_render_targets[slot]; }
 
 	void                              SetBlendControl(uint32_t slot, const BlendControl& control) { m_blend_control[slot] = control; }
 	[[nodiscard]] const BlendControl& GetBlendControl(uint32_t slot) const { return m_blend_control[slot]; }
@@ -409,10 +501,18 @@ public:
 	void SetViewportTransformControl(uint32_t control) { m_screen_viewport.transform_control = control; }
 	void SetScreenScissor(int left, int top, int right, int bottom)
 	{
-		m_screen_viewport.scissor_left   = left;
-		m_screen_viewport.scissor_top    = top;
-		m_screen_viewport.scissor_right  = right;
-		m_screen_viewport.scissor_bottom = bottom;
+		m_screen_viewport.screen_scissor_left   = left;
+		m_screen_viewport.screen_scissor_top    = top;
+		m_screen_viewport.screen_scissor_right  = right;
+		m_screen_viewport.screen_scissor_bottom = bottom;
+	}
+	void SetGenericScissor(int left, int top, int right, int bottom, bool window_offset_enable)
+	{
+		m_screen_viewport.generic_scissor_left                 = left;
+		m_screen_viewport.generic_scissor_top                  = top;
+		m_screen_viewport.generic_scissor_right                = right;
+		m_screen_viewport.generic_scissor_bottom               = bottom;
+		m_screen_viewport.generic_scissor_window_offset_enable = window_offset_enable;
 	}
 	void SetHardwareScreenOffset(uint32_t offset_x, uint32_t offset_y)
 	{
@@ -474,6 +574,8 @@ public:
 	void                                SetStencilControl(const StencilControl& control) { m_stencil_control = control; }
 	[[nodiscard]] const StencilMask&    GetStencilMask() const { return m_stencil_mask; }
 	void                                SetStencilMask(const StencilMask& mask) { m_stencil_mask = mask; }
+	[[nodiscard]] const ColorControl&   GetColorControl() const { return m_color_control; }
+	void                                SetColorControl(const ColorControl& control) { m_color_control = control; }
 
 	void SetVsUserSgpr(uint32_t id, uint32_t value, UserSgprType type)
 	{
@@ -508,13 +610,19 @@ public:
 	[[nodiscard]] uint8_t GetStencilClearValue() const { return m_stencil_clear_value; }
 	void                  SetStencilClearValue(uint8_t clear_value) { m_stencil_clear_value = clear_value; }
 
+	[[nodiscard]] float GetLineWidth() const { return m_line_width; }
+	void                SetLineWidth(float width) { m_line_width = width; }
+
 private:
+	float m_line_width = 1.0f;
+
 	BlendControl   m_blend_control[8];
 	BlendColor     m_blend_color;
 	RenderTarget   m_render_targets[8];
 	uint32_t       m_render_target_mask = 0;
 	ScreenViewport m_screen_viewport;
 	ClipControl    m_clip_control;
+	ColorControl   m_color_control;
 
 	VertexShaderInfo  m_vs;
 	PixelShaderInfo   m_ps;
@@ -580,7 +688,7 @@ inline uint32_t VsStageRegisters::GetUnknown2() const
 	return m_spiShaderPgmRsrc2Vs & 0xFFFFEFFFu;
 }
 
-} // namespace Kyty::Libs::Graphics
+} // namespace Kyty::Libs::Graphics::HW
 
 #endif // KYTY_EMU_ENABLED
 

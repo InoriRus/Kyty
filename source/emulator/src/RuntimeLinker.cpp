@@ -1057,7 +1057,10 @@ void RuntimeLinker::LoadProgramToMemory(Program* program)
 		                                    program->base_vaddr + program->base_size_aligned + exception_handler_size + tls_handler_size,
 		                                    kyty_exception_handler);
 
-		VirtualMemory::ExceptionHandler::InstallVectored(kyty_exception_handler);
+		if (Libs::Graphics::GpuMemoryWatcherEnabled())
+		{
+			VirtualMemory::ExceptionHandler::InstallVectored(kyty_exception_handler);
+		}
 	}
 
 	// program->elf->SetBaseVAddr(program->base_vaddr);

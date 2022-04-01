@@ -1777,7 +1777,7 @@ KYTY_SHADER_PARSER(shader_parse)
 	return ptr - src;
 }
 
-static void vs_print(const char* func, const VsStageRegisters& vs)
+static void vs_print(const char* func, const HW::VsStageRegisters& vs)
 {
 	printf("%s\n", func);
 
@@ -1792,7 +1792,7 @@ static void vs_print(const char* func, const VsStageRegisters& vs)
 	printf("\t m_paClVsOutCntl           = 0x%08" PRIx32 "\n", vs.m_paClVsOutCntl);
 }
 
-static void ps_print(const char* func, const PsStageRegisters& ps)
+static void ps_print(const char* func, const HW::PsStageRegisters& ps)
 {
 	printf("%s\n", func);
 
@@ -1820,7 +1820,7 @@ static void ps_print(const char* func, const PsStageRegisters& ps)
 	printf("\t m_cbShaderMask              = 0x%08" PRIx32 "\n", ps.m_cbShaderMask);
 }
 
-static void cs_print(const char* func, const CsStageRegisters& cs)
+static void cs_print(const char* func, const HW::CsStageRegisters& cs)
 {
 	printf("%s\n", func);
 
@@ -1872,7 +1872,7 @@ static void bi_print(const char* func, const ShaderBinaryInfo& bi)
 	printf("\t crc32                      = 0x%08" PRIx32 "\n", bi.crc32);
 }
 
-static void vs_check(const VsStageRegisters& vs)
+static void vs_check(const HW::VsStageRegisters& vs)
 {
 	EXIT_NOT_IMPLEMENTED(vs.GetStreamoutEnabled() != false);
 	// EXIT_NOT_IMPLEMENTED(vs.GetSgprCount() != 0x00000000);
@@ -1884,7 +1884,7 @@ static void vs_check(const VsStageRegisters& vs)
 	EXIT_NOT_IMPLEMENTED(vs.m_paClVsOutCntl != 0x00000000);
 }
 
-static void ps_check(const PsStageRegisters& ps)
+static void ps_check(const HW::PsStageRegisters& ps)
 {
 	EXIT_NOT_IMPLEMENTED(ps.target_output_mode[0] != 4 && ps.target_output_mode[0] != 9);
 	EXIT_NOT_IMPLEMENTED(ps.conservative_z_export_value != 0x00000000);
@@ -1907,7 +1907,7 @@ static void ps_check(const PsStageRegisters& ps)
 	EXIT_NOT_IMPLEMENTED(ps.m_cbShaderMask != 0x0000000f);
 }
 
-static void cs_check(const CsStageRegisters& cs)
+static void cs_check(const HW::CsStageRegisters& cs)
 {
 	// EXIT_NOT_IMPLEMENTED(cs.num_thread_x != 0x00000040);
 	// EXIT_NOT_IMPLEMENTED(cs.num_thread_y != 0x00000001);
@@ -2207,7 +2207,7 @@ static void ShaderParseFetch(ShaderVertexInputInfo* info, const uint32_t* fetch,
 }
 
 static void ShaderGetStorageBuffer(ShaderStorageResources* info, int start_index, int slot, ShaderStorageUsage usage,
-                                   const UserSgprInfo& user_sgpr, const uint32_t* extended_buffer)
+                                   const HW::UserSgprInfo& user_sgpr, const uint32_t* extended_buffer)
 {
 	EXIT_IF(info == nullptr);
 
@@ -2230,7 +2230,7 @@ static void ShaderGetStorageBuffer(ShaderStorageResources* info, int start_index
 		for (int j = 0; j < 4; j++)
 		{
 			auto type = user_sgpr.type[start_index + j];
-			EXIT_NOT_IMPLEMENTED(type != UserSgprType::Vsharp && type != UserSgprType::Region);
+			EXIT_NOT_IMPLEMENTED(type != HW::UserSgprType::Vsharp && type != HW::UserSgprType::Region);
 		}
 	}
 
@@ -2243,7 +2243,7 @@ static void ShaderGetStorageBuffer(ShaderStorageResources* info, int start_index
 }
 
 static void ShaderGetTextureBuffer(ShaderTextureResources* info, int start_index, int slot, ShaderTextureUsage usage,
-                                   const UserSgprInfo& user_sgpr, const uint32_t* extended_buffer)
+                                   const HW::UserSgprInfo& user_sgpr, const uint32_t* extended_buffer)
 {
 	EXIT_IF(info == nullptr);
 
@@ -2256,33 +2256,45 @@ static void ShaderGetTextureBuffer(ShaderTextureResources* info, int start_index
 	EXIT_NOT_IMPLEMENTED(!extended && start_index >= 16);
 	EXIT_NOT_IMPLEMENTED(extended && !(start_index >= 16));
 
-	info->start_register[index] = start_index;
-	info->extended[index]       = extended;
-	info->slots[index]          = slot;
-	info->usages[index]         = usage;
+	info->desc[index].start_register = start_index;
+	info->desc[index].extended       = extended;
+	info->desc[index].slot           = slot;
+	info->desc[index].usage          = usage;
+
+	EXIT_IF(usage == ShaderTextureUsage::Unknown);
+
+	if (usage == ShaderTextureUsage::ReadWrite)
+	{
+		info->textures2d_storage_num++;
+		info->desc[index].textures2d_without_sampler = true;
+	} else
+	{
+		info->textures2d_sampled_num++;
+		info->desc[index].textures2d_without_sampler = false;
+	}
 
 	if (!extended)
 	{
 		for (int j = 0; j < 8; j++)
 		{
 			auto type = user_sgpr.type[start_index + j];
-			EXIT_NOT_IMPLEMENTED(type != UserSgprType::Vsharp && type != UserSgprType::Region);
+			EXIT_NOT_IMPLEMENTED(type != HW::UserSgprType::Vsharp && type != HW::UserSgprType::Region);
 		}
 	}
 
-	info->textures[index].fields[0] = (extended ? extended_buffer[start_index - 16 + 0] : user_sgpr.value[start_index + 0]);
-	info->textures[index].fields[1] = (extended ? extended_buffer[start_index - 16 + 1] : user_sgpr.value[start_index + 1]);
-	info->textures[index].fields[2] = (extended ? extended_buffer[start_index - 16 + 2] : user_sgpr.value[start_index + 2]);
-	info->textures[index].fields[3] = (extended ? extended_buffer[start_index - 16 + 3] : user_sgpr.value[start_index + 3]);
-	info->textures[index].fields[4] = (extended ? extended_buffer[start_index - 16 + 4] : user_sgpr.value[start_index + 4]);
-	info->textures[index].fields[5] = (extended ? extended_buffer[start_index - 16 + 5] : user_sgpr.value[start_index + 5]);
-	info->textures[index].fields[6] = (extended ? extended_buffer[start_index - 16 + 6] : user_sgpr.value[start_index + 6]);
-	info->textures[index].fields[7] = (extended ? extended_buffer[start_index - 16 + 7] : user_sgpr.value[start_index + 7]);
+	info->desc[index].texture.fields[0] = (extended ? extended_buffer[start_index - 16 + 0] : user_sgpr.value[start_index + 0]);
+	info->desc[index].texture.fields[1] = (extended ? extended_buffer[start_index - 16 + 1] : user_sgpr.value[start_index + 1]);
+	info->desc[index].texture.fields[2] = (extended ? extended_buffer[start_index - 16 + 2] : user_sgpr.value[start_index + 2]);
+	info->desc[index].texture.fields[3] = (extended ? extended_buffer[start_index - 16 + 3] : user_sgpr.value[start_index + 3]);
+	info->desc[index].texture.fields[4] = (extended ? extended_buffer[start_index - 16 + 4] : user_sgpr.value[start_index + 4]);
+	info->desc[index].texture.fields[5] = (extended ? extended_buffer[start_index - 16 + 5] : user_sgpr.value[start_index + 5]);
+	info->desc[index].texture.fields[6] = (extended ? extended_buffer[start_index - 16 + 6] : user_sgpr.value[start_index + 6]);
+	info->desc[index].texture.fields[7] = (extended ? extended_buffer[start_index - 16 + 7] : user_sgpr.value[start_index + 7]);
 
 	info->textures_num++;
 }
 
-static void ShaderGetSampler(ShaderSamplerResources* info, int start_index, int slot, const UserSgprInfo& user_sgpr,
+static void ShaderGetSampler(ShaderSamplerResources* info, int start_index, int slot, const HW::UserSgprInfo& user_sgpr,
                              const uint32_t* extended_buffer)
 {
 	EXIT_IF(info == nullptr);
@@ -2305,7 +2317,7 @@ static void ShaderGetSampler(ShaderSamplerResources* info, int start_index, int 
 		for (int j = 0; j < 4; j++)
 		{
 			auto type = user_sgpr.type[start_index + j];
-			EXIT_NOT_IMPLEMENTED(type != UserSgprType::Vsharp && type != UserSgprType::Region);
+			EXIT_NOT_IMPLEMENTED(type != HW::UserSgprType::Vsharp && type != HW::UserSgprType::Region);
 		}
 	}
 
@@ -2317,7 +2329,7 @@ static void ShaderGetSampler(ShaderSamplerResources* info, int start_index, int 
 	info->samplers_num++;
 }
 
-static void ShaderGetGdsPointer(ShaderGdsResources* info, int start_index, int slot, const UserSgprInfo& user_sgpr,
+static void ShaderGetGdsPointer(ShaderGdsResources* info, int start_index, int slot, const HW::UserSgprInfo& user_sgpr,
                                 const uint32_t* extended_buffer)
 {
 	EXIT_IF(info == nullptr);
@@ -2338,7 +2350,7 @@ static void ShaderGetGdsPointer(ShaderGdsResources* info, int start_index, int s
 	if (!extended)
 	{
 		auto type = user_sgpr.type[start_index];
-		EXIT_NOT_IMPLEMENTED(type != UserSgprType::Unknown);
+		EXIT_NOT_IMPLEMENTED(type != HW::UserSgprType::Unknown);
 	}
 
 	info->pointers[index].field = (extended ? extended_buffer[start_index - 16] : user_sgpr.value[start_index]);
@@ -2381,7 +2393,7 @@ void ShaderCalcBindingIndices(ShaderBindResources* bind)
 	EXIT_IF((bind->push_constant_size % 16) != 0);
 }
 
-void ShaderGetInputInfoVS(const VertexShaderInfo* regs, ShaderVertexInputInfo* info)
+void ShaderGetInputInfoVS(const HW::VertexShaderInfo* regs, ShaderVertexInputInfo* info)
 {
 	KYTY_PROFILER_FUNCTION();
 
@@ -2468,7 +2480,7 @@ void ShaderGetInputInfoVS(const VertexShaderInfo* regs, ShaderVertexInputInfo* i
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-void ShaderGetInputInfoPS(const PixelShaderInfo* regs, const ShaderVertexInputInfo* vs_info, ShaderPixelInputInfo* ps_info)
+void ShaderGetInputInfoPS(const HW::PixelShaderInfo* regs, const ShaderVertexInputInfo* vs_info, ShaderPixelInputInfo* ps_info)
 {
 	KYTY_PROFILER_FUNCTION();
 
@@ -2522,7 +2534,7 @@ void ShaderGetInputInfoPS(const PixelShaderInfo* regs, const ShaderVertexInputIn
 				{
 					ShaderGetTextureBuffer(&ps_info->bind.textures2D, usage.start_register, usage.slot, ShaderTextureUsage::ReadOnly,
 					                       regs->ps_user_sgpr, extended_buffer);
-					EXIT_NOT_IMPLEMENTED(ps_info->bind.textures2D.textures[ps_info->bind.textures2D.textures_num - 1].Type() != 9);
+					EXIT_NOT_IMPLEMENTED(ps_info->bind.textures2D.desc[ps_info->bind.textures2D.textures_num - 1].texture.Type() != 9);
 				}
 				break;
 			case 0x01:
@@ -2540,7 +2552,7 @@ void ShaderGetInputInfoPS(const PixelShaderInfo* regs, const ShaderVertexInputIn
 				{
 					ShaderGetTextureBuffer(&ps_info->bind.textures2D, usage.start_register, usage.slot, ShaderTextureUsage::ReadWrite,
 					                       regs->ps_user_sgpr, extended_buffer);
-					EXIT_NOT_IMPLEMENTED(ps_info->bind.textures2D.textures[ps_info->bind.textures2D.textures_num - 1].Type() != 9);
+					EXIT_NOT_IMPLEMENTED(ps_info->bind.textures2D.desc[ps_info->bind.textures2D.textures_num - 1].texture.Type() != 9);
 				}
 				break;
 			case 0x1b:
@@ -2562,7 +2574,7 @@ void ShaderGetInputInfoPS(const PixelShaderInfo* regs, const ShaderVertexInputIn
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-void ShaderGetInputInfoCS(const ComputeShaderInfo* regs, ShaderComputeInputInfo* info)
+void ShaderGetInputInfoCS(const HW::ComputeShaderInfo* regs, ShaderComputeInputInfo* info)
 {
 	EXIT_IF(info == nullptr);
 	EXIT_IF(regs == nullptr);
@@ -2602,7 +2614,7 @@ void ShaderGetInputInfoCS(const ComputeShaderInfo* regs, ShaderComputeInputInfo*
 				{
 					ShaderGetTextureBuffer(&info->bind.textures2D, usage.start_register, usage.slot, ShaderTextureUsage::ReadOnly,
 					                       regs->cs_user_sgpr, extended_buffer);
-					EXIT_NOT_IMPLEMENTED(info->bind.textures2D.textures[info->bind.textures2D.textures_num - 1].Type() != 9);
+					EXIT_NOT_IMPLEMENTED(info->bind.textures2D.desc[info->bind.textures2D.textures_num - 1].texture.Type() != 9);
 				}
 				break;
 			case 0x02:
@@ -2620,7 +2632,7 @@ void ShaderGetInputInfoCS(const ComputeShaderInfo* regs, ShaderComputeInputInfo*
 				{
 					ShaderGetTextureBuffer(&info->bind.textures2D, usage.start_register, usage.slot, ShaderTextureUsage::ReadWrite,
 					                       regs->cs_user_sgpr, extended_buffer);
-					EXIT_NOT_IMPLEMENTED(info->bind.textures2D.textures[info->bind.textures2D.textures_num - 1].Type() != 9);
+					EXIT_NOT_IMPLEMENTED(info->bind.textures2D.desc[info->bind.textures2D.textures_num - 1].texture.Type() != 9);
 				}
 				break;
 			case 0x07:
@@ -2692,7 +2704,7 @@ static void ShaderDbgDumpResources(const ShaderBindResources& bind)
 
 	for (int i = 0; i < bind.textures2D.textures_num; i++)
 	{
-		const auto& r = bind.textures2D.textures[i];
+		const auto& r = bind.textures2D.desc[i].texture;
 
 		printf("\t Texture %d\n", i);
 
@@ -2723,10 +2735,10 @@ static void ShaderDbgDumpResources(const ShaderBindResources& bind)
 		printf("\t\t MinLodWarn()    = %" PRIu16 "\n", r.MinLodWarn());
 		printf("\t\t CounterBankId() = %" PRIu8 "\n", r.CounterBankId());
 		printf("\t\t LodHdwCntEn()   = %s\n", r.LodHdwCntEn() ? "true" : "false");
-		printf("\t\t slot            = %d\n", bind.textures2D.slots[i]);
-		printf("\t\t start_register  = %d\n", bind.textures2D.start_register[i]);
-		printf("\t\t extended        = %s\n", (bind.textures2D.extended[i] ? "true" : "false"));
-		printf("\t\t usage           = %s\n", Core::EnumName(bind.textures2D.usages[i]).C_Str());
+		printf("\t\t slot            = %d\n", bind.textures2D.desc[i].slot);
+		printf("\t\t start_register  = %d\n", bind.textures2D.desc[i].start_register);
+		printf("\t\t extended        = %s\n", (bind.textures2D.desc[i].extended ? "true" : "false"));
+		printf("\t\t usage           = %s\n", Core::EnumName(bind.textures2D.desc[i].usage).C_Str());
 	}
 
 	for (int i = 0; i < bind.samplers.samplers_num; i++)
@@ -3017,7 +3029,7 @@ private:
 	String     m_file_name;
 };
 
-ShaderCode ShaderParseVS(const VertexShaderInfo* regs)
+ShaderCode ShaderParseVS(const HW::VertexShaderInfo* regs)
 {
 	KYTY_PROFILER_FUNCTION(profiler::colors::Amber300);
 
@@ -3094,7 +3106,7 @@ Vector<uint32_t> ShaderRecompileVS(const ShaderCode& code, const ShaderVertexInp
 	return ret;
 }
 
-ShaderCode ShaderParsePS(const PixelShaderInfo* regs)
+ShaderCode ShaderParsePS(const HW::PixelShaderInfo* regs)
 {
 	KYTY_PROFILER_FUNCTION(profiler::colors::Blue300);
 
@@ -3178,7 +3190,7 @@ Vector<uint32_t> ShaderRecompilePS(const ShaderCode& code, const ShaderPixelInpu
 	return ret;
 }
 
-ShaderCode ShaderParseCS(const ComputeShaderInfo* regs)
+ShaderCode ShaderParseCS(const HW::ComputeShaderInfo* regs)
 {
 	KYTY_PROFILER_FUNCTION(profiler::colors::CyanA700);
 
@@ -3246,111 +3258,110 @@ Vector<uint32_t> ShaderRecompileCS(const ShaderCode& code, const ShaderComputeIn
 	return ret;
 }
 
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
-static ShaderBindParameters ShaderUpdateBindInfo(const ShaderCode& code, const ShaderBindResources* bind)
-{
-	ShaderBindParameters p {};
-
-	auto find_image_op = [&](int index, int s, bool& found, bool& without_sampler)
-	{
-		const auto& insts = code.GetInstructions();
-		int         size  = static_cast<int>(insts.Size());
-		for (int i = index; i < size; i++)
-		{
-			const auto& inst = insts.At(i);
-
-			if ((inst.dst.type == ShaderOperandType::Sgpr && s >= inst.dst.register_id && s < inst.dst.register_id + inst.dst.size) ||
-			    (inst.dst2.type == ShaderOperandType::Sgpr && s >= inst.dst2.register_id && s < inst.dst2.register_id + inst.dst2.size) ||
-			    inst.type == ShaderInstructionType::SEndpgm)
-			{
-				break;
-			}
-
-			if (inst.type == ShaderInstructionType::ImageStore || inst.type == ShaderInstructionType::ImageStoreMip ||
-			    inst.type == ShaderInstructionType::ImageLoad)
-			{
-				if (inst.src[1].register_id == s)
-				{
-					EXIT_NOT_IMPLEMENTED(found && !without_sampler);
-					without_sampler = true;
-					found           = true;
-				}
-			} else if (inst.type == ShaderInstructionType::ImageSample)
-			{
-				if (inst.src[1].register_id == s)
-				{
-					EXIT_NOT_IMPLEMENTED(found && without_sampler);
-					without_sampler = false;
-					found           = true;
-				}
-			}
-		}
-	};
-
-	if (bind->textures2D.textures_num > 0)
-	{
-		const auto& insts = code.GetInstructions();
-
-		for (int ti = 0; ti < bind->textures2D.textures_num; ti++)
-		{
-			bool found = false;
-			if (bind->textures2D.extended[ti])
-			{
-				int s = bind->extended.start_register;
-
-				int index = 0;
-				for (const auto& inst: insts)
-				{
-					if ((inst.dst.type == ShaderOperandType::Sgpr && s >= inst.dst.register_id &&
-					     s < inst.dst.register_id + inst.dst.size) ||
-					    (inst.dst2.type == ShaderOperandType::Sgpr && s >= inst.dst2.register_id &&
-					     s < inst.dst2.register_id + inst.dst2.size) ||
-					    inst.type == ShaderInstructionType::SEndpgm)
-					{
-						break;
-					}
-
-					if (inst.type == ShaderInstructionType::SLoadDwordx8 && inst.src[0].register_id == s &&
-					    static_cast<int>(inst.src[1].constant.u >> 2u) + 16 == bind->textures2D.start_register[ti])
-					{
-						find_image_op(index + 1, inst.dst.register_id, found, p.textures2d_without_sampler[ti]);
-					}
-
-					index++;
-				}
-			} else
-			{
-				find_image_op(0, bind->textures2D.start_register[ti], found, p.textures2d_without_sampler[ti]);
-			}
-
-			EXIT_NOT_IMPLEMENTED(!found);
-
-			if (p.textures2d_without_sampler[ti])
-			{
-				p.textures2d_storage_num++;
-			} else
-			{
-				p.textures2d_sampled_num++;
-			}
-		}
-	}
-	return p;
-}
-
-ShaderBindParameters ShaderGetBindParametersVS(const ShaderCode& code, const ShaderVertexInputInfo* input_info)
-{
-	return ShaderUpdateBindInfo(code, &input_info->bind);
-}
-
-ShaderBindParameters ShaderGetBindParametersPS(const ShaderCode& code, const ShaderPixelInputInfo* input_info)
-{
-	return ShaderUpdateBindInfo(code, &input_info->bind);
-}
-
-ShaderBindParameters ShaderGetBindParametersCS(const ShaderCode& code, const ShaderComputeInputInfo* input_info)
-{
-	return ShaderUpdateBindInfo(code, &input_info->bind);
-}
+//// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+// static ShaderBindParameters ShaderUpdateBindInfo(const ShaderCode& code, const ShaderBindResources* bind)
+//{
+//	ShaderBindParameters p {};
+//
+//	auto find_image_op = [&](int index, int s, bool& found, bool& without_sampler)
+//	{
+//		const auto& insts = code.GetInstructions();
+//		int         size  = static_cast<int>(insts.Size());
+//		for (int i = index; i < size; i++)
+//		{
+//			const auto& inst = insts.At(i);
+//
+//			if ((inst.dst.type == ShaderOperandType::Sgpr && s >= inst.dst.register_id && s < inst.dst.register_id + inst.dst.size) ||
+//			    (inst.dst2.type == ShaderOperandType::Sgpr && s >= inst.dst2.register_id && s < inst.dst2.register_id + inst.dst2.size) ||
+//			    inst.type == ShaderInstructionType::SEndpgm)
+//			{
+//				break;
+//			}
+//
+//			if (inst.type == ShaderInstructionType::ImageStore || inst.type == ShaderInstructionType::ImageStoreMip)
+//			{
+//				if (inst.src[1].register_id == s)
+//				{
+//					EXIT_NOT_IMPLEMENTED(found && !without_sampler);
+//					without_sampler = true;
+//					found           = true;
+//				}
+//			} else if (inst.type == ShaderInstructionType::ImageSample || inst.type == ShaderInstructionType::ImageLoad)
+//			{
+//				if (inst.src[1].register_id == s)
+//				{
+//					EXIT_NOT_IMPLEMENTED(found && without_sampler);
+//					without_sampler = false;
+//					found           = true;
+//				}
+//			}
+//		}
+//	};
+//
+//	if (bind->textures2D.textures_num > 0)
+//	{
+//		const auto& insts = code.GetInstructions();
+//
+//		for (int ti = 0; ti < bind->textures2D.textures_num; ti++)
+//		{
+//			bool found = false;
+//			if (bind->textures2D.desc[ti].extended)
+//			{
+//				int s = bind->extended.start_register;
+//
+//				int index = 0;
+//				for (const auto& inst: insts)
+//				{
+//					if ((inst.dst.type == ShaderOperandType::Sgpr && s >= inst.dst.register_id &&
+//					     s < inst.dst.register_id + inst.dst.size) ||
+//					    (inst.dst2.type == ShaderOperandType::Sgpr && s >= inst.dst2.register_id &&
+//					     s < inst.dst2.register_id + inst.dst2.size) ||
+//					    inst.type == ShaderInstructionType::SEndpgm)
+//					{
+//						break;
+//					}
+//
+//					if (inst.type == ShaderInstructionType::SLoadDwordx8 && inst.src[0].register_id == s &&
+//					    static_cast<int>(inst.src[1].constant.u >> 2u) + 16 == bind->textures2D.desc[ti].start_register)
+//					{
+//						find_image_op(index + 1, inst.dst.register_id, found, p.textures2d_without_sampler[ti]);
+//					}
+//
+//					index++;
+//				}
+//			} else
+//			{
+//				find_image_op(0, bind->textures2D.desc[ti].start_register, found, p.textures2d_without_sampler[ti]);
+//			}
+//
+//			EXIT_NOT_IMPLEMENTED(!found);
+//
+//			if (p.textures2d_without_sampler[ti])
+//			{
+//				p.textures2d_storage_num++;
+//			} else
+//			{
+//				p.textures2d_sampled_num++;
+//			}
+//		}
+//	}
+//	return p;
+//}
+//
+// ShaderBindParameters ShaderGetBindParametersVS(const ShaderCode& code, const ShaderVertexInputInfo* input_info)
+//{
+//	return ShaderUpdateBindInfo(code, &input_info->bind);
+//}
+//
+// ShaderBindParameters ShaderGetBindParametersPS(const ShaderCode& code, const ShaderPixelInputInfo* input_info)
+//{
+//	return ShaderUpdateBindInfo(code, &input_info->bind);
+//}
+//
+// ShaderBindParameters ShaderGetBindParametersCS(const ShaderCode& code, const ShaderComputeInputInfo* input_info)
+//{
+//	return ShaderUpdateBindInfo(code, &input_info->bind);
+//}
 
 static void ShaderGetBindIds(ShaderId* ret, const ShaderBindResources& bind)
 {
@@ -3402,10 +3413,10 @@ static void ShaderGetBindIds(ShaderId* ret, const ShaderBindResources& bind)
 		// ret->ids.Add(r.MinLodWarn());
 		// ret->ids.Add(r.CounterBankId());
 		// ret->ids.Add(static_cast<uint32_t>(r.LodHdwCntEn()));
-		ret->ids.Add(bind.textures2D.slots[i]);
-		ret->ids.Add(bind.textures2D.start_register[i]);
-		ret->ids.Add(static_cast<uint32_t>(bind.textures2D.extended[i]));
-		ret->ids.Add(static_cast<uint32_t>(bind.textures2D.usages[i]));
+		ret->ids.Add(bind.textures2D.desc[i].slot);
+		ret->ids.Add(bind.textures2D.desc[i].start_register);
+		ret->ids.Add(static_cast<uint32_t>(bind.textures2D.desc[i].extended));
+		ret->ids.Add(static_cast<uint32_t>(bind.textures2D.desc[i].usage));
 	}
 
 	ret->ids.Add(bind.samplers.samplers_num);
@@ -3460,7 +3471,7 @@ static void ShaderGetBindIds(ShaderId* ret, const ShaderBindResources& bind)
 	ret->ids.Add(bind.extended.start_register);
 }
 
-ShaderId ShaderGetIdVS(const VertexShaderInfo* regs, const ShaderVertexInputInfo* input_info)
+ShaderId ShaderGetIdVS(const HW::VertexShaderInfo* regs, const ShaderVertexInputInfo* input_info)
 {
 	KYTY_PROFILER_FUNCTION();
 
@@ -3526,7 +3537,7 @@ ShaderId ShaderGetIdVS(const VertexShaderInfo* regs, const ShaderVertexInputInfo
 	return ret;
 }
 
-ShaderId ShaderGetIdPS(const PixelShaderInfo* regs, const ShaderPixelInputInfo* input_info)
+ShaderId ShaderGetIdPS(const HW::PixelShaderInfo* regs, const ShaderPixelInputInfo* input_info)
 {
 	KYTY_PROFILER_FUNCTION();
 
@@ -3567,7 +3578,7 @@ ShaderId ShaderGetIdPS(const PixelShaderInfo* regs, const ShaderPixelInputInfo* 
 	return ret;
 }
 
-ShaderId ShaderGetIdCS(const ComputeShaderInfo* regs, const ShaderComputeInputInfo* input_info)
+ShaderId ShaderGetIdCS(const HW::ComputeShaderInfo* regs, const ShaderComputeInputInfo* input_info)
 {
 	const auto* src = reinterpret_cast<const uint32_t*>(regs->cs_regs.data_addr);
 

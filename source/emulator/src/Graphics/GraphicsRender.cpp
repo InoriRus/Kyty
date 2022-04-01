@@ -100,9 +100,14 @@ struct PipelineStaticParameters
 
 struct PipelineDynamicParameters
 {
-	bool vk_dynamic_state_stencil_compare_mask = false;
-	bool vk_dynamic_state_stencil_write_mask   = false;
-	bool vk_dynamic_state_stencil_reference    = false;
+	bool vk_dynamic_state_line_width             = false;
+	bool vk_dynamic_state_stencil_compare_mask   = false;
+	bool vk_dynamic_state_stencil_write_mask     = false;
+	bool vk_dynamic_state_stencil_reference      = false;
+	bool vk_dynamic_state_color_write_enable_ext = false;
+
+	float line_width         = 1.0f;
+	bool  color_write_enable = true;
 
 	PipelineStencilDynamicState stencil_front;
 	PipelineStencilDynamicState stencil_back;
@@ -111,20 +116,20 @@ struct PipelineDynamicParameters
 };
 #pragma pack(pop)
 
-struct PipelineAdditionalParameters
-{
-	ShaderBindParameters vs_bind;
-	ShaderBindParameters ps_bind;
-	ShaderBindParameters cs_bind;
-};
+// struct PipelineAdditionalParameters
+//{
+//	ShaderBindParameters vs_bind;
+//	ShaderBindParameters ps_bind;
+//	ShaderBindParameters cs_bind;
+//};
 
 struct VulkanPipeline
 {
-	VkPipelineLayout                    pipeline_layout   = nullptr;
-	VkPipeline                          pipeline          = nullptr;
-	const PipelineStaticParameters*     static_params     = nullptr;
-	PipelineDynamicParameters*          dynamic_params    = nullptr;
-	const PipelineAdditionalParameters* additional_params = nullptr;
+	VkPipelineLayout                pipeline_layout = nullptr;
+	VkPipeline                      pipeline        = nullptr;
+	const PipelineStaticParameters* static_params   = nullptr;
+	PipelineDynamicParameters*      dynamic_params  = nullptr;
+	// const PipelineAdditionalParameters* additional_params = nullptr;
 };
 
 class PipelineCache
@@ -135,11 +140,9 @@ public:
 	KYTY_CLASS_NO_COPY(PipelineCache);
 
 	VulkanPipeline* CreatePipeline(VulkanFramebuffer* framebuffer, RenderColorInfo* color, RenderDepthInfo* depth,
-	                               const ShaderVertexInputInfo* vs_input_info, const VertexShaderInfo* vs_regs,
-	                               const ShaderPixelInputInfo* ps_input_info, const PixelShaderInfo* ps_regs, VkPrimitiveTopology topology,
-	                               uint32_t color_mask, const ModeControl& mc, const BlendControl& bc, const BlendColor& bclr,
-	                               const ScreenViewport& vp);
-	VulkanPipeline* CreatePipeline(const ShaderComputeInputInfo* input_info, const ComputeShaderInfo* cs_regs);
+	                               const ShaderVertexInputInfo* vs_input_info, HW::HardwareContext* ctx,
+	                               const ShaderPixelInputInfo* ps_input_info, VkPrimitiveTopology topology);
+	VulkanPipeline* CreatePipeline(const ShaderComputeInputInfo* input_info, const HW::ComputeShaderInfo* cs_regs);
 	void            DeletePipeline(VulkanPipeline* pipeline);
 	void            DeletePipelines(VulkanFramebuffer* framebuffer);
 	void            DeleteAllPipelines();
@@ -195,15 +198,17 @@ public:
 	virtual ~DescriptorCache() { KYTY_NOT_IMPLEMENTED; }
 	KYTY_CLASS_NO_COPY(DescriptorCache);
 
-	VkDescriptorSetLayout GetDescriptorSetLayout(Stage stage, const ShaderBindResources& bind, const ShaderBindParameters& bind_params);
+	VkDescriptorSetLayout GetDescriptorSetLayout(Stage                      stage,
+	                                             const ShaderBindResources& bind /*, const ShaderBindParameters& bind_params*/);
 
 	VulkanDescriptorSet* Allocate(Stage stage, int storage_buffers_num, int textures2d_sampled_num, int textures2d_storage_num,
 	                              int samplers_num, int gds_buffers_num);
 	void                 Free(VulkanDescriptorSet* set);
 
 	VulkanDescriptorSet* GetDescriptor(Stage stage, VulkanBuffer** storage_buffers, VulkanImage** textures2d_sampled,
-	                                   VulkanImage** textures2d_storage, uint64_t* samplers, VulkanBuffer** gds_buffers,
-	                                   const ShaderBindResources& bind, const ShaderBindParameters& bind_params);
+	                                   const bool* textures2d_depth, VulkanImage** textures2d_storage, uint64_t* samplers,
+	                                   VulkanBuffer**             gds_buffers,
+	                                   const ShaderBindResources& bind /*, const ShaderBindParameters& bind_params*/);
 	void                 FreeDescriptor(VulkanBuffer* buffer);
 	void                 FreeDescriptor(VulkanImage* image);
 
@@ -441,7 +446,7 @@ static RenderContext*           g_render_ctx = nullptr;
 static thread_local CommandPool g_command_pool;
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-static void uc_print(const char* func, const UserConfig& uc)
+static void uc_print(const char* func, const HW::UserConfig& uc)
 {
 	printf("%s\n", func);
 
@@ -453,94 +458,94 @@ static void uc_print(const char* func, const UserConfig& uc)
 //	EXIT_NOT_IMPLEMENTED(uc.GetPrimType() != 4);
 //}
 
-static void rt_print(const char* func, const RenderTarget& rt)
+static void rt_print(const char* func, const HW::RenderTarget& rt)
 {
 	printf("%s\n", func);
 
-	printf("\t base_addr                           = 0x%016" PRIx64 "\n", rt.base_addr);
-	printf("\t pitch_div8_minus1                   = 0x%08" PRIx32 "\n", rt.pitch_div8_minus1);
-	printf("\t fmask_pitch_div8_minus1             = 0x%08" PRIx32 "\n", rt.fmask_pitch_div8_minus1);
-	printf("\t slice_div64_minus1                  = 0x%08" PRIx32 "\n", rt.slice_div64_minus1);
-	printf("\t base_array_slice_index              = 0x%08" PRIx32 "\n", rt.base_array_slice_index);
-	printf("\t last_array_slice_index              = 0x%08" PRIx32 "\n", rt.last_array_slice_index);
-	printf("\t color_info.fmask_compression_enable = %s\n", rt.color_info.fmask_compression_enable ? "true" : "false");
-	printf("\t color_info.fmask_compression_mode   = 0x%08" PRIx32 "\n", rt.color_info.fmask_compression_mode);
-	printf("\t color_info.cmask_fast_clear_enable  = %s\n", rt.color_info.cmask_fast_clear_enable ? "true" : "false");
-	printf("\t color_info.dcc_compression_enable   = %s\n", rt.color_info.dcc_compression_enable ? "true" : "false");
-	printf("\t color_info.neo_mode                 = %s\n", rt.color_info.neo_mode ? "true" : "false");
-	printf("\t color_info.cmask_tile_mode          = 0x%08" PRIx32 "\n", rt.color_info.cmask_tile_mode);
-	printf("\t color_info.cmask_tile_mode_neo      = 0x%08" PRIx32 "\n", rt.color_info.cmask_tile_mode_neo);
-	printf("\t color_info.format                   = 0x%08" PRIx32 "\n", rt.color_info.format);
-	printf("\t color_info.channel_type             = 0x%08" PRIx32 "\n", rt.color_info.channel_type);
-	printf("\t color_info.channel_order            = 0x%08" PRIx32 "\n", rt.color_info.channel_order);
-	printf("\t force_dest_alpha_to_one             = %s\n", rt.force_dest_alpha_to_one ? "true" : "false");
-	printf("\t tile_mode                           = 0x%08" PRIx32 "\n", rt.tile_mode);
-	printf("\t fmask_tile_mode                     = 0x%08" PRIx32 "\n", rt.fmask_tile_mode);
-	printf("\t num_samples                         = 0x%08" PRIx32 "\n", rt.num_samples);
-	printf("\t num_fragments                       = 0x%08" PRIx32 "\n", rt.num_fragments);
-	printf("\t dcc_max_uncompressed_block_size     = 0x%08" PRIx32 "\n", rt.dcc_max_uncompressed_block_size);
-	printf("\t dcc_max_compressed_block_size       = 0x%08" PRIx32 "\n", rt.dcc_max_compressed_block_size);
-	printf("\t dcc_min_compressed_block_size       = 0x%08" PRIx32 "\n", rt.dcc_min_compressed_block_size);
-	printf("\t dcc_color_transform                 = 0x%08" PRIx32 "\n", rt.dcc_color_transform);
-	printf("\t dcc_enable_overwrite_combiner       = %s\n", rt.dcc_enable_overwrite_combiner ? "true" : "false");
-	printf("\t dcc_force_independent_blocks        = %s\n", rt.dcc_force_independent_blocks ? "true" : "false");
-	printf("\t cmask_addr                          = 0x%016" PRIx64 "\n", rt.cmask_addr);
-	printf("\t cmask_slice_minus1                  = 0x%08" PRIx32 "\n", rt.cmask_slice_minus1);
-	printf("\t fmask_addr                          = 0x%016" PRIx64 "\n", rt.fmask_addr);
-	printf("\t fmask_slice_minus1                  = 0x%08" PRIx32 "\n", rt.fmask_slice_minus1);
-	printf("\t clear_color_word0                   = 0x%08" PRIx32 "\n", rt.clear_color_word0);
-	printf("\t clear_color_word1                   = 0x%08" PRIx32 "\n", rt.clear_color_word1);
-	printf("\t dcc_addr                            = 0x%016" PRIx64 "\n", rt.dcc_addr);
-	printf("\t width                               = 0x%08" PRIx32 "\n", rt.width);
-	printf("\t height                              = 0x%08" PRIx32 "\n", rt.height);
+	printf("\t base.addr                       = 0x%016" PRIx64 "\n", rt.base.addr);
+	printf("\t pitch.pitch_div8_minus1         = 0x%08" PRIx32 "\n", rt.pitch.pitch_div8_minus1);
+	printf("\t pitch.fmask_pitch_div8_minus1   = 0x%08" PRIx32 "\n", rt.pitch.fmask_pitch_div8_minus1);
+	printf("\t slice.slice_div64_minus1        = 0x%08" PRIx32 "\n", rt.slice.slice_div64_minus1);
+	printf("\t view.base_array_slice_index     = 0x%08" PRIx32 "\n", rt.view.base_array_slice_index);
+	printf("\t view.last_array_slice_index     = 0x%08" PRIx32 "\n", rt.view.last_array_slice_index);
+	printf("\t info.fmask_compression_enable   = %s\n", rt.info.fmask_compression_enable ? "true" : "false");
+	printf("\t info.fmask_compression_mode     = 0x%08" PRIx32 "\n", rt.info.fmask_compression_mode);
+	printf("\t info.cmask_fast_clear_enable    = %s\n", rt.info.cmask_fast_clear_enable ? "true" : "false");
+	printf("\t info.dcc_compression_enable     = %s\n", rt.info.dcc_compression_enable ? "true" : "false");
+	printf("\t info.neo_mode                   = %s\n", rt.info.neo_mode ? "true" : "false");
+	printf("\t info.cmask_tile_mode            = 0x%08" PRIx32 "\n", rt.info.cmask_tile_mode);
+	printf("\t info.cmask_tile_mode_neo        = 0x%08" PRIx32 "\n", rt.info.cmask_tile_mode_neo);
+	printf("\t info.format                     = 0x%08" PRIx32 "\n", rt.info.format);
+	printf("\t info.channel_type               = 0x%08" PRIx32 "\n", rt.info.channel_type);
+	printf("\t info.channel_order              = 0x%08" PRIx32 "\n", rt.info.channel_order);
+	printf("\t attrib.force_dest_alpha_to_one  = %s\n", rt.attrib.force_dest_alpha_to_one ? "true" : "false");
+	printf("\t attrib.tile_mode                = 0x%08" PRIx32 "\n", rt.attrib.tile_mode);
+	printf("\t attrib.fmask_tile_mode          = 0x%08" PRIx32 "\n", rt.attrib.fmask_tile_mode);
+	printf("\t attrib.num_samples              = 0x%08" PRIx32 "\n", rt.attrib.num_samples);
+	printf("\t attrib.num_fragments            = 0x%08" PRIx32 "\n", rt.attrib.num_fragments);
+	printf("\t dcc.max_uncompressed_block_size = 0x%08" PRIx32 "\n", rt.dcc.max_uncompressed_block_size);
+	printf("\t dcc.max_compressed_block_size   = 0x%08" PRIx32 "\n", rt.dcc.max_compressed_block_size);
+	printf("\t dcc.min_compressed_block_size   = 0x%08" PRIx32 "\n", rt.dcc.min_compressed_block_size);
+	printf("\t dcc.color_transform             = 0x%08" PRIx32 "\n", rt.dcc.color_transform);
+	printf("\t dcc.enable_overwrite_combiner   = %s\n", rt.dcc.enable_overwrite_combiner ? "true" : "false");
+	printf("\t dcc.force_independent_blocks    = %s\n", rt.dcc.force_independent_blocks ? "true" : "false");
+	printf("\t cmask.addr                      = 0x%016" PRIx64 "\n", rt.cmask.addr);
+	printf("\t cmask_slice.slice_minus1        = 0x%08" PRIx32 "\n", rt.cmask_slice.slice_minus1);
+	printf("\t fmask.addr                      = 0x%016" PRIx64 "\n", rt.fmask.addr);
+	printf("\t fmask_slice.slice_minus1        = 0x%08" PRIx32 "\n", rt.fmask_slice.slice_minus1);
+	printf("\t clear_word0.word0               = 0x%08" PRIx32 "\n", rt.clear_word0.word0);
+	printf("\t clear_word1.word1               = 0x%08" PRIx32 "\n", rt.clear_word1.word1);
+	printf("\t dcc_addr.addr                   = 0x%016" PRIx64 "\n", rt.dcc_addr.addr);
+	printf("\t size.width                      = 0x%08" PRIx32 "\n", rt.size.width);
+	printf("\t size.height                     = 0x%08" PRIx32 "\n", rt.size.height);
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-static void rt_check(const RenderTarget& rt)
+static void rt_check(const HW::RenderTarget& rt)
 {
-	if (rt.base_addr != 0)
+	if (rt.base.addr != 0)
 	{
-		bool render_to_texture = (rt.tile_mode == 0x0d);
+		bool render_to_texture = (rt.attrib.tile_mode == 0x0d);
 		// EXIT_NOT_IMPLEMENTED(rt.base_addr == 0);
 		// EXIT_NOT_IMPLEMENTED(rt.pitch_div8_minus1 != 0x000000ef);
 		// EXIT_NOT_IMPLEMENTED(rt.fmask_pitch_div8_minus1 != 0x000000ef);
 		// EXIT_NOT_IMPLEMENTED(rt.slice_div64_minus1 != 0x000086ff);
-		EXIT_NOT_IMPLEMENTED(rt.base_array_slice_index != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(rt.last_array_slice_index != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(rt.color_info.fmask_compression_enable != false);
-		EXIT_NOT_IMPLEMENTED(rt.color_info.fmask_compression_mode != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(rt.color_info.cmask_fast_clear_enable != false);
-		EXIT_NOT_IMPLEMENTED(rt.color_info.dcc_compression_enable != false);
-		EXIT_NOT_IMPLEMENTED(!render_to_texture && rt.color_info.neo_mode != Config::IsNeo());
-		EXIT_NOT_IMPLEMENTED(rt.color_info.cmask_tile_mode != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(rt.color_info.cmask_tile_mode_neo != 0x00000000);
+		EXIT_NOT_IMPLEMENTED(rt.view.base_array_slice_index != 0x00000000);
+		EXIT_NOT_IMPLEMENTED(rt.view.last_array_slice_index != 0x00000000);
+		EXIT_NOT_IMPLEMENTED(rt.info.fmask_compression_enable != false);
+		EXIT_NOT_IMPLEMENTED(rt.info.fmask_compression_mode != 0x00000000);
+		EXIT_NOT_IMPLEMENTED(rt.info.cmask_fast_clear_enable != false);
+		EXIT_NOT_IMPLEMENTED(rt.info.dcc_compression_enable != false);
+		EXIT_NOT_IMPLEMENTED(!render_to_texture && rt.info.neo_mode != Config::IsNeo());
+		EXIT_NOT_IMPLEMENTED(rt.info.cmask_tile_mode != 0x00000000);
+		EXIT_NOT_IMPLEMENTED(rt.info.cmask_tile_mode_neo != 0x00000000);
 		//		 EXIT_NOT_IMPLEMENTED(rt.format != 0x0000000a);
 		// EXIT_NOT_IMPLEMENTED(rt.channel_type != 0x00000006);
 		// EXIT_NOT_IMPLEMENTED(rt.channel_order != 0x00000001);
-		EXIT_NOT_IMPLEMENTED(rt.force_dest_alpha_to_one != false);
+		EXIT_NOT_IMPLEMENTED(rt.attrib.force_dest_alpha_to_one != false);
 		// EXIT_NOT_IMPLEMENTED(rt.tile_mode != 0x0000000a);
 		// EXIT_NOT_IMPLEMENTED(rt.fmask_tile_mode != 0x0000000a);
-		EXIT_NOT_IMPLEMENTED(rt.num_samples != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(rt.num_fragments != 0x00000000);
+		EXIT_NOT_IMPLEMENTED(rt.attrib.num_samples != 0x00000000);
+		EXIT_NOT_IMPLEMENTED(rt.attrib.num_fragments != 0x00000000);
 		// EXIT_NOT_IMPLEMENTED(rt.dcc_max_uncompressed_block_size != 0x00000002);
-		EXIT_NOT_IMPLEMENTED(rt.dcc_max_compressed_block_size != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(rt.dcc_min_compressed_block_size != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(rt.dcc_color_transform != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(rt.dcc_enable_overwrite_combiner != false);
-		EXIT_NOT_IMPLEMENTED(rt.dcc_force_independent_blocks != false);
-		EXIT_NOT_IMPLEMENTED(rt.cmask_addr != 0x0000000000000000);
-		EXIT_NOT_IMPLEMENTED(rt.cmask_slice_minus1 != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(rt.fmask_addr != 0x0000000000000000);
-		EXIT_NOT_IMPLEMENTED(rt.fmask_slice_minus1 != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(rt.clear_color_word0 != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(rt.clear_color_word1 != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(rt.dcc_addr != 0x0000000000000000);
+		EXIT_NOT_IMPLEMENTED(rt.dcc.max_compressed_block_size != 0x00000000);
+		EXIT_NOT_IMPLEMENTED(rt.dcc.min_compressed_block_size != 0x00000000);
+		EXIT_NOT_IMPLEMENTED(rt.dcc.color_transform != 0x00000000);
+		EXIT_NOT_IMPLEMENTED(rt.dcc.enable_overwrite_combiner != false);
+		EXIT_NOT_IMPLEMENTED(rt.dcc.force_independent_blocks != false);
+		EXIT_NOT_IMPLEMENTED(rt.cmask.addr != 0x0000000000000000);
+		EXIT_NOT_IMPLEMENTED(rt.cmask_slice.slice_minus1 != 0x00000000);
+		EXIT_NOT_IMPLEMENTED(rt.fmask.addr != 0x0000000000000000);
+		EXIT_NOT_IMPLEMENTED(rt.fmask_slice.slice_minus1 != 0x00000000 && rt.fmask_slice.slice_minus1 != rt.slice.slice_div64_minus1);
+		EXIT_NOT_IMPLEMENTED(rt.clear_word0.word0 != 0x00000000);
+		EXIT_NOT_IMPLEMENTED(rt.clear_word1.word1 != 0x00000000);
+		EXIT_NOT_IMPLEMENTED(rt.dcc_addr.addr != 0x0000000000000000);
 		// EXIT_NOT_IMPLEMENTED(rt.width != 0x00000780);
 		// EXIT_NOT_IMPLEMENTED(rt.height != 0x00000438);
 	}
 }
 
-static void z_print(const char* func, const DepthRenderTarget& z)
+static void z_print(const char* func, const HW::DepthRenderTarget& z)
 {
 	printf("%s\n", func);
 
@@ -584,7 +589,7 @@ static void z_print(const char* func, const DepthRenderTarget& z)
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-static void z_check(const DepthRenderTarget& z)
+static void z_check(const HW::DepthRenderTarget& z)
 {
 	if (z.z_info.format == 0)
 	{
@@ -651,7 +656,7 @@ static void z_check(const DepthRenderTarget& z)
 	}
 }
 
-static void clip_print(const char* func, const ClipControl& c)
+static void clip_print(const char* func, const HW::ClipControl& c)
 {
 	printf("%s\n", func);
 
@@ -669,7 +674,7 @@ static void clip_print(const char* func, const ClipControl& c)
 	printf("\t force_viewport_index_from_vs_enable = %s\n", c.force_viewport_index_from_vs_enable ? "true" : "false");
 }
 
-static void clip_check(const ClipControl& c)
+static void clip_check(const HW::ClipControl& c)
 {
 	EXIT_NOT_IMPLEMENTED(c.user_clip_planes != 0);
 	EXIT_NOT_IMPLEMENTED(c.user_clip_plane_mode != 0);
@@ -685,7 +690,7 @@ static void clip_check(const ClipControl& c)
 	EXIT_NOT_IMPLEMENTED(c.force_viewport_index_from_vs_enable != false);
 }
 
-static void rc_print(const char* func, const RenderControl& c)
+static void rc_print(const char* func, const HW::RenderControl& c)
 {
 	printf("%s\n", func);
 
@@ -698,18 +703,18 @@ static void rc_print(const char* func, const RenderControl& c)
 	printf("\t copy_sample              = %" PRIu8 "\n", c.copy_sample);
 }
 
-static void rc_check(const RenderControl& c)
+static void rc_check(const HW::RenderControl& c)
 {
 	// EXIT_NOT_IMPLEMENTED(c.depth_clear_enable != false);
 	// EXIT_NOT_IMPLEMENTED(c.stencil_clear_enable != false);
 	EXIT_NOT_IMPLEMENTED(c.resummarize_enable != false);
-	EXIT_NOT_IMPLEMENTED(c.stencil_compress_disable != false);
-	EXIT_NOT_IMPLEMENTED(c.depth_compress_disable != false);
+	// EXIT_NOT_IMPLEMENTED(c.stencil_compress_disable != false);
+	// EXIT_NOT_IMPLEMENTED(c.depth_compress_disable != false);
 	EXIT_NOT_IMPLEMENTED(c.copy_centroid != false);
 	EXIT_NOT_IMPLEMENTED(c.copy_sample != 0);
 }
 
-static void mc_print(const char* func, const ModeControl& c)
+static void mc_print(const char* func, const HW::ModeControl& c)
 {
 	printf("%s\n", func);
 
@@ -726,7 +731,7 @@ static void mc_print(const char* func, const ModeControl& c)
 	printf("\t persp_corr_dis           = %s\n", c.persp_corr_dis ? "true" : "false");
 }
 
-static void mc_check(const ModeControl& c)
+static void mc_check(const HW::ModeControl& c)
 {
 	EXIT_NOT_IMPLEMENTED(c.cull_front != false);
 	// EXIT_NOT_IMPLEMENTED(c.cull_back != false);
@@ -741,7 +746,7 @@ static void mc_check(const ModeControl& c)
 	EXIT_NOT_IMPLEMENTED(c.persp_corr_dis != false);
 }
 
-static void bc_print(const char* func, const BlendControl& c, const BlendColor& color)
+static void bc_print(const char* func, const HW::BlendControl& c, const HW::BlendColor& color, const HW::ColorControl& cc)
 {
 	printf("%s\n", func);
 
@@ -757,9 +762,11 @@ static void bc_print(const char* func, const BlendControl& c, const BlendColor& 
 	printf("\t green                = %f\n", color.green);
 	printf("\t blue                 = %f\n", color.blue);
 	printf("\t alpha                = %f\n", color.alpha);
+	printf("\t cc.mode              = %" PRIu8 "\n", cc.mode);
+	printf("\t cc.op                = %" PRIu8 "\n", cc.op);
 }
 
-static void bc_check(const BlendControl& c, const BlendColor& color)
+static void bc_check(const HW::BlendControl& c, const HW::BlendColor& color, const HW::ColorControl& cc)
 {
 	// EXIT_NOT_IMPLEMENTED(c.color_srcblend != 0);
 	EXIT_NOT_IMPLEMENTED(c.color_comb_fcn != 0);
@@ -773,9 +780,11 @@ static void bc_check(const BlendControl& c, const BlendColor& color)
 	EXIT_NOT_IMPLEMENTED(color.green != 0.0f);
 	EXIT_NOT_IMPLEMENTED(color.blue != 0.0f);
 	EXIT_NOT_IMPLEMENTED(color.alpha != 0.0f);
+	EXIT_NOT_IMPLEMENTED(cc.mode != 1 && cc.mode != 0);
+	EXIT_NOT_IMPLEMENTED(cc.op != 0xCC);
 }
 
-static void d_print(const char* func, const DepthControl& c, const StencilControl& s, const StencilMask& sm)
+static void d_print(const char* func, const HW::DepthControl& c, const HW::StencilControl& s, const HW::StencilMask& sm)
 {
 	printf("%s\n", func);
 
@@ -803,7 +812,7 @@ static void d_print(const char* func, const DepthControl& c, const StencilContro
 	printf("\t stencil_opval_bf     = %" PRIu8 "\n", sm.stencil_opval_bf);
 }
 
-static void d_check(const DepthControl& c, const StencilControl& s, const StencilMask& /*sm*/)
+static void d_check(const HW::DepthControl& c, const HW::StencilControl& s, const HW::StencilMask& /*sm*/)
 {
 	// EXIT_NOT_IMPLEMENTED(c.stencil_enable != false);
 	// EXIT_NOT_IMPLEMENTED(c.z_enable != false);
@@ -829,7 +838,7 @@ static void d_check(const DepthControl& c, const StencilControl& s, const Stenci
 	// EXIT_NOT_IMPLEMENTED(sm.stencil_opval_bf != 0);
 }
 
-static void eqaa_print(const char* func, const EqaaControl& c)
+static void eqaa_print(const char* func, const HW::EqaaControl& c)
 {
 	printf("%s\n", func);
 
@@ -843,7 +852,7 @@ static void eqaa_print(const char* func, const EqaaControl& c)
 	printf("\t static_anchor_associations = %s\n", c.static_anchor_associations ? "true" : "false");
 }
 
-static void eqaa_check(const EqaaControl& c)
+static void eqaa_check(const HW::EqaaControl& c)
 {
 	EXIT_NOT_IMPLEMENTED(c.max_anchor_samples != 0);
 	EXIT_NOT_IMPLEMENTED(c.ps_iter_samples != 0);
@@ -852,10 +861,10 @@ static void eqaa_check(const EqaaControl& c)
 	EXIT_NOT_IMPLEMENTED(c.high_quality_intersections != false);
 	EXIT_NOT_IMPLEMENTED(c.incoherent_eqaa_reads != false);
 	EXIT_NOT_IMPLEMENTED(c.interpolate_comp_z != false);
-	EXIT_NOT_IMPLEMENTED(c.static_anchor_associations != false);
+	// EXIT_NOT_IMPLEMENTED(c.static_anchor_associations != false);
 }
 
-static void vp_print(const char* func, const ScreenViewport& vp)
+static void vp_print(const char* func, const HW::ScreenViewport& vp)
 {
 	printf("%s\n", func);
 
@@ -868,19 +877,24 @@ static void vp_print(const char* func, const ScreenViewport& vp)
 	printf("\t viewports[0].zscale     = %f\n", vp.viewports[0].zscale);
 	printf("\t viewports[0].zoffset    = %f\n", vp.viewports[0].zoffset);
 	printf("\t transform_control       = 0x%08" PRIx32 "\n", vp.transform_control);
-	printf("\t scissor_left            = %d\n", vp.scissor_left);
-	printf("\t scissor_top             = %d\n", vp.scissor_top);
-	printf("\t scissor_right           = %d\n", vp.scissor_right);
-	printf("\t scissor_bottom          = %d\n", vp.scissor_bottom);
+	printf("\t screen_scissor_left     = %d\n", vp.screen_scissor_left);
+	printf("\t screen_scissor_top      = %d\n", vp.screen_scissor_top);
+	printf("\t screen_scissor_right    = %d\n", vp.screen_scissor_right);
+	printf("\t screen_scissor_bottom   = %d\n", vp.screen_scissor_bottom);
+	printf("\t generic_scissor_left    = %d\n", vp.generic_scissor_left);
+	printf("\t generic_scissor_top     = %d\n", vp.generic_scissor_top);
+	printf("\t generic_scissor_right   = %d\n", vp.generic_scissor_right);
+	printf("\t generic_scissor_bottom  = %d\n", vp.generic_scissor_bottom);
 	printf("\t hw_offset_x             = %u\n", vp.hw_offset_x);
 	printf("\t hw_offset_y             = %u\n", vp.hw_offset_y);
 	printf("\t guard_band_horz_clip    = %f\n", vp.guard_band_horz_clip);
 	printf("\t guard_band_vert_clip    = %f\n", vp.guard_band_vert_clip);
 	printf("\t guard_band_horz_discard = %f\n", vp.guard_band_horz_discard);
 	printf("\t guard_band_vert_discard = %f\n", vp.guard_band_vert_discard);
+	printf("\t generic_scissor_window_offset_enable = %s\n", vp.generic_scissor_window_offset_enable ? "true" : "false");
 }
 
-static void vp_check(const ScreenViewport& vp)
+static void vp_check(const HW::ScreenViewport& vp)
 {
 	EXIT_NOT_IMPLEMENTED(vp.viewports[0].zmin != 0.000000);
 	EXIT_NOT_IMPLEMENTED(vp.viewports[0].zmax != 1.000000);
@@ -891,21 +905,22 @@ static void vp_check(const ScreenViewport& vp)
 	// EXIT_NOT_IMPLEMENTED(vp.viewports[0].zscale != 0.500000);
 	// EXIT_NOT_IMPLEMENTED(vp.viewports[0].zoffset != 0.500000);
 	EXIT_NOT_IMPLEMENTED(vp.transform_control != 1087);
-	// EXIT_NOT_IMPLEMENTED(vp.scissor_left != 0);
-	// EXIT_NOT_IMPLEMENTED(vp.scissor_top != 0);
-	// EXIT_NOT_IMPLEMENTED(vp.scissor_right != 1920);
-	// EXIT_NOT_IMPLEMENTED(vp.scissor_bottom != 1080);
+	EXIT_NOT_IMPLEMENTED(vp.generic_scissor_left != 0 && !(vp.screen_scissor_left == vp.generic_scissor_left));
+	EXIT_NOT_IMPLEMENTED(vp.generic_scissor_right != 0 && !(vp.screen_scissor_right == vp.generic_scissor_right));
+	EXIT_NOT_IMPLEMENTED(vp.generic_scissor_right != 0 && !(vp.screen_scissor_right == vp.generic_scissor_right));
+	EXIT_NOT_IMPLEMENTED(vp.generic_scissor_bottom != 0 && !(vp.screen_scissor_bottom == vp.generic_scissor_bottom));
 	// EXIT_NOT_IMPLEMENTED(vp.hw_offset_x != 60);
 	// EXIT_NOT_IMPLEMENTED(vp.hw_offset_y != 32);
 	// EXIT_NOT_IMPLEMENTED(fabsf(vp.guard_band_horz_clip - 33.133327f) > 0.001f);
 	// EXIT_NOT_IMPLEMENTED(fabsf(vp.guard_band_vert_clip - 59.629623f) > 0.001f);
 	EXIT_NOT_IMPLEMENTED(vp.guard_band_horz_discard != 1.000000);
 	EXIT_NOT_IMPLEMENTED(vp.guard_band_vert_discard != 1.000000);
+	EXIT_NOT_IMPLEMENTED(vp.generic_scissor_window_offset_enable != false);
 }
 
-static void hw_check(const HardwareContext& hw)
+static void hw_check(const HW::HardwareContext& hw)
 {
-	const auto& rt   = hw.GetRenderTargets(0);
+	const auto& rt   = hw.GetRenderTarget(0);
 	const auto& bc   = hw.GetBlendControl(0);
 	const auto& bclr = hw.GetBlendColor();
 	const auto& vp   = hw.GetScreenViewport();
@@ -917,6 +932,7 @@ static void hw_check(const HardwareContext& hw)
 	const auto& sm   = hw.GetStencilMask();
 	const auto& mc   = hw.GetModeControl();
 	const auto& eqaa = hw.GetEqaaControl();
+	const auto& cc   = hw.GetColorControl();
 
 	rt_check(rt);
 	vp_check(vp);
@@ -925,7 +941,7 @@ static void hw_check(const HardwareContext& hw)
 	rc_check(rc);
 	d_check(d, s, sm);
 	mc_check(mc);
-	bc_check(bc, bclr);
+	bc_check(bc, bclr, cc);
 	eqaa_check(eqaa);
 
 	EXIT_NOT_IMPLEMENTED(hw.GetRenderTargetMask() != 0xF && hw.GetRenderTargetMask() != 0x0);
@@ -933,9 +949,9 @@ static void hw_check(const HardwareContext& hw)
 	// EXIT_NOT_IMPLEMENTED(hw.GetStencilClearValue() != 0);
 }
 
-static void hw_print(const HardwareContext& hw)
+static void hw_print(const HW::HardwareContext& hw)
 {
-	const auto& rt   = hw.GetRenderTargets(0);
+	const auto& rt   = hw.GetRenderTarget(0);
 	const auto& bc   = hw.GetBlendControl(0);
 	const auto& bclr = hw.GetBlendColor();
 	const auto& vp   = hw.GetScreenViewport();
@@ -947,11 +963,13 @@ static void hw_print(const HardwareContext& hw)
 	const auto& sm   = hw.GetStencilMask();
 	const auto& mc   = hw.GetModeControl();
 	const auto& eqaa = hw.GetEqaaControl();
+	const auto& cc   = hw.GetColorControl();
 
 	printf("HardwareContext\n");
-	printf("\t GetRenderTargetMask() = 0x%08" PRIx32 "\n", hw.GetRenderTargetMask());
-	printf("\t GetDepthClearValue()  = %f\n", hw.GetDepthClearValue());
+	printf("\t GetRenderTargetMask()   = 0x%08" PRIx32 "\n", hw.GetRenderTargetMask());
+	printf("\t GetDepthClearValue()    = %f\n", hw.GetDepthClearValue());
 	printf("\t GetStencilClearValue()  = %" PRIu8 "\n", hw.GetStencilClearValue());
+	printf("\t GetLineWidth()          = %f\n", hw.GetLineWidth());
 
 	rt_print("RenderTraget:", rt);
 	z_print("DepthRenderTraget:", z);
@@ -960,7 +978,7 @@ static void hw_print(const HardwareContext& hw)
 	rc_print("RenderControl:", rc);
 	d_print("DepthStencilControlMask:", d, s, sm);
 	mc_print("ModeControl:", mc);
-	bc_print("BlendControl:", bc, bclr);
+	bc_print("BlendColorControl:", bc, bclr, cc);
 	eqaa_print("EqaaControl:", eqaa);
 }
 
@@ -1651,7 +1669,7 @@ static VkBlendOp get_blend_op(uint32_t op)
 }
 
 static void CreateLayout(VkDescriptorSetLayout* set_layouts, uint32_t* set_layouts_num, VkPushConstantRange* push_constant_info,
-                         uint32_t* push_constant_info_num, const ShaderBindResources& bind, const ShaderBindParameters& bind_params,
+                         uint32_t* push_constant_info_num, const ShaderBindResources& bind, /*const ShaderBindParameters& bind_params,*/
                          VkShaderStageFlags vk_stage, DescriptorCache::Stage stage)
 {
 	EXIT_IF(set_layouts == nullptr);
@@ -1678,7 +1696,7 @@ static void CreateLayout(VkDescriptorSetLayout* set_layouts, uint32_t* set_layou
 	{
 		EXIT_IF(bind.descriptor_set_slot != *set_layouts_num);
 
-		set_layouts[*set_layouts_num] = g_render_ctx->GetDescriptorCache()->GetDescriptorSetLayout(stage, bind, bind_params);
+		set_layouts[*set_layouts_num] = g_render_ctx->GetDescriptorCache()->GetDescriptorSetLayout(stage, bind /*, bind_params*/);
 		(*set_layouts_num)++;
 	}
 }
@@ -1687,19 +1705,19 @@ static void CreateLayout(VkDescriptorSetLayout* set_layouts, uint32_t* set_layou
 static VulkanPipeline* CreatePipelineInternal(VkRenderPass render_pass, const ShaderVertexInputInfo* vs_input_info,
                                               const Vector<uint32_t>& vs_shader, const ShaderPixelInputInfo* ps_input_info,
                                               const Vector<uint32_t>& ps_shader, const PipelineStaticParameters* static_params,
-                                              PipelineDynamicParameters*          dynamic_params,
-                                              const PipelineAdditionalParameters* additional_params)
+                                              PipelineDynamicParameters*          dynamic_params/*,
+                                              const PipelineAdditionalParameters* additional_params*/)
 {
 	EXIT_IF(g_render_ctx == nullptr);
 	EXIT_IF(render_pass == nullptr);
 	EXIT_IF(static_params == nullptr);
 	EXIT_IF(dynamic_params == nullptr);
-	EXIT_IF(additional_params == nullptr);
+	// EXIT_IF(additional_params == nullptr);
 
-	auto* pipeline              = new VulkanPipeline;
-	pipeline->additional_params = additional_params;
-	pipeline->static_params     = static_params;
-	pipeline->dynamic_params    = dynamic_params;
+	auto* pipeline = new VulkanPipeline;
+	// pipeline->additional_params = additional_params;
+	pipeline->static_params  = static_params;
+	pipeline->dynamic_params = dynamic_params;
 
 	auto* gctx = g_render_ctx->GetGraphicCtx();
 
@@ -1835,7 +1853,7 @@ static VulkanPipeline* CreatePipelineInternal(VkRenderPass render_pass, const Sh
 	rasterizer.depthBiasConstantFactor = 0.0f;
 	rasterizer.depthBiasClamp          = 0.0f;
 	rasterizer.depthBiasSlopeFactor    = 0.0f;
-	rasterizer.lineWidth               = 1.0f;
+	rasterizer.lineWidth               = dynamic_params->line_width;
 
 	VkPipelineMultisampleStateCreateInfo multisampling {};
 	multisampling.sType                 = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
@@ -1876,9 +1894,17 @@ static VulkanPipeline* CreatePipelineInternal(VkRenderPass render_pass, const Sh
 	color_blend_attachment.alphaBlendOp =
 	    (static_params->separate_alpha_blend ? get_blend_op(static_params->alpha_comb_fcn) : color_blend_attachment.colorBlendOp);
 
+	VkBool32 color_write_enable = (pipeline->dynamic_params->color_write_enable ? VK_TRUE : VK_FALSE);
+
+	VkPipelineColorWriteCreateInfoEXT color_write {};
+	color_write.sType              = VK_STRUCTURE_TYPE_PIPELINE_COLOR_WRITE_CREATE_INFO_EXT;
+	color_write.pNext              = nullptr;
+	color_write.attachmentCount    = 1;
+	color_write.pColorWriteEnables = &color_write_enable;
+
 	VkPipelineColorBlendStateCreateInfo color_blending {};
 	color_blending.sType             = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-	color_blending.pNext             = nullptr;
+	color_blending.pNext             = &color_write;
 	color_blending.flags             = 0;
 	color_blending.logicOpEnable     = VK_FALSE;
 	color_blending.logicOp           = VK_LOGIC_OP_COPY;
@@ -1896,9 +1922,9 @@ static VulkanPipeline* CreatePipelineInternal(VkRenderPass render_pass, const Sh
 	uint32_t            push_constant_info_num = 0;
 
 	CreateLayout(set_layouts, &set_layouts_num, push_constant_info, &push_constant_info_num, vs_input_info->bind,
-	             additional_params->vs_bind, VK_SHADER_STAGE_VERTEX_BIT, DescriptorCache::Stage::Vertex);
+	             /*additional_params->vs_bind,*/ VK_SHADER_STAGE_VERTEX_BIT, DescriptorCache::Stage::Vertex);
 	CreateLayout(set_layouts, &set_layouts_num, push_constant_info, &push_constant_info_num, ps_input_info->bind,
-	             additional_params->ps_bind, VK_SHADER_STAGE_FRAGMENT_BIT, DescriptorCache::Stage::Pixel);
+	             /*additional_params->ps_bind,*/ VK_SHADER_STAGE_FRAGMENT_BIT, DescriptorCache::Stage::Pixel);
 
 	VkPipelineLayoutCreateInfo pipeline_layout_info {};
 	pipeline_layout_info.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -1943,6 +1969,10 @@ static VulkanPipeline* CreatePipelineInternal(VkRenderPass render_pass, const Sh
 
 	VkDynamicState dynamic_states[8]    = {};
 	uint32_t       dynamic_states_count = 0;
+	if (dynamic_params->vk_dynamic_state_line_width)
+	{
+		dynamic_states[dynamic_states_count++] = VK_DYNAMIC_STATE_LINE_WIDTH;
+	}
 	if (dynamic_params->vk_dynamic_state_stencil_compare_mask)
 	{
 		dynamic_states[dynamic_states_count++] = VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK;
@@ -1954,6 +1984,10 @@ static VulkanPipeline* CreatePipelineInternal(VkRenderPass render_pass, const Sh
 	if (dynamic_params->vk_dynamic_state_stencil_write_mask)
 	{
 		dynamic_states[dynamic_states_count++] = VK_DYNAMIC_STATE_STENCIL_WRITE_MASK;
+	}
+	if (dynamic_params->vk_dynamic_state_color_write_enable_ext)
+	{
+		dynamic_states[dynamic_states_count++] = VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT;
 	}
 
 	VkPipelineDynamicStateCreateInfo dynamic_state {};
@@ -1998,18 +2032,18 @@ static VulkanPipeline* CreatePipelineInternal(VkRenderPass render_pass, const Sh
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 static VulkanPipeline* CreatePipelineInternal(const ShaderComputeInputInfo* input_info, const Vector<uint32_t>& cs_shader,
-                                              const PipelineStaticParameters* static_params, PipelineDynamicParameters* dynamic_params,
-                                              const PipelineAdditionalParameters* additional_params)
+                                              const PipelineStaticParameters* static_params, PipelineDynamicParameters* dynamic_params/*,
+                                              const PipelineAdditionalParameters* additional_params*/)
 {
 	EXIT_IF(g_render_ctx == nullptr);
 	EXIT_IF(static_params == nullptr);
 	EXIT_IF(dynamic_params == nullptr);
-	EXIT_IF(additional_params == nullptr);
+	// EXIT_IF(additional_params == nullptr);
 
-	auto* pipeline              = new VulkanPipeline;
-	pipeline->additional_params = additional_params;
-	pipeline->static_params     = static_params;
-	pipeline->dynamic_params    = dynamic_params;
+	auto* pipeline = new VulkanPipeline;
+	// pipeline->additional_params = additional_params;
+	pipeline->static_params  = static_params;
+	pipeline->dynamic_params = dynamic_params;
 
 	auto* gctx = g_render_ctx->GetGraphicCtx();
 
@@ -2043,7 +2077,8 @@ static VulkanPipeline* CreatePipelineInternal(const ShaderComputeInputInfo* inpu
 	VkPushConstantRange push_constant_info[1];
 	uint32_t            push_constant_info_num = 0;
 
-	CreateLayout(set_layouts, &set_layouts_num, push_constant_info, &push_constant_info_num, input_info->bind, additional_params->cs_bind,
+	CreateLayout(set_layouts, &set_layouts_num, push_constant_info, &push_constant_info_num,
+	             input_info->bind, /*additional_params->cs_bind,*/
 	             VK_SHADER_STAGE_COMPUTE_BIT, DescriptorCache::Stage::Compute);
 
 	VkPipelineLayoutCreateInfo pipeline_layout_info {};
@@ -2089,18 +2124,18 @@ void PipelineCache::DeletePipelineInternal(Pipeline& p)
 	EXIT_IF(p.pipeline->pipeline_layout == nullptr);
 	EXIT_IF(p.static_params == nullptr);
 	EXIT_IF(p.dynamic_params == nullptr);
-	EXIT_IF(p.pipeline->additional_params == nullptr);
+	// EXIT_IF(p.pipeline->additional_params == nullptr);
 
 	EXIT_IF(p.pipeline->static_params != p.static_params);
 	EXIT_IF(p.pipeline->dynamic_params != p.dynamic_params);
 
 	delete p.static_params;
 	delete p.dynamic_params;
-	delete p.pipeline->additional_params;
+	// delete p.pipeline->additional_params;
 
-	p.static_params               = nullptr;
-	p.dynamic_params              = nullptr;
-	p.pipeline->additional_params = nullptr;
+	p.static_params  = nullptr;
+	p.dynamic_params = nullptr;
+	// p.pipeline->additional_params = nullptr;
 
 	auto* gctx = g_render_ctx->GetGraphicCtx();
 
@@ -2121,10 +2156,19 @@ bool PipelineStaticParameters::operator==(const PipelineStaticParameters& other)
 
 bool PipelineDynamicParameters::operator==(const PipelineDynamicParameters& other) const
 {
-	EXIT_IF(vk_dynamic_state_stencil_compare_mask != other.vk_dynamic_state_stencil_compare_mask ||
+	EXIT_IF(vk_dynamic_state_line_width != other.vk_dynamic_state_line_width ||
+	        vk_dynamic_state_stencil_compare_mask != other.vk_dynamic_state_stencil_compare_mask ||
 	        vk_dynamic_state_stencil_write_mask != other.vk_dynamic_state_stencil_write_mask ||
-	        vk_dynamic_state_stencil_reference != other.vk_dynamic_state_stencil_reference);
+	        vk_dynamic_state_stencil_reference != other.vk_dynamic_state_stencil_reference ||
+	        vk_dynamic_state_color_write_enable_ext != other.vk_dynamic_state_color_write_enable_ext);
 
+	if (!vk_dynamic_state_line_width)
+	{
+		if (line_width != other.line_width)
+		{
+			return false;
+		}
+	}
 	if (!vk_dynamic_state_stencil_compare_mask)
 	{
 		if (stencil_front.compareMask != other.stencil_front.compareMask || stencil_back.compareMask != other.stencil_back.compareMask)
@@ -2142,6 +2186,13 @@ bool PipelineDynamicParameters::operator==(const PipelineDynamicParameters& othe
 	if (!vk_dynamic_state_stencil_reference)
 	{
 		if (stencil_front.reference != other.stencil_front.reference || stencil_back.reference != other.stencil_back.reference)
+		{
+			return false;
+		}
+	}
+	if (!vk_dynamic_state_color_write_enable_ext)
+	{
+		if (color_write_enable != other.color_write_enable)
 		{
 			return false;
 		}
@@ -2164,20 +2215,25 @@ VulkanPipeline* PipelineCache::Find(const Pipeline& p) const
 }
 
 VulkanPipeline* PipelineCache::CreatePipeline(VulkanFramebuffer* framebuffer, RenderColorInfo* color, RenderDepthInfo* depth,
-                                              const ShaderVertexInputInfo* vs_input_info, const VertexShaderInfo* vs_regs,
-                                              const ShaderPixelInputInfo* ps_input_info, const PixelShaderInfo* ps_regs,
-                                              VkPrimitiveTopology topology, uint32_t color_mask, const ModeControl& mc,
-                                              const BlendControl& bc, const BlendColor& bclr, const ScreenViewport& vp)
+                                              const ShaderVertexInputInfo* vs_input_info, HW::HardwareContext* ctx,
+                                              const ShaderPixelInputInfo* ps_input_info, VkPrimitiveTopology topology)
 {
 	KYTY_PROFILER_BLOCK("PipelineCache::CreatePipeline(Gfx)", profiler::colors::DeepOrangeA200);
 
 	EXIT_IF(framebuffer == nullptr);
-	EXIT_IF(vs_regs == nullptr);
-	EXIT_IF(ps_regs == nullptr);
 	EXIT_IF(depth == nullptr);
 	EXIT_IF(color == nullptr);
 
 	Core::LockGuard lock(m_mutex);
+
+	const auto&               vs_regs    = ctx->GetVs();
+	const auto&               ps_regs    = ctx->GetPs();
+	const HW::BlendColor&     bclr       = ctx->GetBlendColor();
+	const HW::ScreenViewport& vp         = ctx->GetScreenViewport();
+	const auto&               bc         = ctx->GetBlendControl(0);
+	uint32_t                  color_mask = ctx->GetRenderTargetMask();
+	const HW::ModeControl&    mc         = ctx->GetModeControl();
+	const auto&               cc         = ctx->GetColorControl();
 
 	if (Config::GetPrintfDirection() != Log::Direction::Silent)
 	{
@@ -2185,8 +2241,8 @@ VulkanPipeline* PipelineCache::CreatePipeline(VulkanFramebuffer* framebuffer, Re
 		ShaderDbgDumpInputInfo(ps_input_info);
 	}
 
-	auto vs_id = ShaderGetIdVS(vs_regs, vs_input_info);
-	auto ps_id = ShaderGetIdPS(ps_regs, ps_input_info);
+	auto vs_id = ShaderGetIdVS(&vs_regs, vs_input_info);
+	auto ps_id = ShaderGetIdPS(&ps_regs, ps_input_info);
 
 	Pipeline p {};
 	p.render_pass_id = framebuffer->render_pass_id;
@@ -2195,9 +2251,11 @@ VulkanPipeline* PipelineCache::CreatePipeline(VulkanFramebuffer* framebuffer, Re
 	p.static_params  = new PipelineStaticParameters;
 	p.dynamic_params = new PipelineDynamicParameters;
 
+	p.dynamic_params->vk_dynamic_state_line_width           = true;
 	p.dynamic_params->vk_dynamic_state_stencil_compare_mask = true;
 	p.dynamic_params->vk_dynamic_state_stencil_reference    = true;
 	p.dynamic_params->vk_dynamic_state_stencil_write_mask   = true;
+	p.dynamic_params->color_write_enable                    = true;
 
 	EXIT_NOT_IMPLEMENTED(depth->depth_test_enable && ps_input_info->ps_execute_on_noop);
 
@@ -2207,10 +2265,10 @@ VulkanPipeline* PipelineCache::CreatePipeline(VulkanFramebuffer* framebuffer, Re
 	p.static_params->viewport_offset[0]       = vp.viewports[0].xoffset;
 	p.static_params->viewport_offset[1]       = vp.viewports[0].yoffset;
 	p.static_params->viewport_offset[2]       = vp.viewports[0].zoffset;
-	p.static_params->scissor_ltrb[0]          = vp.scissor_left;
-	p.static_params->scissor_ltrb[1]          = vp.scissor_top;
-	p.static_params->scissor_ltrb[2]          = vp.scissor_right;
-	p.static_params->scissor_ltrb[3]          = vp.scissor_bottom;
+	p.static_params->scissor_ltrb[0]          = vp.screen_scissor_left;
+	p.static_params->scissor_ltrb[1]          = vp.screen_scissor_top;
+	p.static_params->scissor_ltrb[2]          = vp.screen_scissor_right;
+	p.static_params->scissor_ltrb[3]          = vp.screen_scissor_bottom;
 	p.static_params->topology                 = topology;
 	p.static_params->with_depth               = (depth->format != VK_FORMAT_UNDEFINED && depth->vulkan_buffer != nullptr);
 	p.static_params->depth_test_enable        = depth->depth_test_enable;
@@ -2239,8 +2297,10 @@ VulkanPipeline* PipelineCache::CreatePipeline(VulkanFramebuffer* framebuffer, Re
 	p.static_params->blend_color_blue         = bclr.blue;
 	p.static_params->blend_color_alpha        = bclr.alpha;
 
-	p.dynamic_params->stencil_front = depth->stencil_dynamic_front;
-	p.dynamic_params->stencil_back  = depth->stencil_dynamic_back;
+	p.dynamic_params->line_width         = ctx->GetLineWidth();
+	p.dynamic_params->stencil_front      = depth->stencil_dynamic_front;
+	p.dynamic_params->stencil_back       = depth->stencil_dynamic_back;
+	p.dynamic_params->color_write_enable = (cc.mode == 1);
 
 	auto* found = Find(p);
 
@@ -2252,13 +2312,13 @@ VulkanPipeline* PipelineCache::CreatePipeline(VulkanFramebuffer* framebuffer, Re
 		return found;
 	}
 
-	auto vs_code = ShaderParseVS(vs_regs);
-	auto ps_code = ShaderParsePS(ps_regs);
+	auto vs_code = ShaderParseVS(&vs_regs);
+	auto ps_code = ShaderParsePS(&ps_regs);
 
-	auto* params2 = new PipelineAdditionalParameters;
+	// auto* params2 = new PipelineAdditionalParameters;
 
-	params2->vs_bind = ShaderGetBindParametersVS(vs_code, vs_input_info);
-	params2->ps_bind = ShaderGetBindParametersPS(ps_code, ps_input_info);
+	// params2->vs_bind = ShaderGetBindParametersVS(vs_code, vs_input_info);
+	// params2->ps_bind = ShaderGetBindParametersPS(ps_code, ps_input_info);
 
 	auto vs_shader = ShaderRecompileVS(vs_code, vs_input_info);
 	auto ps_shader = ShaderRecompilePS(ps_code, ps_input_info);
@@ -2267,7 +2327,7 @@ VulkanPipeline* PipelineCache::CreatePipeline(VulkanFramebuffer* framebuffer, Re
 	EXIT_IF(ps_shader.IsEmpty());
 
 	p.pipeline = CreatePipelineInternal(framebuffer->render_pass, vs_input_info, vs_shader, ps_input_info, ps_shader, p.static_params,
-	                                    p.dynamic_params, params2);
+	                                    p.dynamic_params /*, params2*/);
 
 	EXIT_NOT_IMPLEMENTED(p.pipeline == nullptr);
 
@@ -2298,7 +2358,7 @@ VulkanPipeline* PipelineCache::CreatePipeline(VulkanFramebuffer* framebuffer, Re
 	return p.pipeline;
 }
 
-VulkanPipeline* PipelineCache::CreatePipeline(const ShaderComputeInputInfo* input_info, const ComputeShaderInfo* cs_regs)
+VulkanPipeline* PipelineCache::CreatePipeline(const ShaderComputeInputInfo* input_info, const HW::ComputeShaderInfo* cs_regs)
 {
 	KYTY_PROFILER_BLOCK("PipelineCache::CreatePipeline(Compute)", profiler::colors::RedA100);
 
@@ -2315,9 +2375,11 @@ VulkanPipeline* PipelineCache::CreatePipeline(const ShaderComputeInputInfo* inpu
 	p.static_params  = new PipelineStaticParameters;
 	p.dynamic_params = new PipelineDynamicParameters;
 
+	p.dynamic_params->vk_dynamic_state_line_width           = true;
 	p.dynamic_params->vk_dynamic_state_stencil_compare_mask = true;
 	p.dynamic_params->vk_dynamic_state_stencil_reference    = true;
 	p.dynamic_params->vk_dynamic_state_stencil_write_mask   = true;
+	p.dynamic_params->color_write_enable                    = true;
 
 	auto* found = Find(p);
 
@@ -2331,14 +2393,14 @@ VulkanPipeline* PipelineCache::CreatePipeline(const ShaderComputeInputInfo* inpu
 
 	auto cs_code = ShaderParseCS(cs_regs);
 
-	auto* params2 = new PipelineAdditionalParameters;
+	// auto* params2 = new PipelineAdditionalParameters;
 
-	params2->cs_bind = ShaderGetBindParametersCS(cs_code, input_info);
+	// params2->cs_bind = ShaderGetBindParametersCS(cs_code, input_info);
 
 	auto cs_shader = ShaderRecompileCS(cs_code, input_info);
 	EXIT_IF(cs_shader.IsEmpty());
 
-	p.pipeline = CreatePipelineInternal(input_info, cs_shader, p.static_params, p.dynamic_params, params2);
+	p.pipeline = CreatePipelineInternal(input_info, cs_shader, p.static_params, p.dynamic_params /*, params2*/);
 
 	EXIT_NOT_IMPLEMENTED(p.pipeline == nullptr);
 
@@ -2661,14 +2723,15 @@ void DescriptorCache::Free(VulkanDescriptorSet* set)
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 VulkanDescriptorSet* DescriptorCache::GetDescriptor(Stage stage, VulkanBuffer** storage_buffers, VulkanImage** textures2d_sampled,
-                                                    VulkanImage** textures2d_storage, uint64_t* samplers, VulkanBuffer** gds_buffers,
-                                                    const ShaderBindResources& bind, const ShaderBindParameters& bind_params)
+                                                    const bool* textures2d_depth, VulkanImage** textures2d_storage, uint64_t* samplers,
+                                                    VulkanBuffer**             gds_buffers,
+                                                    const ShaderBindResources& bind /*, const ShaderBindParameters& bind_params*/)
 {
 	KYTY_PROFILER_BLOCK("DescriptorCache::GetDescriptor");
 
 	int storage_buffers_num    = bind.storage_buffers.buffers_num;
-	int textures2d_sampled_num = bind_params.textures2d_sampled_num;
-	int textures2d_storage_num = bind_params.textures2d_storage_num;
+	int textures2d_sampled_num = bind.textures2D.textures2d_sampled_num;
+	int textures2d_storage_num = bind.textures2D.textures2d_storage_num;
 	int samplers_num           = bind.samplers.samplers_num;
 	int gds_buffers_num        = bind.gds_pointers.pointers_num;
 
@@ -2763,9 +2826,17 @@ VulkanDescriptorSet* DescriptorCache::GetDescriptor(Stage stage, VulkanBuffer** 
 	VkDescriptorImageInfo texture2d_sampled_info[TEXTURES_SAMPLED_MAX] {};
 	for (int i = 0; i < textures2d_sampled_num; i++)
 	{
-		texture2d_sampled_info[i].sampler     = nullptr;
-		texture2d_sampled_info[i].imageView   = textures2d_sampled[i]->image_view;
-		texture2d_sampled_info[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		if (textures2d_depth[i])
+		{
+			texture2d_sampled_info[i].sampler     = nullptr;
+			texture2d_sampled_info[i].imageView   = static_cast<DepthStencilVulkanImage*>(textures2d_sampled[i])->texture_view;
+			texture2d_sampled_info[i].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+		} else
+		{
+			texture2d_sampled_info[i].sampler     = nullptr;
+			texture2d_sampled_info[i].imageView   = textures2d_sampled[i]->image_view;
+			texture2d_sampled_info[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		}
 	}
 
 	VkDescriptorImageInfo texture2d_storage_info[TEXTURES_STORAGE_MAX] {};
@@ -2969,12 +3040,12 @@ void DescriptorCache::FreeDescriptor(VulkanImage* image)
 	}
 }
 
-VkDescriptorSetLayout DescriptorCache::GetDescriptorSetLayout(Stage stage, const ShaderBindResources& bind,
-                                                              const ShaderBindParameters& bind_params)
+VkDescriptorSetLayout DescriptorCache::GetDescriptorSetLayout(Stage stage, const ShaderBindResources& bind/*,
+                                                              const ShaderBindParameters& bind_params*/)
 {
 	int storage_buffers_num    = bind.storage_buffers.buffers_num;
-	int textures2d_sampled_num = bind_params.textures2d_sampled_num;
-	int textures2d_storage_num = bind_params.textures2d_storage_num;
+	int textures2d_sampled_num = bind.textures2D.textures2d_sampled_num;
+	int textures2d_storage_num = bind.textures2D.textures2d_storage_num;
 	int samplers_num           = bind.samplers.samplers_num;
 	int gds_buffers_num        = bind.gds_pointers.pointers_num;
 
@@ -3115,7 +3186,143 @@ static void get_stencil_state(PipelineStencilStaticState* s, PipelineStencilDyna
 	}
 }
 
-static void FindRenderDepthInfo(CommandBuffer* /*buffer*/, const HardwareContext& hw, RenderDepthInfo* r)
+static Vector<RenderTextureVulkanImage*> FindRenderTexture(uint64_t vaddr, uint64_t size, bool exact)
+{
+	KYTY_PROFILER_FUNCTION();
+
+	Vector<RenderTextureVulkanImage*> ret;
+
+	auto objects = GpuMemoryFindObjects(vaddr, size, exact, false);
+
+	for (const auto& obj: objects)
+	{
+		if (obj.type == GpuMemoryObjectType::RenderTexture)
+		{
+			ret.Add(static_cast<RenderTextureVulkanImage*>(obj.obj));
+		}
+	}
+
+	return ret;
+}
+
+static Vector<DepthStencilVulkanImage*> FindDepthStencil(uint64_t vaddr, uint64_t size, bool exact)
+{
+	KYTY_PROFILER_FUNCTION();
+
+	Vector<DepthStencilVulkanImage*> ret;
+
+	auto objects = GpuMemoryFindObjects(vaddr, size, exact, true);
+
+	for (const auto& obj: objects)
+	{
+		if (obj.type == GpuMemoryObjectType::DepthStencilBuffer)
+		{
+			ret.Add(static_cast<DepthStencilVulkanImage*>(obj.obj));
+		}
+	}
+
+	return ret;
+}
+
+void GraphicsRenderMemoryBarrier(CommandBuffer* buffer)
+{
+	EXIT_IF(buffer == nullptr);
+	EXIT_IF(buffer->IsInvalid());
+
+	Core::LockGuard lock(g_render_ctx->GetMutex());
+
+	auto* vk_buffer = buffer->GetPool()->buffers[buffer->GetIndex()];
+
+	VkMemoryBarrier mem_barrier {};
+	mem_barrier.sType         = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+	mem_barrier.pNext         = nullptr;
+	mem_barrier.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
+	mem_barrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+
+	vkCmdPipelineBarrier(vk_buffer, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+	                     VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &mem_barrier, 0, nullptr, 0,
+	                     nullptr);
+}
+
+static void GraphicsRenderRenderTextureBarrier(VkCommandBuffer vk_buffer, VulkanImage* image)
+{
+	EXIT_IF(image == nullptr);
+
+	if (image->layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+	{
+		VkImageMemoryBarrier image_memory_barrier {};
+		image_memory_barrier.sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		image_memory_barrier.pNext                           = nullptr;
+		image_memory_barrier.srcAccessMask                   = VK_ACCESS_MEMORY_WRITE_BIT;
+		image_memory_barrier.dstAccessMask                   = VK_ACCESS_MEMORY_READ_BIT;
+		image_memory_barrier.oldLayout                       = image->layout;
+		image_memory_barrier.newLayout                       = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		image_memory_barrier.srcQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+		image_memory_barrier.dstQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+		image_memory_barrier.image                           = image->image;
+		image_memory_barrier.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+		image_memory_barrier.subresourceRange.baseMipLevel   = 0;
+		image_memory_barrier.subresourceRange.levelCount     = VK_REMAINING_MIP_LEVELS;
+		image_memory_barrier.subresourceRange.baseArrayLayer = 0;
+		image_memory_barrier.subresourceRange.layerCount     = 1;
+
+		vkCmdPipelineBarrier(vk_buffer, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+		                     VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1,
+		                     &image_memory_barrier);
+
+		image->layout = image_memory_barrier.newLayout;
+	}
+}
+
+static void GraphicsRenderDepthStencilBarrier(VkCommandBuffer vk_buffer, VulkanImage* image)
+{
+	EXIT_IF(image == nullptr);
+
+	if (image->layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+	{
+		VkImageMemoryBarrier image_memory_barrier {};
+		image_memory_barrier.sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		image_memory_barrier.pNext                           = nullptr;
+		image_memory_barrier.srcAccessMask                   = VK_ACCESS_MEMORY_WRITE_BIT;
+		image_memory_barrier.dstAccessMask                   = VK_ACCESS_MEMORY_READ_BIT;
+		image_memory_barrier.oldLayout                       = image->layout;
+		image_memory_barrier.newLayout                       = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+		image_memory_barrier.srcQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+		image_memory_barrier.dstQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+		image_memory_barrier.image                           = image->image;
+		image_memory_barrier.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_DEPTH_BIT;
+		image_memory_barrier.subresourceRange.baseMipLevel   = 0;
+		image_memory_barrier.subresourceRange.levelCount     = VK_REMAINING_MIP_LEVELS;
+		image_memory_barrier.subresourceRange.baseArrayLayer = 0;
+		image_memory_barrier.subresourceRange.layerCount     = 1;
+
+		vkCmdPipelineBarrier(vk_buffer, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+		                     VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1,
+		                     &image_memory_barrier);
+
+		image->layout = image_memory_barrier.newLayout;
+	}
+}
+
+void GraphicsRenderRenderTextureBarrier(CommandBuffer* buffer, uint64_t vaddr, uint64_t size)
+{
+	EXIT_IF(buffer == nullptr);
+	EXIT_IF(buffer->IsInvalid());
+
+	Core::LockGuard lock(g_render_ctx->GetMutex());
+
+	auto* vk_buffer = buffer->GetPool()->buffers[buffer->GetIndex()];
+
+	auto images = FindRenderTexture(vaddr, size, false);
+
+	for (auto* image: images)
+	{
+		GraphicsRenderRenderTextureBarrier(vk_buffer, image);
+	}
+}
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+static void FindRenderDepthInfo(CommandBuffer* /*buffer*/, const HW::HardwareContext& hw, RenderDepthInfo* r)
 {
 	KYTY_PROFILER_FUNCTION();
 
@@ -3127,6 +3334,7 @@ static void FindRenderDepthInfo(CommandBuffer* /*buffer*/, const HardwareContext
 	const auto& dc  = hw.GetDepthControl();
 	const auto& sc  = hw.GetStencilControl();
 	const auto& sm  = hw.GetStencilMask();
+	const auto& cc  = hw.GetColorControl();
 
 	uint32_t size         = 0;
 	uint32_t stencil_size = 0;
@@ -3144,6 +3352,8 @@ static void FindRenderDepthInfo(CommandBuffer* /*buffer*/, const HardwareContext
 
 	bool htile = z.z_info.tile_surface_enable;
 
+	bool decompress = htile && (rc.depth_compress_disable || rc.stencil_compress_disable);
+
 	TileGetDepthSize(z.width, z.height, z.z_info.format, z.stencil_info.format, htile, neo, &stencil_size, &htile_size, &depth_size,
 	                 &pitch);
 
@@ -3156,15 +3366,18 @@ static void FindRenderDepthInfo(CommandBuffer* /*buffer*/, const HardwareContext
 		EXIT_NOT_IMPLEMENTED((z.pitch_div8_minus1 + 1) * 8 != pitch);
 	}
 
-	switch (z.z_info.format * 2 + z.stencil_info.format)
+	if (dc.z_enable || dc.z_write_enable || dc.stencil_enable || decompress)
 	{
-		case 0: r->format = VK_FORMAT_UNDEFINED; break;
-		case 1: /*r->format = VK_FORMAT_S8_UINT*/ EXIT("Unsupported format: VK_FORMAT_S8_UINT\n"); break;
-		case 2: r->format = VK_FORMAT_D16_UNORM; break;
-		case 3: r->format = VK_FORMAT_D24_UNORM_S8_UINT; break;
-		case 6: r->format = VK_FORMAT_D32_SFLOAT; break;
-		case 7: r->format = VK_FORMAT_D32_SFLOAT_S8_UINT; break;
-		default: EXIT("unknown z and stencil format: %u, %u\n", z.z_info.format, z.stencil_info.format);
+		switch (z.z_info.format * 2 + z.stencil_info.format)
+		{
+			case 0: r->format = VK_FORMAT_UNDEFINED; break;
+			case 1: /*r->format = VK_FORMAT_S8_UINT*/ EXIT("Unsupported format: VK_FORMAT_S8_UINT\n"); break;
+			case 2: r->format = VK_FORMAT_D16_UNORM; break;
+			case 3: r->format = VK_FORMAT_D24_UNORM_S8_UINT; break;
+			case 6: r->format = VK_FORMAT_D32_SFLOAT; break;
+			case 7: r->format = VK_FORMAT_D32_SFLOAT_S8_UINT; break;
+			default: EXIT("unknown z and stencil format: %u, %u\n", z.z_info.format, z.stencil_info.format);
+		}
 	}
 
 	r->htile                = htile;
@@ -3251,20 +3464,25 @@ static void FindRenderDepthInfo(CommandBuffer* /*buffer*/, const HardwareContext
 		    GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), nullptr, r->vaddr, r->size, r->vaddr_num, vulkan_buffer_info));
 
 		EXIT_NOT_IMPLEMENTED(r->vulkan_buffer == nullptr);
+
+		if ((cc.mode == 0 && cc.op == 0xCC) || (dc.z_enable || dc.z_write_enable))
+		{
+			r->vulkan_buffer->compressed = htile && !decompress;
+		}
 	}
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-static void FindRenderColorInfo(CommandBuffer* buffer, const HardwareContext& hw, RenderColorInfo* r)
+static void FindRenderColorInfo(CommandBuffer* buffer, const HW::HardwareContext& hw, RenderColorInfo* r)
 {
 	KYTY_PROFILER_FUNCTION();
 
 	EXIT_IF(r == nullptr);
 
-	const auto& rt   = hw.GetRenderTargets(0);
+	const auto& rt   = hw.GetRenderTarget(0);
 	auto        mask = hw.GetRenderTargetMask();
 
-	if (rt.base_addr == 0 || mask == 0)
+	if (rt.base.addr == 0 || mask == 0)
 	{
 		// No color output
 		r->type          = RenderColorType::NoColorOutput;
@@ -3274,40 +3492,45 @@ static void FindRenderColorInfo(CommandBuffer* buffer, const HardwareContext& hw
 		return;
 	}
 
-	auto     width             = rt.width;
-	auto     height            = rt.height;
-	auto     pitch             = (rt.pitch_div8_minus1 + 1) * 8;
-	auto     size              = (rt.slice_div64_minus1 + 1) * 64 * 4;
+	auto     width             = rt.size.width;
+	auto     height            = rt.size.height;
+	auto     pitch             = (rt.pitch.pitch_div8_minus1 + 1) * 8;
+	auto     size              = (rt.slice.slice_div64_minus1 + 1) * 64 * 4;
 	bool     tile              = false;
 	uint32_t format            = 0;
 	bool     render_to_texture = false;
 
-	if (rt.tile_mode == 0x8)
+	if (rt.attrib.tile_mode == 0x8)
 	{
 		tile = false;
-	} else if (rt.tile_mode == 0xa)
+	} else if (rt.attrib.tile_mode == 0xa)
 	{
 		tile = true;
-	} else if (rt.tile_mode == 0xd || rt.tile_mode == 0xe)
+
+		if (rt.info.format == 0xa && rt.info.channel_type == 0x0 && rt.info.channel_order == 0x0 && rt.size.width == rt.size.height)
+		{
+			render_to_texture = true;
+		}
+	} else if (rt.attrib.tile_mode == 0xd || rt.attrib.tile_mode == 0xe)
 	{
 		tile              = true;
 		render_to_texture = true;
 	} else
 	{
-		EXIT("unknown tile mode: %u\n", rt.tile_mode);
+		EXIT("unknown tile mode: %u\n", rt.attrib.tile_mode);
 	}
 
 	if (render_to_texture)
 	{
-		if (rt.color_info.format == 0xa && rt.color_info.channel_type == 0x0 && rt.color_info.channel_order == 0x0)
+		if (rt.info.format == 0xa && rt.info.channel_type == 0x0 && rt.info.channel_order == 0x0)
 		{
 			// Render to texture
-			RenderTextureObject vulkan_buffer_info(RenderTextureFormat::R8G8B8A8Unorm, width, height, tile, rt.color_info.neo_mode, pitch);
+			RenderTextureObject vulkan_buffer_info(RenderTextureFormat::R8G8B8A8Unorm, width, height, tile, rt.info.neo_mode, pitch);
 			auto*               buffer_vulkan = static_cast<Graphics::RenderTextureVulkanImage*>(
-                Graphics::GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), buffer, rt.base_addr, size, vulkan_buffer_info));
+                Graphics::GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), buffer, rt.base.addr, size, vulkan_buffer_info));
 			EXIT_NOT_IMPLEMENTED(buffer_vulkan == nullptr);
 			r->type          = RenderColorType::RenderTexture;
-			r->base_addr     = rt.base_addr;
+			r->base_addr     = rt.base.addr;
 			r->vulkan_buffer = buffer_vulkan;
 			r->buffer_size   = size;
 		} else
@@ -3316,7 +3539,7 @@ static void FindRenderColorInfo(CommandBuffer* buffer, const HardwareContext& hw
 		}
 	} else
 	{
-		if (rt.color_info.format == 0xa && rt.color_info.channel_type == 0x6 && rt.color_info.channel_order == 0x1)
+		if (rt.info.format == 0xa && rt.info.channel_type == 0x6 && rt.info.channel_order == 0x1)
 		{
 			format = 0x80000000;
 		} else
@@ -3324,16 +3547,16 @@ static void FindRenderColorInfo(CommandBuffer* buffer, const HardwareContext& hw
 			EXIT("unknown format");
 		}
 
-		auto video_image = VideoOut::VideoOutGetImage(rt.base_addr);
+		auto video_image = VideoOut::VideoOutGetImage(rt.base.addr);
 		if (video_image.image == nullptr)
 		{
 			// Offscreen buffer
 			VideoOutBufferObject vulkan_buffer_info(format, width, height, tile, Config::IsNeo(), pitch);
 			auto*                buffer_vulkan = static_cast<Graphics::VideoOutVulkanImage*>(
-                Graphics::GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), nullptr, rt.base_addr, size, vulkan_buffer_info));
+                Graphics::GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), nullptr, rt.base.addr, size, vulkan_buffer_info));
 			EXIT_NOT_IMPLEMENTED(buffer_vulkan == nullptr);
 			r->type          = RenderColorType::OffscreenBuffer;
-			r->base_addr     = rt.base_addr;
+			r->base_addr     = rt.base.addr;
 			r->vulkan_buffer = buffer_vulkan;
 			r->buffer_size   = size;
 		} else
@@ -3342,7 +3565,7 @@ static void FindRenderColorInfo(CommandBuffer* buffer, const HardwareContext& hw
 			EXIT_NOT_IMPLEMENTED(video_image.buffer_size != size);
 			EXIT_NOT_IMPLEMENTED(video_image.buffer_pitch != pitch);
 			r->type          = RenderColorType::DisplayBuffer;
-			r->base_addr     = rt.base_addr;
+			r->base_addr     = rt.base.addr;
 			r->vulkan_buffer = video_image.image;
 			r->buffer_size   = video_image.buffer_size;
 		}
@@ -3373,25 +3596,6 @@ static void InvalidateMemoryObject(const RenderDepthInfo& r)
 	{
 		GpuMemoryResetHash(g_render_ctx->GetGraphicCtx(), r.vaddr, r.size, r.vaddr_num, GpuMemoryObjectType::DepthStencilBuffer);
 	}
-}
-
-static Vector<RenderTextureVulkanImage*> FindRenderTexture(uint64_t vaddr, uint64_t size, bool exact)
-{
-	KYTY_PROFILER_FUNCTION();
-
-	Vector<RenderTextureVulkanImage*> ret;
-
-	auto objects = GpuMemoryFindObjects(vaddr, size, exact);
-
-	for (const auto& obj: objects)
-	{
-		if (obj.type == GpuMemoryObjectType::RenderTexture)
-		{
-			ret.Add(static_cast<RenderTextureVulkanImage*>(obj.obj));
-		}
-	}
-
-	return ret;
 }
 
 static void PrepareStorageBuffers(CommandBuffer* buffer, const ShaderStorageResources& storage_buffers, VulkanBuffer** buffers,
@@ -3456,7 +3660,7 @@ static void PrepareStorageBuffers(CommandBuffer* buffer, const ShaderStorageReso
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 static void PrepareTextures(CommandBuffer* buffer, const ShaderTextureResources& textures, VulkanImage** images_sampled,
-                            VulkanImage** images_storage, uint32_t** sgprs, const bool* without_sampler)
+                            VulkanImage** images_storage, bool* images_depth, uint32_t** sgprs /*, const bool* without_sampler*/)
 {
 	KYTY_PROFILER_FUNCTION();
 
@@ -3464,19 +3668,19 @@ static void PrepareTextures(CommandBuffer* buffer, const ShaderTextureResources&
 	EXIT_IF(images_storage == nullptr);
 	EXIT_IF(sgprs == nullptr);
 	EXIT_IF(*sgprs == nullptr);
-	EXIT_IF(without_sampler == nullptr);
+	//	EXIT_IF(without_sampler == nullptr);
 
 	int index_sampled = 0;
 	int index_storage = 0;
 
 	for (int i = 0; i < textures.textures_num; i++)
 	{
-		auto r = textures.textures[i];
+		auto r = textures.desc[i].texture;
 
 		EXIT_NOT_IMPLEMENTED(r.Base() == 0);
 		EXIT_NOT_IMPLEMENTED(r.MinLod() != 0);
-		EXIT_NOT_IMPLEMENTED(r.Dfmt() != 10 && r.Dfmt() != 37);
-		EXIT_NOT_IMPLEMENTED(r.Nfmt() != 9 && r.Nfmt() != 0);
+		EXIT_NOT_IMPLEMENTED(r.Dfmt() != 10 && r.Dfmt() != 37 && r.Dfmt() != 4);
+		EXIT_NOT_IMPLEMENTED(r.Nfmt() != 9 && r.Nfmt() != 0 && r.Nfmt() != 7);
 		// EXIT_NOT_IMPLEMENTED(r.Width() != 511);
 		// EXIT_NOT_IMPLEMENTED(r.Height() != 511);
 		EXIT_NOT_IMPLEMENTED(r.PerfMod() != 7 && r.PerfMod() != 0);
@@ -3487,7 +3691,7 @@ static void PrepareTextures(CommandBuffer* buffer, const ShaderTextureResources&
 		// EXIT_NOT_IMPLEMENTED(r.DstSelW() != 7);
 		// EXIT_NOT_IMPLEMENTED(r.BaseLevel() != 0);
 		// EXIT_NOT_IMPLEMENTED(r.LastLevel() != 0 && r.LastLevel() != 9);
-		EXIT_NOT_IMPLEMENTED(!(r.TilingIdx() == 8 || r.TilingIdx() == 13 || r.TilingIdx() == 14));
+		EXIT_NOT_IMPLEMENTED(!(r.TilingIdx() == 8 || r.TilingIdx() == 13 || r.TilingIdx() == 14 || r.TilingIdx() == 2));
 		// EXIT_NOT_IMPLEMENTED(!(r.LastLevel() == 0 && r.Pow2Pad() == false) && !(r.LastLevel() == 9 && r.Pow2Pad() == true));
 		EXIT_NOT_IMPLEMENTED(r.Type() != 9);
 		EXIT_NOT_IMPLEMENTED(r.Depth() != 0);
@@ -3501,8 +3705,7 @@ static void PrepareTextures(CommandBuffer* buffer, const ShaderTextureResources&
 
 		bool read_only = (r.MemoryType() == 0x10);
 
-		EXIT_NOT_IMPLEMENTED(read_only && !(textures.usages[i] == ShaderTextureUsage::ReadOnly));
-		// EXIT_NOT_IMPLEMENTED(!read_only && !(textures.usages[i] == ShaderTextureUsage::ReadWrite));
+		EXIT_NOT_IMPLEMENTED(read_only && !(textures.desc[i].usage == ShaderTextureUsage::ReadOnly));
 
 		auto     addr       = r.Base();
 		uint32_t size       = 0;
@@ -3516,25 +3719,52 @@ static void PrepareTextures(CommandBuffer* buffer, const ShaderTextureResources&
 		uint32_t swizzle    = static_cast<uint32_t>(r.DstSelX()) | (static_cast<uint32_t>(r.DstSelY()) << 8u) |
 		                   (static_cast<uint32_t>(r.DstSelZ()) << 16u) | (static_cast<uint32_t>(r.DstSelW()) << 24u);
 
+		bool check_depth_texture = (tile == 2);
+
 		TileGetTextureSize(r.Dfmt(), r.Nfmt(), width, height, pitch, levels, tile, neo, &size, nullptr, nullptr, nullptr);
 		EXIT_NOT_IMPLEMENTED(size == 0);
 
-		auto rtex = FindRenderTexture(addr, size, true);
+		VulkanImage* tex            = nullptr;
+		bool         render_texture = false;
+		bool         depth_texture  = false;
 
-		EXIT_NOT_IMPLEMENTED(rtex.Size() > 1);
-
-		VulkanImage* tex = (!rtex.IsEmpty() ? rtex.At(0) : nullptr);
-
-		if (tex == nullptr)
+		if (check_depth_texture)
 		{
-			if (without_sampler[i])
+			auto dtex     = FindDepthStencil(addr, size, true);
+			depth_texture = !dtex.IsEmpty();
+			if (depth_texture)
 			{
+				EXIT_NOT_IMPLEMENTED(dtex.Size() > 1);
+				EXIT_NOT_IMPLEMENTED(swizzle != 0x04040404);
+				EXIT_NOT_IMPLEMENTED(dtex.At(0)->compressed);
+				tex = dtex.At(0);
+			}
+		} else
+		{
+			auto rtex      = FindRenderTexture(addr, size, true);
+			render_texture = !rtex.IsEmpty();
+			if (render_texture)
+			{
+				EXIT_NOT_IMPLEMENTED(rtex.Size() > 1);
+				EXIT_NOT_IMPLEMENTED(swizzle != 0x07060504);
+				tex = rtex.At(0);
+			}
+		}
+
+		if (!render_texture && !depth_texture)
+		{
+			if (textures.desc[i].textures2d_without_sampler)
+			{
+				EXIT_NOT_IMPLEMENTED(textures.desc[i].usage != ShaderTextureUsage::ReadWrite);
+
 				StorageTextureObject vulkan_texture_info(r.Dfmt(), r.Nfmt(), width, height, pitch, base_level, levels, tile, neo, swizzle);
 
 				tex = static_cast<StorageTextureVulkanImage*>(
 				    GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), buffer, addr, size, vulkan_texture_info));
 			} else
 			{
+				EXIT_NOT_IMPLEMENTED(textures.desc[i].usage != ShaderTextureUsage::ReadOnly);
+
 				TextureObject vulkan_texture_info(r.Dfmt(), r.Nfmt(), width, height, pitch, base_level, levels, tile, neo, swizzle);
 
 				tex = static_cast<TextureVulkanImage*>(
@@ -3544,7 +3774,7 @@ static void PrepareTextures(CommandBuffer* buffer, const ShaderTextureResources&
 
 		EXIT_NOT_IMPLEMENTED(tex == nullptr);
 
-		if (without_sampler[i])
+		if (textures.desc[i].textures2d_without_sampler)
 		{
 			images_storage[index_storage] = tex;
 			r.UpdateAddress(index_storage);
@@ -3552,6 +3782,7 @@ static void PrepareTextures(CommandBuffer* buffer, const ShaderTextureResources&
 		} else
 		{
 			images_sampled[index_sampled] = tex;
+			images_depth[index_sampled]   = depth_texture;
 			r.UpdateAddress(index_sampled);
 			index_sampled++;
 		}
@@ -3646,7 +3877,7 @@ static void PrepareGdsPointers(const ShaderGdsResources& gds_pointers, uint32_t*
 }
 
 static void BindDescriptors(CommandBuffer* buffer, VkPipelineBindPoint pipeline_bind_point, VkPipelineLayout layout,
-                            const ShaderBindResources& bind, const ShaderBindParameters& bind_params, VkShaderStageFlags vk_stage,
+                            const ShaderBindResources& bind, /*const ShaderBindParameters& bind_params,*/ VkShaderStageFlags vk_stage,
                             DescriptorCache::Stage stage)
 {
 	KYTY_PROFILER_FUNCTION();
@@ -3655,14 +3886,16 @@ static void BindDescriptors(CommandBuffer* buffer, VkPipelineBindPoint pipeline_
 	{
 		EXIT_NOT_IMPLEMENTED(bind.push_constant_size > DescriptorCache::PUSH_CONSTANTS_MAX * 4);
 		EXIT_NOT_IMPLEMENTED(bind.storage_buffers.buffers_num > DescriptorCache::BUFFERS_MAX);
-		EXIT_NOT_IMPLEMENTED((bind_params.textures2d_storage_num > DescriptorCache::TEXTURES_STORAGE_MAX) ||
-		                     (bind_params.textures2d_sampled_num > DescriptorCache::TEXTURES_SAMPLED_MAX));
-		EXIT_NOT_IMPLEMENTED(bind_params.textures2d_storage_num + bind_params.textures2d_sampled_num != bind.textures2D.textures_num);
+		EXIT_NOT_IMPLEMENTED((bind.textures2D.textures2d_storage_num > DescriptorCache::TEXTURES_STORAGE_MAX) ||
+		                     (bind.textures2D.textures2d_sampled_num > DescriptorCache::TEXTURES_SAMPLED_MAX));
+		EXIT_NOT_IMPLEMENTED(bind.textures2D.textures2d_storage_num + bind.textures2D.textures2d_sampled_num !=
+		                     bind.textures2D.textures_num);
 		EXIT_NOT_IMPLEMENTED(bind.samplers.samplers_num > DescriptorCache::SAMPLERS_MAX);
 
 		VulkanBuffer* storage_buffers[DescriptorCache::BUFFERS_MAX];
 		VulkanImage*  textures2d_sampled[DescriptorCache::TEXTURES_SAMPLED_MAX];
 		VulkanImage*  textures2d_storage[DescriptorCache::TEXTURES_STORAGE_MAX];
+		bool          textures2d_depth[DescriptorCache::TEXTURES_SAMPLED_MAX];
 		uint64_t      samplers[DescriptorCache::SAMPLERS_MAX];
 		uint32_t      sgprs[DescriptorCache::PUSH_CONSTANTS_MAX];
 
@@ -3676,8 +3909,8 @@ static void BindDescriptors(CommandBuffer* buffer, VkPipelineBindPoint pipeline_
 		}
 		if (bind.textures2D.textures_num > 0)
 		{
-			PrepareTextures(buffer, bind.textures2D, textures2d_sampled, textures2d_storage, &sgprs_ptr,
-			                bind_params.textures2d_without_sampler);
+			PrepareTextures(buffer, bind.textures2D, textures2d_sampled, textures2d_storage, textures2d_depth, &sgprs_ptr/*,
+			                bind.textures2D.textures2d_without_sampler*/);
 		}
 		if (bind.samplers.samplers_num > 0)
 		{
@@ -3691,15 +3924,45 @@ static void BindDescriptors(CommandBuffer* buffer, VkPipelineBindPoint pipeline_
 
 		EXIT_IF(bind.push_constant_size != (sgprs_ptr - sgprs) * 4);
 
-		auto* descriptor_set = g_render_ctx->GetDescriptorCache()->GetDescriptor(
-		    stage, storage_buffers, textures2d_sampled, textures2d_storage, samplers, &gds_buffer, bind, bind_params);
+		auto* descriptor_set =
+		    g_render_ctx->GetDescriptorCache()->GetDescriptor(stage, storage_buffers, textures2d_sampled, textures2d_depth,
+		                                                      textures2d_storage, samplers, &gds_buffer, bind /*, bind_params*/);
 
 		EXIT_IF(descriptor_set == nullptr);
 
 		auto* vk_buffer = buffer->GetPool()->buffers[buffer->GetIndex()];
 
+		if (bind.textures2D.textures_num > 0)
+		{
+			for (int i = 0; i < bind.textures2D.textures2d_sampled_num; i++)
+			{
+				if (textures2d_depth[i])
+				{
+					GraphicsRenderDepthStencilBarrier(vk_buffer, textures2d_sampled[i]);
+				}
+			}
+		}
+
 		vkCmdBindDescriptorSets(vk_buffer, pipeline_bind_point, layout, bind.descriptor_set_slot, 1, &descriptor_set->set, 0, nullptr);
 		vkCmdPushConstants(vk_buffer, layout, vk_stage, bind.push_constant_offset, bind.push_constant_size, sgprs);
+	}
+}
+
+static void VulkanCmdSetColorWriteEnableEXT(GraphicContext* ctx, VkCommandBuffer command_buffer, uint32_t attachment_count,
+                                            const VkBool32* p_color_write_enables)
+{
+	EXIT_IF(ctx == nullptr);
+	EXIT_IF(ctx->instance == nullptr);
+
+	static auto func =
+	    reinterpret_cast<PFN_vkCmdSetColorWriteEnableEXT>(vkGetInstanceProcAddr(ctx->instance, "vkCmdSetColorWriteEnableEXT"));
+
+	if (func != nullptr)
+	{
+		func(command_buffer, attachment_count, p_color_write_enables);
+	} else
+	{
+		EXIT("vkCmdSetColorWriteEnableEXT not present\n");
 	}
 }
 
@@ -3710,6 +3973,11 @@ static void SetDynamicParams(VkCommandBuffer vk_buffer, VulkanPipeline* pipeline
 	EXIT_IF(pipeline == nullptr);
 	EXIT_IF(pipeline->static_params == nullptr);
 	EXIT_IF(pipeline->dynamic_params == nullptr);
+
+	if (pipeline->dynamic_params->vk_dynamic_state_line_width)
+	{
+		vkCmdSetLineWidth(vk_buffer, pipeline->dynamic_params->line_width);
+	}
 
 	if (pipeline->static_params->stencil_test_enable)
 	{
@@ -3729,9 +3997,15 @@ static void SetDynamicParams(VkCommandBuffer vk_buffer, VulkanPipeline* pipeline
 			vkCmdSetStencilReference(vk_buffer, VK_STENCIL_FACE_BACK_BIT, pipeline->dynamic_params->stencil_back.reference);
 		}
 	}
+
+	if (pipeline->dynamic_params->vk_dynamic_state_color_write_enable_ext)
+	{
+		VkBool32 enable = (pipeline->dynamic_params->color_write_enable ? VK_TRUE : VK_FALSE);
+		VulkanCmdSetColorWriteEnableEXT(g_render_ctx->GetGraphicCtx(), vk_buffer, 1, &enable);
+	}
 }
 
-void GraphicsRenderDrawIndex(CommandBuffer* buffer, HardwareContext* ctx, UserConfig* ucfg, uint32_t index_type_and_size,
+void GraphicsRenderDrawIndex(CommandBuffer* buffer, HW::HardwareContext* ctx, HW::UserConfig* ucfg, uint32_t index_type_and_size,
                              uint32_t index_count, const void* index_addr, uint32_t flags, uint32_t type)
 {
 	KYTY_PROFILER_FUNCTION();
@@ -3755,7 +4029,7 @@ void GraphicsRenderDrawIndex(CommandBuffer* buffer, HardwareContext* ctx, UserCo
 	}
 
 	// const auto& rt = ctx->GetRenderTargets(0);
-	const auto& bc = ctx->GetBlendControl(0);
+	// const auto& bc = ctx->GetBlendControl(0);
 
 	uc_print("GraphicsRenderDrawIndex():UserConfig:", *ucfg);
 
@@ -3812,10 +4086,8 @@ void GraphicsRenderDrawIndex(CommandBuffer* buffer, HardwareContext* ctx, UserCo
 
 	EXIT_NOT_IMPLEMENTED(vs_input_info.buffers_num > 1);
 
-	auto* pipeline = g_render_ctx->GetPipelineCache()->CreatePipeline(framebuffer, &color_info, &depth_info, &vs_input_info, &ctx->GetVs(),
-	                                                                  &ps_input_info, &ctx->GetPs(), VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-	                                                                  ctx->GetRenderTargetMask(), ctx->GetModeControl(), bc,
-	                                                                  ctx->GetBlendColor(), ctx->GetScreenViewport());
+	auto* pipeline = g_render_ctx->GetPipelineCache()->CreatePipeline(framebuffer, &color_info, &depth_info, &vs_input_info, ctx,
+	                                                                  &ps_input_info, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 
 	vkCmdBindPipeline(vk_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
 
@@ -3836,10 +4108,10 @@ void GraphicsRenderDrawIndex(CommandBuffer* buffer, HardwareContext* ctx, UserCo
 	}
 
 	BindDescriptors(buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline_layout, vs_input_info.bind,
-	                pipeline->additional_params->vs_bind, VK_SHADER_STAGE_VERTEX_BIT, DescriptorCache::Stage::Vertex);
+	                /*pipeline->additional_params->vs_bind,*/ VK_SHADER_STAGE_VERTEX_BIT, DescriptorCache::Stage::Vertex);
 
 	BindDescriptors(buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline_layout, ps_input_info.bind,
-	                pipeline->additional_params->ps_bind, VK_SHADER_STAGE_FRAGMENT_BIT, DescriptorCache::Stage::Pixel);
+	                /*pipeline->additional_params->ps_bind,*/ VK_SHADER_STAGE_FRAGMENT_BIT, DescriptorCache::Stage::Pixel);
 
 	VulkanBuffer* indices = static_cast<VulkanBuffer*>(GpuMemoryCreateObject(
 	    g_render_ctx->GetGraphicCtx(), nullptr, reinterpret_cast<uint64_t>(index_addr), index_size, IndexBufferGpuObject()));
@@ -3859,7 +4131,8 @@ void GraphicsRenderDrawIndex(CommandBuffer* buffer, HardwareContext* ctx, UserCo
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-void GraphicsRenderDrawIndexAuto(CommandBuffer* buffer, HardwareContext* ctx, UserConfig* ucfg, uint32_t index_count, uint32_t flags)
+void GraphicsRenderDrawIndexAuto(CommandBuffer* buffer, HW::HardwareContext* ctx, HW::UserConfig* ucfg, uint32_t index_count,
+                                 uint32_t flags)
 {
 	KYTY_PROFILER_FUNCTION();
 
@@ -3880,7 +4153,7 @@ void GraphicsRenderDrawIndexAuto(CommandBuffer* buffer, HardwareContext* ctx, Us
 	}
 
 	// const auto& rt = ctx->GetRenderTargets(0);
-	const auto& bc = ctx->GetBlendControl(0);
+	// const auto& bc = ctx->GetBlendControl(0);
 
 	uc_print("GraphicsRenderDrawIndexAuto():UserConfig:", *ucfg);
 
@@ -3928,9 +4201,8 @@ void GraphicsRenderDrawIndexAuto(CommandBuffer* buffer, HardwareContext* ctx, Us
 
 	EXIT_NOT_IMPLEMENTED(vs_input_info.buffers_num > 1);
 
-	auto* pipeline = g_render_ctx->GetPipelineCache()->CreatePipeline(
-	    framebuffer, &color_info, &depth_info, &vs_input_info, &vertex_shader_info, &ps_input_info, &pixel_shader_info, topology,
-	    ctx->GetRenderTargetMask(), ctx->GetModeControl(), bc, ctx->GetBlendColor(), ctx->GetScreenViewport());
+	auto* pipeline = g_render_ctx->GetPipelineCache()->CreatePipeline(framebuffer, &color_info, &depth_info, &vs_input_info, ctx,
+	                                                                  &ps_input_info, topology);
 
 	vkCmdBindPipeline(vk_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
 
@@ -3951,10 +4223,10 @@ void GraphicsRenderDrawIndexAuto(CommandBuffer* buffer, HardwareContext* ctx, Us
 	}
 
 	BindDescriptors(buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline_layout, vs_input_info.bind,
-	                pipeline->additional_params->vs_bind, VK_SHADER_STAGE_VERTEX_BIT, DescriptorCache::Stage::Vertex);
+	                /*pipeline->additional_params->vs_bind,*/ VK_SHADER_STAGE_VERTEX_BIT, DescriptorCache::Stage::Vertex);
 
 	BindDescriptors(buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline_layout, ps_input_info.bind,
-	                pipeline->additional_params->ps_bind, VK_SHADER_STAGE_FRAGMENT_BIT, DescriptorCache::Stage::Pixel);
+	                /*pipeline->additional_params->ps_bind,*/ VK_SHADER_STAGE_FRAGMENT_BIT, DescriptorCache::Stage::Pixel);
 
 	buffer->BeginRenderPass(framebuffer, &color_info, &depth_info);
 
@@ -3979,7 +4251,7 @@ void GraphicsRenderDrawIndexAuto(CommandBuffer* buffer, HardwareContext* ctx, Us
 	InvalidateMemoryObject(depth_info);
 }
 
-void GraphicsRenderDispatchDirect(CommandBuffer* buffer, HardwareContext* ctx, uint32_t thread_group_x, uint32_t thread_group_y,
+void GraphicsRenderDispatchDirect(CommandBuffer* buffer, HW::HardwareContext* ctx, uint32_t thread_group_x, uint32_t thread_group_y,
                                   uint32_t thread_group_z, uint32_t mode)
 {
 	EXIT_IF(ctx == nullptr);
@@ -4010,70 +4282,9 @@ void GraphicsRenderDispatchDirect(CommandBuffer* buffer, HardwareContext* ctx, u
 	SetDynamicParams(vk_buffer, pipeline);
 
 	BindDescriptors(buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline_layout, input_info.bind,
-	                pipeline->additional_params->cs_bind, VK_SHADER_STAGE_COMPUTE_BIT, DescriptorCache::Stage::Compute);
+	                /*pipeline->additional_params->cs_bind,*/ VK_SHADER_STAGE_COMPUTE_BIT, DescriptorCache::Stage::Compute);
 
 	vkCmdDispatch(vk_buffer, thread_group_x, thread_group_y, thread_group_z);
-}
-
-void GraphicsRenderMemoryBarrier(CommandBuffer* buffer)
-{
-	EXIT_IF(buffer == nullptr);
-	EXIT_IF(buffer->IsInvalid());
-
-	Core::LockGuard lock(g_render_ctx->GetMutex());
-
-	auto* vk_buffer = buffer->GetPool()->buffers[buffer->GetIndex()];
-
-	VkMemoryBarrier mem_barrier {};
-	mem_barrier.sType         = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-	mem_barrier.pNext         = nullptr;
-	mem_barrier.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
-	mem_barrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-
-	vkCmdPipelineBarrier(vk_buffer, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-	                     VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &mem_barrier, 0, nullptr, 0,
-	                     nullptr);
-}
-
-void GraphicsRenderRenderTextureBarrier(CommandBuffer* buffer, uint64_t vaddr, uint64_t size)
-{
-	EXIT_IF(buffer == nullptr);
-	EXIT_IF(buffer->IsInvalid());
-
-	Core::LockGuard lock(g_render_ctx->GetMutex());
-
-	auto* vk_buffer = buffer->GetPool()->buffers[buffer->GetIndex()];
-
-	auto images = FindRenderTexture(vaddr, size, false);
-
-	for (auto* image: images)
-	{
-		EXIT_NOT_IMPLEMENTED(image == nullptr);
-		if (image->layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
-		{
-			VkImageMemoryBarrier image_memory_barrier {};
-			image_memory_barrier.sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-			image_memory_barrier.pNext                           = nullptr;
-			image_memory_barrier.srcAccessMask                   = VK_ACCESS_MEMORY_WRITE_BIT;
-			image_memory_barrier.dstAccessMask                   = VK_ACCESS_MEMORY_READ_BIT;
-			image_memory_barrier.oldLayout                       = image->layout;
-			image_memory_barrier.newLayout                       = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			image_memory_barrier.srcQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
-			image_memory_barrier.dstQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
-			image_memory_barrier.image                           = image->image;
-			image_memory_barrier.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
-			image_memory_barrier.subresourceRange.baseMipLevel   = 0;
-			image_memory_barrier.subresourceRange.levelCount     = VK_REMAINING_MIP_LEVELS;
-			image_memory_barrier.subresourceRange.baseArrayLayer = 0;
-			image_memory_barrier.subresourceRange.layerCount     = 1;
-
-			vkCmdPipelineBarrier(vk_buffer, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-			                     VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1,
-			                     &image_memory_barrier);
-
-			image->layout = image_memory_barrier.newLayout;
-		}
-	}
 }
 
 void GraphicsRenderWriteAtEndOfPipe(CommandBuffer* buffer, uint32_t* dst_gpu_addr, uint32_t value)
@@ -4636,6 +4847,31 @@ void CommandBuffer::BeginRenderPass(VulkanFramebuffer* framebuffer, RenderColorI
 		                     &image_memory_barrier);
 
 		color->vulkan_buffer->layout = image_memory_barrier.newLayout;
+	}
+
+	if (with_depth && depth->vulkan_buffer->layout != VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+	{
+		VkImageMemoryBarrier image_memory_barrier {};
+		image_memory_barrier.sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		image_memory_barrier.pNext                           = nullptr;
+		image_memory_barrier.srcAccessMask                   = VK_ACCESS_MEMORY_READ_BIT;
+		image_memory_barrier.dstAccessMask                   = VK_ACCESS_MEMORY_WRITE_BIT;
+		image_memory_barrier.oldLayout                       = depth->vulkan_buffer->layout;
+		image_memory_barrier.newLayout                       = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		image_memory_barrier.srcQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+		image_memory_barrier.dstQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+		image_memory_barrier.image                           = depth->vulkan_buffer->image;
+		image_memory_barrier.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_DEPTH_BIT;
+		image_memory_barrier.subresourceRange.baseMipLevel   = 0;
+		image_memory_barrier.subresourceRange.levelCount     = VK_REMAINING_MIP_LEVELS;
+		image_memory_barrier.subresourceRange.baseArrayLayer = 0;
+		image_memory_barrier.subresourceRange.layerCount     = 1;
+
+		vkCmdPipelineBarrier(buffer, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+		                     VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1,
+		                     &image_memory_barrier);
+
+		depth->vulkan_buffer->layout = image_memory_barrier.newLayout;
 	}
 
 	vkCmdBeginRenderPass(buffer, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);

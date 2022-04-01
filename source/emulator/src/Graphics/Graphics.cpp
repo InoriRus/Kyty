@@ -44,11 +44,11 @@ KYTY_SUBSYSTEM_UNEXPECTED_SHUTDOWN(Graphics) {}
 
 KYTY_SUBSYSTEM_DESTROY(Graphics) {}
 
-int KYTY_SYSV_ABI GraphicsSetVsShader(uint32_t* cmd, uint64_t size, const VsStageRegisters* vs_regs, uint32_t shader_modifier)
+int KYTY_SYSV_ABI GraphicsSetVsShader(uint32_t* cmd, uint64_t size, const HW::VsStageRegisters* vs_regs, uint32_t shader_modifier)
 {
 	PRINT_NAME();
 
-	EXIT_NOT_IMPLEMENTED(size < sizeof(VsStageRegisters) / 4 + 2);
+	EXIT_NOT_IMPLEMENTED(size < sizeof(HW::VsStageRegisters) / 4 + 2);
 
 	printf("\t cmd_buffer      = %016" PRIx64 "\n", reinterpret_cast<uint64_t>(cmd));
 	printf("\t size            = %" PRIu64 "\n", size);
@@ -64,16 +64,16 @@ int KYTY_SYSV_ABI GraphicsSetVsShader(uint32_t* cmd, uint64_t size, const VsStag
 
 	cmd[0] = KYTY_PM4(size, Pm4::IT_NOP, Pm4::R_VS);
 	cmd[1] = shader_modifier;
-	memcpy(&cmd[2], vs_regs, sizeof(VsStageRegisters));
+	memcpy(&cmd[2], vs_regs, sizeof(HW::VsStageRegisters));
 
 	return OK;
 }
 
-int KYTY_SYSV_ABI GraphicsUpdateVsShader(uint32_t* cmd, uint64_t size, const VsStageRegisters* vs_regs, uint32_t shader_modifier)
+int KYTY_SYSV_ABI GraphicsUpdateVsShader(uint32_t* cmd, uint64_t size, const HW::VsStageRegisters* vs_regs, uint32_t shader_modifier)
 {
 	PRINT_NAME();
 
-	EXIT_NOT_IMPLEMENTED(size < sizeof(VsStageRegisters) / 4 + 2);
+	EXIT_NOT_IMPLEMENTED(size < sizeof(HW::VsStageRegisters) / 4 + 2);
 
 	printf("\t cmd_buffer      = %016" PRIx64 "\n", reinterpret_cast<uint64_t>(cmd));
 	printf("\t size            = %" PRIu64 "\n", size);
@@ -89,7 +89,7 @@ int KYTY_SYSV_ABI GraphicsUpdateVsShader(uint32_t* cmd, uint64_t size, const VsS
 
 	cmd[0] = KYTY_PM4(size, Pm4::IT_NOP, Pm4::R_VS_UPDATE);
 	cmd[1] = shader_modifier;
-	memcpy(&cmd[2], vs_regs, sizeof(VsStageRegisters));
+	memcpy(&cmd[2], vs_regs, sizeof(HW::VsStageRegisters));
 
 	return OK;
 }

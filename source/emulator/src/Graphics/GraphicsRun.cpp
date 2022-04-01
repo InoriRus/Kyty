@@ -55,8 +55,8 @@ public:
 	void BufferFlush();
 	void BufferWait();
 
-	HardwareContext* GetCtx();
-	UserConfig*      GetUcfg();
+	HW::HardwareContext* GetCtx() { return &m_ctx; }
+	HW::UserConfig*      GetUcfg() { return &m_ucfg; }
 
 	void SetIndexType(uint32_t index_type_and_size);
 	void DrawIndex(uint32_t index_count, const void* index_addr, uint32_t flags, uint32_t type);
@@ -76,11 +76,11 @@ public:
 	void WaitFlipDone(uint32_t video_out_handle, uint32_t display_buffer_index);
 	void TriggerEvent(uint32_t event_type, uint32_t event_index);
 
-	void                       SetUserDataMarker(UserSgprType type) { m_user_data_marker = type; }
-	[[nodiscard]] UserSgprType GetUserDataMarker() const { return m_user_data_marker; }
-	void                       SetEmbeddedDataMarker(const uint32_t* buffer, uint32_t num_dw, uint32_t align) {}
-	void                       PushMarker(const char* str) {}
-	void                       PopMarker() {}
+	void                           SetUserDataMarker(HW::UserSgprType type) { m_user_data_marker = type; }
+	[[nodiscard]] HW::UserSgprType GetUserDataMarker() const { return m_user_data_marker; }
+	void                           SetEmbeddedDataMarker(const uint32_t* buffer, uint32_t num_dw, uint32_t align) {}
+	void                           PushMarker(const char* str) {}
+	void                           PopMarker() {}
 
 	void PrefetchL2(void* addr, uint32_t size) {}
 	void ClearGds(uint64_t dw_offset, uint32_t dw_num, uint32_t clear_value);
@@ -115,10 +115,10 @@ private:
 		uint32_t      value = 0;
 	};
 
-	HardwareContext m_ctx;
-	UserConfig      m_ucfg;
-	uint32_t        m_index_type_and_size = 0;
-	UserSgprType    m_user_data_marker    = UserSgprType::Unknown;
+	HW::HardwareContext m_ctx;
+	HW::UserConfig      m_ucfg;
+	uint32_t            m_index_type_and_size = 0;
+	HW::UserSgprType    m_user_data_marker    = HW::UserSgprType::Unknown;
 
 	Core::Mutex m_mutex;
 
@@ -484,7 +484,7 @@ void CommandProcessor::Reset()
 	m_ucfg.Reset();
 	m_ctx.Reset();
 	m_index_type_and_size = 0;
-	m_user_data_marker    = UserSgprType::Unknown;
+	m_user_data_marker    = HW::UserSgprType::Unknown;
 
 	std::memset(m_const_ram, 0, sizeof(m_const_ram));
 }
@@ -954,22 +954,6 @@ void CommandProcessor::Run(uint32_t* data, uint32_t num_dw)
 	}
 }
 
-HardwareContext* CommandProcessor::GetCtx()
-{
-	Core::LockGuard lock(m_mutex);
-
-	// EXIT_NOT_IMPLEMENTED(m_drawing);
-
-	return &m_ctx;
-}
-
-UserConfig* CommandProcessor::GetUcfg()
-{
-	Core::LockGuard lock(m_mutex);
-
-	return &m_ucfg;
-}
-
 void CommandProcessor::SetIndexType(uint32_t index_type_and_size)
 {
 	Core::LockGuard lock(m_mutex);
@@ -1141,10 +1125,15 @@ void CommandProcessor::TriggerEvent(uint32_t event_type, uint32_t event_index)
 
 	if ((event_type == 0x00000016 || event_type == 0x00000031) && event_index == 0x00000007)
 	{
+		// CacheFlushAndInvEvent
+		// FlushAndInvalidateCbPixelData
 		MemoryBarrier();
+	} else if ((event_type == 0x0000002c) && event_index == 0x00000007)
+	{
+		// FlushAndInvalidateDbMeta
 	} else
 	{
-		EXIT("unknown event type\n");
+		EXIT("unknown event type: 0x%08" PRIx32 ", 0x%08" PRIx32 "\n", event_type, event_index);
 	}
 }
 
@@ -1275,7 +1264,7 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_depth_render_target)
 
 	if (cmd_id == 0xC0016900)
 	{
-		DepthRenderTargetZInfo r;
+		HW::DepthRenderTargetZInfo r;
 
 		r.expclear_enabled = (buffer[0] & 0x08000000u) != 0;
 
@@ -1294,7 +1283,7 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_depth_render_target)
 		{
 			count = 22;
 
-			DepthRenderTarget z;
+			HW::DepthRenderTarget z;
 
 			z.z_info.expclear_enabled    = (buffer[0] & 0x08000000u) != 0;
 			z.z_info.format              = (buffer[0] >> Pm4::DB_Z_INFO_FORMAT_SHIFT) & Pm4::DB_Z_INFO_FORMAT_MASK;
@@ -1403,7 +1392,7 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_stencil_info)
 	EXIT_NOT_IMPLEMENTED(cmd_id != 0xC0016900);
 	EXIT_NOT_IMPLEMENTED(cmd_offset != Pm4::DB_STENCIL_INFO);
 
-	DepthRenderTargetStencilInfo r;
+	HW::DepthRenderTargetStencilInfo r;
 
 	r.expclear_enabled = (buffer[0] & 0x08000000u) != 0;
 	r.tile_split       = (buffer[0] >> 13u) & 0x7u;
@@ -1423,7 +1412,7 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_render_control)
 	EXIT_NOT_IMPLEMENTED(cmd_id != 0xC0016900);
 	EXIT_NOT_IMPLEMENTED(cmd_offset != Pm4::DB_RENDER_CONTROL);
 
-	RenderControl r;
+	HW::RenderControl r;
 
 	r.depth_clear_enable       = KYTY_PM4_GET(buffer[0], DB_RENDER_CONTROL, DEPTH_CLEAR_ENABLE) != 0;
 	r.stencil_clear_enable     = KYTY_PM4_GET(buffer[0], DB_RENDER_CONTROL, STENCIL_CLEAR_ENABLE) != 0;
@@ -1443,7 +1432,7 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_mode_control)
 	EXIT_NOT_IMPLEMENTED(cmd_id != 0xC0016900);
 	EXIT_NOT_IMPLEMENTED(cmd_offset != Pm4::PA_SU_SC_MODE_CNTL);
 
-	ModeControl r;
+	HW::ModeControl r;
 
 	r.cull_front               = KYTY_PM4_GET(buffer[0], PA_SU_SC_MODE_CNTL, CULL_FRONT) != 0;
 	r.cull_back                = KYTY_PM4_GET(buffer[0], PA_SU_SC_MODE_CNTL, CULL_BACK) != 0;
@@ -1462,12 +1451,30 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_mode_control)
 	return 1;
 }
 
+KYTY_HW_CTX_PARSER(hw_ctx_set_line_control)
+{
+	EXIT_NOT_IMPLEMENTED(cmd_id != 0xC0016900);
+	EXIT_NOT_IMPLEMENTED(cmd_offset != Pm4::PA_SU_LINE_CNTL);
+
+	auto line_width = KYTY_PM4_GET(buffer[0], PA_SU_LINE_CNTL, WIDTH);
+
+	if (line_width == 8)
+	{
+		cp->GetCtx()->SetLineWidth(1.0f);
+	} else
+	{
+		cp->GetCtx()->SetLineWidth(static_cast<float>(line_width) / 8.0f);
+	}
+
+	return 1;
+}
+
 KYTY_HW_CTX_PARSER(hw_ctx_set_depth_control)
 {
 	EXIT_NOT_IMPLEMENTED(cmd_id != 0xC0016900);
 	EXIT_NOT_IMPLEMENTED(cmd_offset != Pm4::DB_DEPTH_CONTROL);
 
-	DepthControl r;
+	HW::DepthControl r;
 
 	r.stencil_enable      = KYTY_PM4_GET(buffer[0], DB_DEPTH_CONTROL, STENCIL_ENABLE) != 0;
 	r.z_enable            = KYTY_PM4_GET(buffer[0], DB_DEPTH_CONTROL, Z_ENABLE) != 0;
@@ -1488,7 +1495,7 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_stencil_control)
 	EXIT_NOT_IMPLEMENTED(cmd_id != 0xC0016900);
 	EXIT_NOT_IMPLEMENTED(cmd_offset != Pm4::DB_STENCIL_CONTROL);
 
-	StencilControl r;
+	HW::StencilControl r;
 
 	r.stencil_fail     = KYTY_PM4_GET(buffer[0], DB_STENCIL_CONTROL, STENCILFAIL);
 	r.stencil_zpass    = KYTY_PM4_GET(buffer[0], DB_STENCIL_CONTROL, STENCILZPASS);
@@ -1507,7 +1514,7 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_stencil_mask)
 	EXIT_NOT_IMPLEMENTED(cmd_id != 0xc0026900);
 	EXIT_NOT_IMPLEMENTED(cmd_offset != Pm4::DB_STENCILREFMASK);
 
-	StencilMask r;
+	HW::StencilMask r;
 
 	r.stencil_testval      = KYTY_PM4_GET(buffer[0], DB_STENCILREFMASK, STENCILTESTVAL);
 	r.stencil_mask         = KYTY_PM4_GET(buffer[0], DB_STENCILREFMASK, STENCILMASK);
@@ -1528,7 +1535,7 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_eqaa_control)
 	EXIT_NOT_IMPLEMENTED(cmd_id != 0xC0016900);
 	EXIT_NOT_IMPLEMENTED(cmd_offset != Pm4::DB_EQAA);
 
-	EqaaControl r;
+	HW::EqaaControl r;
 
 	r.max_anchor_samples         = KYTY_PM4_GET(buffer[0], DB_EQAA, MAX_ANCHOR_SAMPLES);
 	r.ps_iter_samples            = KYTY_PM4_GET(buffer[0], DB_EQAA, PS_ITER_SAMPLES);
@@ -1540,6 +1547,21 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_eqaa_control)
 	r.static_anchor_associations = KYTY_PM4_GET(buffer[0], DB_EQAA, STATIC_ANCHOR_ASSOCIATIONS) != 0;
 
 	cp->GetCtx()->SetEqaaControl(r);
+
+	return 1;
+}
+
+KYTY_HW_CTX_PARSER(hw_ctx_set_color_control)
+{
+	EXIT_NOT_IMPLEMENTED(cmd_id != 0xc0016900);
+	EXIT_NOT_IMPLEMENTED(cmd_offset != Pm4::CB_COLOR_CONTROL);
+
+	HW::ColorControl r;
+
+	r.mode = KYTY_PM4_GET(buffer[0], CB_COLOR_CONTROL, MODE);
+	r.op   = KYTY_PM4_GET(buffer[0], CB_COLOR_CONTROL, ROP3);
+
+	cp->GetCtx()->SetColorControl(r);
 
 	return 1;
 }
@@ -1580,7 +1602,7 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_blend_control)
 
 	uint32_t param = (cmd_offset - Pm4::CB_BLEND0_CONTROL) / 1;
 
-	BlendControl r;
+	HW::BlendControl r;
 
 	r.color_srcblend  = (buffer[0] >> Pm4::CB_BLEND0_CONTROL_COLOR_SRCBLEND_SHIFT) & Pm4::CB_BLEND0_CONTROL_COLOR_SRCBLEND_MASK;
 	r.color_comb_fcn  = (buffer[0] >> Pm4::CB_BLEND0_CONTROL_COLOR_COMB_FCN_SHIFT) & Pm4::CB_BLEND0_CONTROL_COLOR_COMB_FCN_MASK;
@@ -1599,59 +1621,98 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_blend_control)
 
 KYTY_HW_CTX_PARSER(hw_ctx_set_render_target)
 {
-	EXIT_NOT_IMPLEMENTED(cmd_id != 0xC00E6900);
+	EXIT_NOT_IMPLEMENTED(cmd_id != 0xC00E6900 && cmd_id != 0xC00B6900);
 
 	uint32_t param = (cmd_offset - Pm4::CB_COLOR0_BASE) / 15;
 
-	uint32_t count = 14;
+	uint32_t count = 11;
 
-	if (dw >= 16 && buffer[14] == 0xC0001000)
+	auto* ctx = cp->GetCtx();
+
+	HW::ColorBase       base;
+	HW::ColorPitch      pitch;
+	HW::ColorSlice      slice;
+	HW::ColorView       view;
+	HW::ColorInfo       info;
+	HW::ColorAttrib     attrib;
+	HW::ColorDcc        dcc;
+	HW::ColorCmask      cmask;
+	HW::ColorCmaskSlice cmask_slice;
+	HW::ColorFmask      fmask;
+	HW::ColorFmaskSlice fmask_slice;
+
+	base.addr                       = static_cast<uint64_t>(buffer[0]) << 8u;
+	pitch.pitch_div8_minus1         = buffer[1] & 0x7ffu;
+	pitch.fmask_pitch_div8_minus1   = (buffer[1] >> 20u) & 0x7ffu;
+	slice.slice_div64_minus1        = buffer[2] & 0x3fffffu;
+	view.base_array_slice_index     = buffer[3] & 0x7ffu;
+	view.last_array_slice_index     = (buffer[3] >> 13u) & 0x7ffu;
+	info.fmask_compression_enable   = (buffer[4] & 0x4000u) != 0;
+	info.fmask_compression_mode     = (buffer[4] >> 26u) & 0x3u;
+	info.cmask_fast_clear_enable    = (buffer[4] & 0x2000u) != 0;
+	info.dcc_compression_enable     = (buffer[4] & 0x10000000u) != 0;
+	info.neo_mode                   = (buffer[4] & 0x80000000u) != 0;
+	info.cmask_tile_mode            = (buffer[4] >> 19u) & 0x1u;
+	info.cmask_tile_mode_neo        = (buffer[4] >> 29u) & 0x3u;
+	info.format                     = (buffer[4] >> 2u) & 0x1fu;
+	info.channel_type               = (buffer[4] >> 8u) & 0x7u;
+	info.channel_order              = (buffer[4] >> 11u) & 0x3u;
+	attrib.force_dest_alpha_to_one  = (buffer[5] & 0x20000u) != 0;
+	attrib.tile_mode                = buffer[5] & 0x1fu;
+	attrib.fmask_tile_mode          = (buffer[5] >> 5u) & 0x1fu;
+	attrib.num_samples              = (buffer[5] >> 12u) & 0x7u;
+	attrib.num_fragments            = (buffer[5] >> 15u) & 0x3u;
+	dcc.max_uncompressed_block_size = (buffer[6] >> 2u) & 0x3u;
+	dcc.max_compressed_block_size   = (buffer[6] >> 5u) & 0x3u;
+	dcc.min_compressed_block_size   = (buffer[6] >> 4u) & 0x1u;
+	dcc.color_transform             = (buffer[6] >> 7u) & 0x3u;
+	dcc.enable_overwrite_combiner   = (buffer[6] & 0x1u) != 0;
+	dcc.force_independent_blocks    = (buffer[6] & 0x200u) != 0;
+	cmask.addr                      = static_cast<uint64_t>(buffer[7]) << 8u;
+	cmask_slice.slice_minus1        = buffer[8] & 0x3fffu;
+	fmask.addr                      = static_cast<uint64_t>(buffer[9]) << 8u;
+	fmask_slice.slice_minus1        = buffer[10] & 0x3fffffu;
+
+	ctx->SetColorBase(param, base);
+	ctx->SetColorPitch(param, pitch);
+	ctx->SetColorSlice(param, slice);
+	ctx->SetColorView(param, view);
+	ctx->SetColorInfo(param, info);
+	ctx->SetColorAttrib(param, attrib);
+	ctx->SetColorDcc(param, dcc);
+	ctx->SetColorCmask(param, cmask);
+	ctx->SetColorCmaskSlice(param, cmask_slice);
+	ctx->SetColorFmask(param, fmask);
+	ctx->SetColorFmaskSlice(param, fmask_slice);
+
+	if (cmd_id == 0xC00E6900)
 	{
-		count = 16;
+		count = 14;
+
+		HW::ColorClearWord0 clear_word0;
+		HW::ColorClearWord1 clear_word1;
+		HW::ColorDccAddr    dcc_addr;
+
+		clear_word0.word0 = buffer[11];
+		clear_word1.word1 = buffer[12];
+		dcc_addr.addr     = static_cast<uint64_t>(buffer[13]) << 8u;
+
+		ctx->SetColorClearWord0(param, clear_word0);
+		ctx->SetColorClearWord1(param, clear_word1);
+		ctx->SetColorDccAddr(param, dcc_addr);
 	}
 
-	RenderTarget r;
+	if (dw >= count + 2 && buffer[count] == 0xC0001000)
+	{
+		HW::ColorSize size;
 
-	r.base_addr               = static_cast<uint64_t>(buffer[0]) << 8u;
-	r.pitch_div8_minus1       = buffer[1] & 0x7ffu;
-	r.fmask_pitch_div8_minus1 = (buffer[1] >> 20u) & 0x7ffu;
-	r.slice_div64_minus1      = buffer[2] & 0x3fffffu;
-	r.base_array_slice_index  = buffer[3] & 0x7ffu;
-	r.last_array_slice_index  = (buffer[3] >> 13u) & 0x7ffu;
+		size.width  = (buffer[count + 1] >> 0u) & 0xffffu;
+		size.height = (buffer[count + 1] >> 16u) & 0xffffu;
 
-	r.color_info.fmask_compression_enable = (buffer[4] & 0x4000u) != 0;
-	r.color_info.fmask_compression_mode   = (buffer[4] >> 26u) & 0x3u;
-	r.color_info.cmask_fast_clear_enable  = (buffer[4] & 0x2000u) != 0;
-	r.color_info.dcc_compression_enable   = (buffer[4] & 0x10000000u) != 0;
-	r.color_info.neo_mode                 = (buffer[4] & 0x80000000u) != 0;
-	r.color_info.cmask_tile_mode          = (buffer[4] >> 19u) & 0x1u;
-	r.color_info.cmask_tile_mode_neo      = (buffer[4] >> 29u) & 0x3u;
-	r.color_info.format                   = (buffer[4] >> 2u) & 0x1fu;
-	r.color_info.channel_type             = (buffer[4] >> 8u) & 0x7u;
-	r.color_info.channel_order            = (buffer[4] >> 11u) & 0x3u;
+		ctx->SetColorSize(param, size);
 
-	r.force_dest_alpha_to_one         = (buffer[5] & 0x20000u) != 0;
-	r.tile_mode                       = buffer[5] & 0x1fu;
-	r.fmask_tile_mode                 = (buffer[5] >> 5u) & 0x1fu;
-	r.num_samples                     = (buffer[5] >> 12u) & 0x7u;
-	r.num_fragments                   = (buffer[5] >> 15u) & 0x3u;
-	r.dcc_max_uncompressed_block_size = (buffer[6] >> 2u) & 0x3u;
-	r.dcc_max_compressed_block_size   = (buffer[6] >> 5u) & 0x3u;
-	r.dcc_min_compressed_block_size   = (buffer[6] >> 4u) & 0x1u;
-	r.dcc_color_transform             = (buffer[6] >> 7u) & 0x3u;
-	r.dcc_enable_overwrite_combiner   = (buffer[6] & 0x1u) != 0;
-	r.dcc_force_independent_blocks    = (buffer[6] & 0x200u) != 0;
-	r.cmask_addr                      = static_cast<uint64_t>(buffer[7]) << 8u;
-	r.cmask_slice_minus1              = buffer[8] & 0x3fffu;
-	r.fmask_addr                      = static_cast<uint64_t>(buffer[9]) << 8u;
-	r.fmask_slice_minus1              = buffer[10] & 0x3fffffu;
-	r.clear_color_word0               = buffer[11];
-	r.clear_color_word1               = buffer[12];
-	r.dcc_addr                        = static_cast<uint64_t>(buffer[13]) << 8u;
-	r.width                           = (count == 16 ? (buffer[15] >> 0u) & 0xffffu : 0);
-	r.height                          = (count == 16 ? (buffer[15] >> 16u) & 0xffffu : 0);
-
-	cp->GetCtx()->SetRenderTarget(param, r);
+		count += 2;
+	}
 
 	return count;
 }
@@ -1662,7 +1723,7 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_color_info)
 
 	uint32_t param = (cmd_offset - Pm4::CB_COLOR0_INFO) / 15;
 
-	ColorInfo r;
+	HW::ColorInfo r;
 
 	r.fmask_compression_enable = (buffer[4] & 0x4000u) != 0;
 	r.fmask_compression_mode   = (buffer[4] >> 26u) & 0x3u;
@@ -1733,7 +1794,7 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_clip_control)
 	EXIT_NOT_IMPLEMENTED(cmd_id != 0xC0016900);
 	EXIT_NOT_IMPLEMENTED(cmd_offset != 0x00000204);
 
-	ClipControl r;
+	HW::ClipControl r;
 
 	r.user_clip_planes                    = buffer[0] & 0x3fu;
 	r.user_clip_plane_mode                = (buffer[0] >> 14u) & 0x3u;
@@ -1756,14 +1817,31 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_clip_control)
 KYTY_HW_CTX_PARSER(hw_ctx_set_screen_scissor)
 {
 	EXIT_NOT_IMPLEMENTED(cmd_id != 0xC0026900);
-	EXIT_NOT_IMPLEMENTED(cmd_offset != 0x0000000C);
+	EXIT_NOT_IMPLEMENTED(cmd_offset != Pm4::PA_SC_SCREEN_SCISSOR_TL);
 
-	int left   = static_cast<int16_t>(static_cast<uint16_t>(buffer[0] & 0xffffu));
-	int top    = static_cast<int16_t>(static_cast<uint16_t>((buffer[0] >> 16u) & 0xffffu));
-	int right  = static_cast<int16_t>(static_cast<uint16_t>(buffer[1] & 0xffffu));
-	int bottom = static_cast<int16_t>(static_cast<uint16_t>((buffer[1] >> 16u) & 0xffffu));
+	int left   = static_cast<int16_t>(static_cast<uint16_t>(KYTY_PM4_GET(buffer[0], PA_SC_SCREEN_SCISSOR_TL, TL_X)));
+	int top    = static_cast<int16_t>(static_cast<uint16_t>(KYTY_PM4_GET(buffer[0], PA_SC_SCREEN_SCISSOR_TL, TL_Y)));
+	int right  = static_cast<int16_t>(static_cast<uint16_t>(KYTY_PM4_GET(buffer[1], PA_SC_SCREEN_SCISSOR_BR, BR_X)));
+	int bottom = static_cast<int16_t>(static_cast<uint16_t>(KYTY_PM4_GET(buffer[1], PA_SC_SCREEN_SCISSOR_BR, BR_Y)));
 
 	cp->GetCtx()->SetScreenScissor(left, top, right, bottom);
+
+	return 2;
+}
+
+KYTY_HW_CTX_PARSER(hw_ctx_set_generic_scissor)
+{
+	EXIT_NOT_IMPLEMENTED(cmd_id != 0xC0026900);
+	EXIT_NOT_IMPLEMENTED(cmd_offset != Pm4::PA_SC_GENERIC_SCISSOR_TL);
+
+	int left   = static_cast<int16_t>(static_cast<uint16_t>(KYTY_PM4_GET(buffer[0], PA_SC_GENERIC_SCISSOR_TL, TL_X)));
+	int top    = static_cast<int16_t>(static_cast<uint16_t>(KYTY_PM4_GET(buffer[0], PA_SC_GENERIC_SCISSOR_TL, TL_Y)));
+	int right  = static_cast<int16_t>(static_cast<uint16_t>(KYTY_PM4_GET(buffer[1], PA_SC_GENERIC_SCISSOR_BR, BR_X)));
+	int bottom = static_cast<int16_t>(static_cast<uint16_t>(KYTY_PM4_GET(buffer[1], PA_SC_GENERIC_SCISSOR_BR, BR_Y)));
+
+	bool window_offset_disable = KYTY_PM4_GET(buffer[0], PA_SC_GENERIC_SCISSOR_TL, WINDOW_OFFSET_DISABLE) != 0;
+
+	cp->GetCtx()->SetGenericScissor(left, top, right, bottom, !window_offset_disable);
 
 	return 2;
 }
@@ -1801,7 +1879,7 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_blend_color)
 	EXIT_NOT_IMPLEMENTED(cmd_id != 0xc0046900);
 	EXIT_NOT_IMPLEMENTED(cmd_offset != Pm4::CB_BLEND_RED);
 
-	BlendColor r;
+	HW::BlendColor r;
 
 	r.red   = *reinterpret_cast<const float*>(&buffer[0]);
 	r.green = *reinterpret_cast<const float*>(&buffer[1]);
@@ -1819,7 +1897,7 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_vs_shader)
 
 	auto shader_modifier = buffer[0];
 
-	cp->GetCtx()->SetVsShader(reinterpret_cast<const VsStageRegisters*>(buffer + 1), shader_modifier);
+	cp->GetCtx()->SetVsShader(reinterpret_cast<const HW::VsStageRegisters*>(buffer + 1), shader_modifier);
 
 	return 28;
 }
@@ -1851,7 +1929,7 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_ps_shader)
 {
 	EXIT_NOT_IMPLEMENTED(cmd_id != 0xC0261008);
 
-	PsStageRegisters r {};
+	HW::PsStageRegisters r {};
 
 	r.data_addr       = (static_cast<uint64_t>(buffer[0]) << 8u) | (static_cast<uint64_t>(buffer[1]) << 40u);
 	r.vgprs           = (buffer[2] >> Pm4::SPI_SHADER_PGM_RSRC1_PS_VGPRS_SHIFT) & Pm4::SPI_SHADER_PGM_RSRC1_PS_VGPRS_MASK;
@@ -1889,7 +1967,7 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_cs_shader)
 
 	auto shader_modifier = buffer[0];
 
-	CsStageRegisters r {};
+	HW::CsStageRegisters r {};
 
 	r.data_addr      = (static_cast<uint64_t>(buffer[1]) << 8u) | (static_cast<uint64_t>(buffer[2]) << 40u);
 	r.vgprs          = (buffer[3] >> Pm4::COMPUTE_PGM_RSRC1_VGPRS_SHIFT) & Pm4::COMPUTE_PGM_RSRC1_VGPRS_MASK;
@@ -2033,14 +2111,47 @@ KYTY_CP_OP_PARSER(cp_op_draw_index_auto)
 {
 	KYTY_PROFILER_FUNCTION();
 
-	EXIT_NOT_IMPLEMENTED(cmd_id != 0xC0051010);
+	EXIT_NOT_IMPLEMENTED(cmd_id != 0xC0051010 && cmd_id != 0xc0012d00);
 
-	uint32_t index_count = buffer[0];
-	uint32_t flags       = buffer[1];
+	if (cmd_id == 0xC0051010)
+	{
+		uint32_t index_count = buffer[0];
+		uint32_t flags       = buffer[1];
 
-	cp->DrawIndexAuto(index_count, flags);
+		cp->DrawIndexAuto(index_count, flags);
 
-	return 6;
+		return 6;
+	}
+
+	if (cmd_id == 0xc0012d00)
+	{
+		uint32_t index_count = buffer[0];
+		uint32_t flags       = 0;
+
+		EXIT_NOT_IMPLEMENTED(buffer[1] != 2);
+
+		cp->DrawIndexAuto(index_count, flags);
+
+		EXIT_NOT_IMPLEMENTED(!(dw >= 4));
+
+		if (buffer[2] == 0xc0001000)
+		{
+			EXIT_NOT_IMPLEMENTED(buffer[3] != 0);
+
+			return 4;
+		}
+
+		if (buffer[2] == 0xc0021000)
+		{
+			EXIT_NOT_IMPLEMENTED(buffer[3] != 0);
+
+			return 6;
+		}
+
+		EXIT("invalid draw_index_auto\n");
+	}
+
+	return 1;
 }
 
 KYTY_CP_OP_PARSER(cp_op_dispatch_direct)
@@ -2171,7 +2282,7 @@ KYTY_CP_OP_PARSER(cp_op_set_shader_reg)
 		EXIT("unknown reg: %u\n", reg);
 	}
 
-	cp->SetUserDataMarker(UserSgprType::Unknown);
+	cp->SetUserDataMarker(HW::UserSgprType::Unknown);
 
 	return 1 + reg_num;
 }
@@ -2299,6 +2410,7 @@ KYTY_CP_OP_PARSER(cp_op_wait_on_address)
 	return 13;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 KYTY_CP_OP_PARSER(cp_op_acquire_mem)
 {
 	KYTY_PROFILER_FUNCTION();
@@ -2313,7 +2425,11 @@ KYTY_CP_OP_PARSER(cp_op_acquire_mem)
 	uint32_t base_hi      = buffer[4];
 	uint32_t poll         = buffer[5];
 
-	EXIT_NOT_IMPLEMENTED(stall_mode != 1);
+	uint32_t target_mask     = cache_action & 0x00007FC0u;
+	uint32_t extended_action = cache_action & 0x2E000000u;
+	uint32_t action          = ((cache_action & 0x00C00000u) >> 0x12u) | ((cache_action & 0x00058000u) >> 0xfu);
+
+	// EXIT_NOT_IMPLEMENTED(stall_mode != 1);
 	EXIT_NOT_IMPLEMENTED(size_hi != 0);
 	EXIT_NOT_IMPLEMENTED(base_hi != 0);
 	EXIT_NOT_IMPLEMENTED(poll != 10);
@@ -2321,36 +2437,81 @@ KYTY_CP_OP_PARSER(cp_op_acquire_mem)
 	switch (cache_action)
 	{
 		case 0x02c40040:
+		case 0x02c43fc0:
 		{
+			// target_mask:     0x00000040 (rt0), 0x00003fc0 (all rt)
+			// extended_action: 0x02000000 (FlushAndInvalidateCbCache)
+			// action:          0x38 (WriteBackAndInvalidateL1andL2)
+			EXIT_IF(target_mask != 0x00000040 && target_mask != 0x00003FC0);
+			EXIT_IF(extended_action != 0x02000000);
+			EXIT_IF(action != 0x38);
 			EXIT_NOT_IMPLEMENTED(size_lo == 0);
 			EXIT_NOT_IMPLEMENTED(base_lo == 0);
+
 			cp->RenderTextureBarrier(base_lo << 8u, size_lo << 8u);
 			cp->WriteBack();
 		}
 		break;
 		case 0x02003fc0:
 		{
+			// target_mask:     0x00003FC0 (all rt)
+			// extended_action: 0x02000000 (FlushAndInvalidateCbCache)
+			// action:          0x00 (none)
+			EXIT_IF(target_mask != 0x00003FC0);
+			EXIT_IF(extended_action != 0x02000000);
+			EXIT_IF(action != 0x00);
 			EXIT_NOT_IMPLEMENTED(size_lo == 0);
 			EXIT_NOT_IMPLEMENTED(base_lo == 0);
+
 			cp->RenderTextureBarrier(base_lo << 8u, size_lo << 8u);
 		}
 		break;
 		case 0x00C40000:
 		{
+			// target_mask:     0x00000000 (none)
+			// extended_action: 0x00000000 (none)
+			// action:          0x38 (WriteBackAndInvalidateL1andL2)
+			EXIT_IF(target_mask != 0x00000000);
+			EXIT_IF(extended_action != 0x00000000);
+			EXIT_IF(action != 0x38);
 			EXIT_NOT_IMPLEMENTED(size_lo != 1);
 			EXIT_NOT_IMPLEMENTED(base_lo != 0);
+
 			cp->MemoryBarrier();
 			cp->WriteBack();
 		}
 		break;
 		case 0x00400000:
 		{
+			// target_mask:     0x00000000 (none)
+			// extended_action: 0x00000000 (none)
+			// action:          0x10 (InvalidateL1)
+			EXIT_IF(target_mask != 0x00000000);
+			EXIT_IF(extended_action != 0x00000000);
+			EXIT_IF(action != 0x10);
 			EXIT_NOT_IMPLEMENTED(size_lo != 1);
 			EXIT_NOT_IMPLEMENTED(base_lo != 0);
+
 			cp->MemoryBarrier();
 		}
 		break;
-		default: EXIT("unknown barrier");
+		case 0x04c44000:
+		{
+			// target_mask:     0x00004000 (Depth Target)
+			// extended_action: 0x04000000 (FlushAndInvalidateDbCache)
+			// action:          0x38 (WriteBackAndInvalidateL1andL2)
+			KYTY_NOT_IMPLEMENTED;
+		}
+		break;
+		default:
+			EXIT("unknown barrier: 0x%08" PRIx32 ", 0x%08" PRIx32 ", 0x%08" PRIx32 ", 0x%08" PRIx32 "\n", cache_action, target_mask,
+			     extended_action, action);
+	}
+
+	if (stall_mode == 0)
+	{
+		cp->BufferFlush();
+		cp->BufferWait();
 	}
 
 	return 6;
@@ -2416,8 +2577,8 @@ KYTY_CP_OP_PARSER(cp_op_marker)
 	switch (id)
 	{
 		case 0x0: cp->SetEmbeddedDataMarker(buffer + 1, len_dw, align); break;
-		case 0x4: cp->SetUserDataMarker(UserSgprType::Vsharp); break;
-		case 0xd: cp->SetUserDataMarker(UserSgprType::Region); break;
+		case 0x4: cp->SetUserDataMarker(HW::UserSgprType::Vsharp); break;
+		case 0xd: cp->SetUserDataMarker(HW::UserSgprType::Region); break;
 		case 0x778:
 		{
 			auto*    addr  = reinterpret_cast<void*>(buffer[1] | (static_cast<uint64_t>(buffer[2]) << 32u));
@@ -2522,25 +2683,28 @@ static void graphics_init_jmp_tables()
 		func = nullptr;
 	}
 
-	g_hw_ctx_func[Pm4::DB_RENDER_CONTROL]    = hw_ctx_set_render_control;
-	g_hw_ctx_func[Pm4::DB_STENCIL_CLEAR]     = hw_ctx_set_stencil_clear;
-	g_hw_ctx_func[Pm4::DB_DEPTH_CLEAR]       = hw_ctx_set_depth_clear;
-	g_hw_ctx_func[0x00c]                     = hw_ctx_set_screen_scissor;
-	g_hw_ctx_func[Pm4::DB_Z_INFO]            = hw_ctx_set_depth_render_target;
-	g_hw_ctx_func[Pm4::DB_STENCIL_INFO]      = hw_ctx_set_stencil_info;
-	g_hw_ctx_func[0x08d]                     = hw_ctx_hardware_screen_offset;
-	g_hw_ctx_func[0x08e]                     = hw_ctx_set_render_target_mask;
-	g_hw_ctx_func[Pm4::CB_BLEND_RED]         = hw_ctx_set_blend_color;
-	g_hw_ctx_func[Pm4::DB_STENCIL_CONTROL]   = hw_ctx_set_stencil_control;
-	g_hw_ctx_func[Pm4::DB_STENCILREFMASK]    = hw_ctx_set_stencil_mask;
-	g_hw_ctx_func[Pm4::SPI_PS_INPUT_CNTL_0]  = hw_ctx_set_ps_input;
-	g_hw_ctx_func[Pm4::DB_DEPTH_CONTROL]     = hw_ctx_set_depth_control;
-	g_hw_ctx_func[Pm4::DB_EQAA]              = hw_ctx_set_eqaa_control;
-	g_hw_ctx_func[0x204]                     = hw_ctx_set_clip_control;
-	g_hw_ctx_func[Pm4::PA_SU_SC_MODE_CNTL]   = hw_ctx_set_mode_control;
-	g_hw_ctx_func[0x206]                     = hw_ctx_set_viewport_transform_control;
-	g_hw_ctx_func[Pm4::VGT_SHADER_STAGES_EN] = hw_ctx_set_shader_stages;
-	g_hw_ctx_func[0x2fa]                     = hw_ctx_set_guard_bands;
+	g_hw_ctx_func[Pm4::DB_RENDER_CONTROL]        = hw_ctx_set_render_control;
+	g_hw_ctx_func[Pm4::DB_STENCIL_CLEAR]         = hw_ctx_set_stencil_clear;
+	g_hw_ctx_func[Pm4::DB_DEPTH_CLEAR]           = hw_ctx_set_depth_clear;
+	g_hw_ctx_func[Pm4::PA_SC_SCREEN_SCISSOR_TL]  = hw_ctx_set_screen_scissor;
+	g_hw_ctx_func[Pm4::DB_Z_INFO]                = hw_ctx_set_depth_render_target;
+	g_hw_ctx_func[Pm4::DB_STENCIL_INFO]          = hw_ctx_set_stencil_info;
+	g_hw_ctx_func[0x08d]                         = hw_ctx_hardware_screen_offset;
+	g_hw_ctx_func[0x08e]                         = hw_ctx_set_render_target_mask;
+	g_hw_ctx_func[Pm4::PA_SC_GENERIC_SCISSOR_TL] = hw_ctx_set_generic_scissor;
+	g_hw_ctx_func[Pm4::CB_BLEND_RED]             = hw_ctx_set_blend_color;
+	g_hw_ctx_func[Pm4::DB_STENCIL_CONTROL]       = hw_ctx_set_stencil_control;
+	g_hw_ctx_func[Pm4::DB_STENCILREFMASK]        = hw_ctx_set_stencil_mask;
+	g_hw_ctx_func[Pm4::SPI_PS_INPUT_CNTL_0]      = hw_ctx_set_ps_input;
+	g_hw_ctx_func[Pm4::DB_DEPTH_CONTROL]         = hw_ctx_set_depth_control;
+	g_hw_ctx_func[Pm4::DB_EQAA]                  = hw_ctx_set_eqaa_control;
+	g_hw_ctx_func[Pm4::CB_COLOR_CONTROL]         = hw_ctx_set_color_control;
+	g_hw_ctx_func[0x204]                         = hw_ctx_set_clip_control;
+	g_hw_ctx_func[Pm4::PA_SU_SC_MODE_CNTL]       = hw_ctx_set_mode_control;
+	g_hw_ctx_func[0x206]                         = hw_ctx_set_viewport_transform_control;
+	g_hw_ctx_func[Pm4::PA_SU_LINE_CNTL]          = hw_ctx_set_line_control;
+	g_hw_ctx_func[Pm4::VGT_SHADER_STAGES_EN]     = hw_ctx_set_shader_stages;
+	g_hw_ctx_func[0x2fa]                         = hw_ctx_set_guard_bands;
 
 	for (uint32_t slot = 0; slot < 8; slot++)
 	{
@@ -2563,6 +2727,7 @@ static void graphics_init_jmp_tables()
 
 	g_cp_op_func[Pm4::IT_NOP]                     = cp_op_nop;
 	g_cp_op_func[Pm4::IT_INDEX_TYPE]              = cp_op_index_type;
+	g_cp_op_func[Pm4::IT_DRAW_INDEX_AUTO]         = cp_op_draw_index_auto;
 	g_cp_op_func[Pm4::IT_WAIT_REG_MEM]            = cp_op_wait_reg_mem;
 	g_cp_op_func[Pm4::IT_WRITE_DATA]              = cp_op_write_data;
 	g_cp_op_func[Pm4::IT_INDIRECT_BUFFER]         = cp_op_indirect_buffer;

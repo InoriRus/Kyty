@@ -31,6 +31,7 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 	auto pixel_format = static_cast<VkFormat>(params[DepthStencilBufferObject::PARAM_FORMAT]);
 	auto width        = params[DepthStencilBufferObject::PARAM_WIDTH];
 	auto height       = params[DepthStencilBufferObject::PARAM_HEIGHT];
+	bool htile        = params[DepthStencilBufferObject::PARAM_HTILE] != 1;
 
 	EXIT_NOT_IMPLEMENTED(pixel_format == VK_FORMAT_UNDEFINED);
 	EXIT_NOT_IMPLEMENTED(width == 0);
@@ -45,6 +46,8 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 	vk_obj->image_view    = nullptr;
 	vk_obj->layout        = VK_IMAGE_LAYOUT_UNDEFINED;
 
+	vk_obj->compressed = htile;
+
 	VkImageCreateInfo image_info {};
 	image_info.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 	image_info.pNext         = nullptr;
@@ -58,9 +61,10 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 	image_info.format        = vk_obj->format;
 	image_info.tiling        = VK_IMAGE_TILING_OPTIMAL;
 	image_info.initialLayout = vk_obj->layout;
-	image_info.usage         = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-	image_info.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
-	image_info.samples       = VK_SAMPLE_COUNT_1_BIT;
+	image_info.usage         = static_cast<VkImageUsageFlags>(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) |
+	                   static_cast<VkImageUsageFlags>(VK_IMAGE_USAGE_SAMPLED_BIT);
+	image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	image_info.samples     = VK_SAMPLE_COUNT_1_BIT;
 
 	vkCreateImage(ctx->device, &image_info, nullptr, &vk_obj->image);
 
@@ -101,7 +105,27 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 
 	vkCreateImageView(ctx->device, &create_info, nullptr, &vk_obj->image_view);
 
+	VkImageViewCreateInfo create_info2 {};
+	create_info2.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	create_info2.pNext                           = nullptr;
+	create_info2.flags                           = 0;
+	create_info2.image                           = vk_obj->image;
+	create_info2.viewType                        = VK_IMAGE_VIEW_TYPE_2D;
+	create_info2.format                          = vk_obj->format;
+	create_info2.components.r                    = VK_COMPONENT_SWIZZLE_R;
+	create_info2.components.g                    = VK_COMPONENT_SWIZZLE_R;
+	create_info2.components.b                    = VK_COMPONENT_SWIZZLE_R;
+	create_info2.components.a                    = VK_COMPONENT_SWIZZLE_R;
+	create_info2.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_DEPTH_BIT;
+	create_info2.subresourceRange.baseArrayLayer = 0;
+	create_info2.subresourceRange.baseMipLevel   = 0;
+	create_info2.subresourceRange.layerCount     = 1;
+	create_info2.subresourceRange.levelCount     = 1;
+
+	vkCreateImageView(ctx->device, &create_info2, nullptr, &vk_obj->texture_view);
+
 	EXIT_NOT_IMPLEMENTED(vk_obj->image_view == nullptr);
+	EXIT_NOT_IMPLEMENTED(vk_obj->texture_view == nullptr);
 
 	UtilSetDepthLayoutOptimal(vk_obj);
 
@@ -119,6 +143,7 @@ static void delete_func(GraphicContext* ctx, void* obj, VulkanMemory* mem)
 
 	DeleteFramebuffer(vk_obj);
 
+	vkDestroyImageView(ctx->device, vk_obj->texture_view, nullptr);
 	vkDestroyImageView(ctx->device, vk_obj->image_view, nullptr);
 
 	vkDestroyImage(ctx->device, vk_obj->image, nullptr);
