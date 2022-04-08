@@ -134,6 +134,7 @@ public:
 	void DbgDump(const String& folder);
 
 	Program* LoadProgram(const String& elf_name);
+	void     SaveMainProgram(const String& elf_name);
 	void     UnloadProgram(Program* program);
 
 	[[nodiscard]] uint64_t GetEntry();

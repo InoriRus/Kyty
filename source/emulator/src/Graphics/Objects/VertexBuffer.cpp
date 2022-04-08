@@ -12,7 +12,34 @@
 
 namespace Kyty::Libs::Graphics {
 
-static void* create_func(GraphicContext* ctx, const uint64_t* /*params*/, const uint64_t* vaddr, const uint64_t* size, int vaddr_num,
+static void update_func(GraphicContext* ctx, const uint64_t* /*params*/, void* obj, const uint64_t* vaddr, const uint64_t* size,
+                        int vaddr_num)
+{
+	KYTY_PROFILER_BLOCK("VertexBufferGpuObject::update_func");
+
+	EXIT_IF(vaddr_num != 1 || size == nullptr || vaddr == nullptr || *vaddr == 0);
+	EXIT_IF(obj == nullptr);
+
+	auto* vk_obj = static_cast<VulkanBuffer*>(obj);
+
+	VulkanBuffer staging_buffer {};
+	staging_buffer.usage           = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+	staging_buffer.memory.property = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+
+	VulkanCreateBuffer(ctx, *size, &staging_buffer);
+	EXIT_NOT_IMPLEMENTED(staging_buffer.buffer == nullptr);
+
+	void* data = nullptr;
+	VulkanMapMemory(ctx, &staging_buffer.memory, &data);
+	memcpy(data, reinterpret_cast<void*>(*vaddr), *size);
+	VulkanUnmapMemory(ctx, &staging_buffer.memory);
+
+	UtilCopyBuffer(&staging_buffer, vk_obj, *size);
+
+	VulkanDeleteBuffer(ctx, &staging_buffer);
+}
+
+static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint64_t* vaddr, const uint64_t* size, int vaddr_num,
                          VulkanMemory* mem)
 {
 	KYTY_PROFILER_BLOCK("VertexBufferGpuObject::Create");
@@ -30,33 +57,9 @@ static void* create_func(GraphicContext* ctx, const uint64_t* /*params*/, const 
 	VulkanCreateBuffer(ctx, *size, vk_obj);
 	EXIT_NOT_IMPLEMENTED(vk_obj->buffer == nullptr);
 
-	VulkanBuffer staging_buffer {};
-	staging_buffer.usage           = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-	staging_buffer.memory.property = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-
-	VulkanCreateBuffer(ctx, *size, &staging_buffer);
-	EXIT_NOT_IMPLEMENTED(staging_buffer.buffer == nullptr);
-
-	void* data = nullptr;
-	// vkMapMemory(ctx->device, staging_buffer.memory.memory, staging_buffer.memory.offset, *size, 0, &data);
-	VulkanMapMemory(ctx, &staging_buffer.memory, &data);
-	memcpy(data, reinterpret_cast<void*>(*vaddr), *size);
-	// vkUnmapMemory(ctx->device, staging_buffer.memory.memory);
-	VulkanUnmapMemory(ctx, &staging_buffer.memory);
-
-	UtilCopyBuffer(&staging_buffer, vk_obj, *size);
-
-	VulkanDeleteBuffer(ctx, &staging_buffer);
+	update_func(ctx, params, vk_obj, vaddr, size, vaddr_num);
 
 	return vk_obj;
-}
-
-static void update_func(GraphicContext* /*ctx*/, const uint64_t* /*params*/, void* /*obj*/, const uint64_t* /*vaddr*/,
-                        const uint64_t* /*size*/, int /*vaddr_num*/)
-{
-	KYTY_PROFILER_BLOCK("VertexBufferGpuObject::update_func");
-
-	KYTY_NOT_IMPLEMENTED;
 }
 
 static void delete_func(GraphicContext* ctx, void* obj, VulkanMemory* /*mem*/)

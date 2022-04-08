@@ -89,6 +89,7 @@ void GraphicsRenderDispatchDirect(CommandBuffer* buffer, HW::HardwareContext* ct
                                   uint32_t thread_group_z, uint32_t mode);
 void GraphicsRenderMemoryBarrier(CommandBuffer* buffer);
 void GraphicsRenderRenderTextureBarrier(CommandBuffer* buffer, uint64_t vaddr, uint64_t size);
+void GraphicsRenderDepthStencilBarrier(CommandBuffer* buffer, uint64_t vaddr, uint64_t size);
 void GraphicsRenderMemoryFree(uint64_t vaddr, uint64_t size);
 
 void DeleteFramebuffer(VideoOutVulkanImage* image);

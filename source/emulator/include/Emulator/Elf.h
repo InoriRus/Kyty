@@ -254,6 +254,7 @@ public:
 	virtual ~Elf64();
 
 	void Open(const String& file_name);
+	void Save(const String& file_name);
 
 	void DbgDump(const String& folder);
 

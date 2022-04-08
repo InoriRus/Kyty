@@ -32,6 +32,19 @@ constexpr int OK = 0;
 		return 0;                                                                                                                          \
 	}()
 
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
+#define POSIX_NET_CALL(func)                                                                                                               \
+	[&]()                                                                                                                                  \
+	{                                                                                                                                      \
+		auto result = func;                                                                                                                \
+		if (result != OK)                                                                                                                  \
+		{                                                                                                                                  \
+			*GetErrorAddr() = Network::NetToPosix(result);                                                                                 \
+			return -1;                                                                                                                     \
+		}                                                                                                                                  \
+		return 0;                                                                                                                          \
+	}()
+
 namespace Kyty::Libs {
 
 namespace Posix {
@@ -323,6 +336,257 @@ constexpr int SYSTEM_SERVICE_ERROR_NO_APP_INFO                     = -2136932343
 constexpr int SYSTEM_SERVICE_ERROR_NOT_FLAG_IN_PARAM_SFO           = -2136932342; /* 0x80A1000A */
 
 } // namespace SystemService
+
+namespace Network {
+
+inline int NetToPosix(int kernel_errno)
+{
+	return kernel_errno > -2143223551 && kernel_errno <= -2143223316 ? kernel_errno + 2143223551 + 1 : 204;
+}
+
+constexpr int NET_ERROR_EPERM                    = -2143223551; /* 0x80410101 */
+constexpr int NET_ERROR_ENOENT                   = -2143223550; /* 0x80410102 */
+constexpr int NET_ERROR_ESRCH                    = -2143223549; /* 0x80410103 */
+constexpr int NET_ERROR_EINTR                    = -2143223548; /* 0x80410104 */
+constexpr int NET_ERROR_EIO                      = -2143223547; /* 0x80410105 */
+constexpr int NET_ERROR_ENXIO                    = -2143223546; /* 0x80410106 */
+constexpr int NET_ERROR_E2BIG                    = -2143223545; /* 0x80410107 */
+constexpr int NET_ERROR_ENOEXEC                  = -2143223544; /* 0x80410108 */
+constexpr int NET_ERROR_EBADF                    = -2143223543; /* 0x80410109 */
+constexpr int NET_ERROR_ECHILD                   = -2143223542; /* 0x8041010A */
+constexpr int NET_ERROR_EDEADLK                  = -2143223541; /* 0x8041010B */
+constexpr int NET_ERROR_ENOMEM                   = -2143223540; /* 0x8041010C */
+constexpr int NET_ERROR_EACCES                   = -2143223539; /* 0x8041010D */
+constexpr int NET_ERROR_EFAULT                   = -2143223538; /* 0x8041010E */
+constexpr int NET_ERROR_ENOTBLK                  = -2143223537; /* 0x8041010F */
+constexpr int NET_ERROR_EBUSY                    = -2143223536; /* 0x80410110 */
+constexpr int NET_ERROR_EEXIST                   = -2143223535; /* 0x80410111 */
+constexpr int NET_ERROR_EXDEV                    = -2143223534; /* 0x80410112 */
+constexpr int NET_ERROR_ENODEV                   = -2143223533; /* 0x80410113 */
+constexpr int NET_ERROR_ENOTDIR                  = -2143223532; /* 0x80410114 */
+constexpr int NET_ERROR_EISDIR                   = -2143223531; /* 0x80410115 */
+constexpr int NET_ERROR_EINVAL                   = -2143223530; /* 0x80410116 */
+constexpr int NET_ERROR_ENFILE                   = -2143223529; /* 0x80410117 */
+constexpr int NET_ERROR_EMFILE                   = -2143223528; /* 0x80410118 */
+constexpr int NET_ERROR_ENOTTY                   = -2143223527; /* 0x80410119 */
+constexpr int NET_ERROR_ETXTBSY                  = -2143223526; /* 0x8041011A */
+constexpr int NET_ERROR_EFBIG                    = -2143223525; /* 0x8041011B */
+constexpr int NET_ERROR_ENOSPC                   = -2143223524; /* 0x8041011C */
+constexpr int NET_ERROR_ESPIPE                   = -2143223523; /* 0x8041011D */
+constexpr int NET_ERROR_EROFS                    = -2143223522; /* 0x8041011E */
+constexpr int NET_ERROR_EMLINK                   = -2143223521; /* 0x8041011F */
+constexpr int NET_ERROR_EPIPE                    = -2143223520; /* 0x80410120 */
+constexpr int NET_ERROR_EDOM                     = -2143223519; /* 0x80410121 */
+constexpr int NET_ERROR_ERANGE                   = -2143223518; /* 0x80410122 */
+constexpr int NET_ERROR_EAGAIN                   = -2143223517; /* 0x80410123 */
+constexpr int NET_ERROR_EWOULDBLOCK              = -2143223517; /* 0x80410123 */
+constexpr int NET_ERROR_EINPROGRESS              = -2143223516; /* 0x80410124 */
+constexpr int NET_ERROR_EALREADY                 = -2143223515; /* 0x80410125 */
+constexpr int NET_ERROR_ENOTSOCK                 = -2143223514; /* 0x80410126 */
+constexpr int NET_ERROR_EDESTADDRREQ             = -2143223513; /* 0x80410127 */
+constexpr int NET_ERROR_EMSGSIZE                 = -2143223512; /* 0x80410128 */
+constexpr int NET_ERROR_EPROTOTYPE               = -2143223511; /* 0x80410129 */
+constexpr int NET_ERROR_ENOPROTOOPT              = -2143223510; /* 0x8041012A */
+constexpr int NET_ERROR_EPROTONOSUPPORT          = -2143223509; /* 0x8041012B */
+constexpr int NET_ERROR_ESOCKTNOSUPPORT          = -2143223508; /* 0x8041012C */
+constexpr int NET_ERROR_EOPNOTSUPP               = -2143223507; /* 0x8041012D */
+constexpr int NET_ERROR_ENOTSUP                  = -2143223507; /* 0x8041012D */
+constexpr int NET_ERROR_EPFNOSUPPORT             = -2143223506; /* 0x8041012E */
+constexpr int NET_ERROR_EAFNOSUPPORT             = -2143223505; /* 0x8041012F */
+constexpr int NET_ERROR_EADDRINUSE               = -2143223504; /* 0x80410130 */
+constexpr int NET_ERROR_EADDRNOTAVAIL            = -2143223503; /* 0x80410131 */
+constexpr int NET_ERROR_ENETDOWN                 = -2143223502; /* 0x80410132 */
+constexpr int NET_ERROR_ENETUNREACH              = -2143223501; /* 0x80410133 */
+constexpr int NET_ERROR_ENETRESET                = -2143223500; /* 0x80410134 */
+constexpr int NET_ERROR_ECONNABORTED             = -2143223499; /* 0x80410135 */
+constexpr int NET_ERROR_ECONNRESET               = -2143223498; /* 0x80410136 */
+constexpr int NET_ERROR_ENOBUFS                  = -2143223497; /* 0x80410137 */
+constexpr int NET_ERROR_EISCONN                  = -2143223496; /* 0x80410138 */
+constexpr int NET_ERROR_ENOTCONN                 = -2143223495; /* 0x80410139 */
+constexpr int NET_ERROR_ESHUTDOWN                = -2143223494; /* 0x8041013A */
+constexpr int NET_ERROR_ETOOMANYREFS             = -2143223493; /* 0x8041013B */
+constexpr int NET_ERROR_ETIMEDOUT                = -2143223492; /* 0x8041013C */
+constexpr int NET_ERROR_ECONNREFUSED             = -2143223491; /* 0x8041013D */
+constexpr int NET_ERROR_ELOOP                    = -2143223490; /* 0x8041013E */
+constexpr int NET_ERROR_ENAMETOOLONG             = -2143223489; /* 0x8041013F */
+constexpr int NET_ERROR_EHOSTDOWN                = -2143223488; /* 0x80410140 */
+constexpr int NET_ERROR_EHOSTUNREACH             = -2143223487; /* 0x80410141 */
+constexpr int NET_ERROR_ENOTEMPTY                = -2143223486; /* 0x80410142 */
+constexpr int NET_ERROR_EPROCLIM                 = -2143223485; /* 0x80410143 */
+constexpr int NET_ERROR_EUSERS                   = -2143223484; /* 0x80410144 */
+constexpr int NET_ERROR_EDQUOT                   = -2143223483; /* 0x80410145 */
+constexpr int NET_ERROR_ESTALE                   = -2143223482; /* 0x80410146 */
+constexpr int NET_ERROR_EREMOTE                  = -2143223481; /* 0x80410147 */
+constexpr int NET_ERROR_EBADRPC                  = -2143223480; /* 0x80410148 */
+constexpr int NET_ERROR_ERPCMISMATCH             = -2143223479; /* 0x80410149 */
+constexpr int NET_ERROR_EPROGUNAVAIL             = -2143223478; /* 0x8041014A */
+constexpr int NET_ERROR_EPROGMISMATCH            = -2143223477; /* 0x8041014B */
+constexpr int NET_ERROR_EPROCUNAVAIL             = -2143223476; /* 0x8041014C */
+constexpr int NET_ERROR_ENOLCK                   = -2143223475; /* 0x8041014D */
+constexpr int NET_ERROR_ENOSYS                   = -2143223474; /* 0x8041014E */
+constexpr int NET_ERROR_EFTYPE                   = -2143223473; /* 0x8041014F */
+constexpr int NET_ERROR_EAUTH                    = -2143223472; /* 0x80410150 */
+constexpr int NET_ERROR_ENEEDAUTH                = -2143223471; /* 0x80410151 */
+constexpr int NET_ERROR_EIDRM                    = -2143223470; /* 0x80410152 */
+constexpr int NET_ERROR_ENOMS                    = -2143223469; /* 0x80410153 */
+constexpr int NET_ERROR_EOVERFLOW                = -2143223468; /* 0x80410154 */
+constexpr int NET_ERROR_ECANCELED                = -2143223467; /* 0x80410155 */
+constexpr int NET_ERROR_EPROTO                   = -2143223460; /* 0x8041015C */
+constexpr int NET_ERROR_EADHOC                   = -2143223392; /* 0x804101A0 */
+constexpr int NET_ERROR_ERESERVED161             = -2143223391; /* 0x804101A1 */
+constexpr int NET_ERROR_ERESERVED162             = -2143223390; /* 0x804101A2 */
+constexpr int NET_ERROR_EINACTIVEDISABLED        = -2143223389; /* 0x804101A3 */
+constexpr int NET_ERROR_ENODATA                  = -2143223388; /* 0x804101A4 */
+constexpr int NET_ERROR_EDESC                    = -2143223387; /* 0x804101A5 */
+constexpr int NET_ERROR_EDESCTIMEDOUT            = -2143223386; /* 0x804101A6 */
+constexpr int NET_ERROR_ENETINTR                 = -2143223385; /* 0x804101A7 */
+constexpr int NET_ERROR_ENOTINIT                 = -2143223352; /* 0x804101C8 */
+constexpr int NET_ERROR_ENOLIBMEM                = -2143223351; /* 0x804101C9 */
+constexpr int NET_ERROR_ERESERVED202             = -2143223350; /* 0x804101CA */
+constexpr int NET_ERROR_ECALLBACK                = -2143223349; /* 0x804101CB */
+constexpr int NET_ERROR_EINTERNAL                = -2143223348; /* 0x804101CC */
+constexpr int NET_ERROR_ERETURN                  = -2143223347; /* 0x804101CD */
+constexpr int NET_ERROR_ENOALLOCMEM              = -2143223346; /* 0x804101CE */
+constexpr int NET_ERROR_RESOLVER_EINTERNAL       = -2143223332; /* 0x804101DC */
+constexpr int NET_ERROR_RESOLVER_EBUSY           = -2143223331; /* 0x804101DD */
+constexpr int NET_ERROR_RESOLVER_ENOSPACE        = -2143223330; /* 0x804101DE */
+constexpr int NET_ERROR_RESOLVER_EPACKET         = -2143223329; /* 0x804101DF */
+constexpr int NET_ERROR_RESOLVER_ERESERVED224    = -2143223328; /* 0x804101E0 */
+constexpr int NET_ERROR_RESOLVER_ENODNS          = -2143223327; /* 0x804101E1 */
+constexpr int NET_ERROR_RESOLVER_ETIMEDOUT       = -2143223326; /* 0x804101E2 */
+constexpr int NET_ERROR_RESOLVER_ENOSUPPORT      = -2143223325; /* 0x804101E3 */
+constexpr int NET_ERROR_RESOLVER_EFORMAT         = -2143223324; /* 0x804101E4 */
+constexpr int NET_ERROR_RESOLVER_ESERVERFAILURE  = -2143223323; /* 0x804101E5 */
+constexpr int NET_ERROR_RESOLVER_ENOHOST         = -2143223322; /* 0x804101E6 */
+constexpr int NET_ERROR_RESOLVER_ENOTIMPLEMENTED = -2143223321; /* 0x804101E7 */
+constexpr int NET_ERROR_RESOLVER_ESERVERREFUSED  = -2143223320; /* 0x804101E8 */
+constexpr int NET_ERROR_RESOLVER_ENORECORD       = -2143223319; /* 0x804101E9 */
+constexpr int NET_ERROR_RESOLVER_EALIGNMENT      = -2143223318; /* 0x804101EA */
+constexpr int NET_ERROR_RESOLVER_ENOTFOUND       = -2143223317; /* 0x804101EB */
+constexpr int NET_ERROR_RESOLVER_ENOTINIT        = -2143223316; /* 0x804101EC */
+
+constexpr int SSL_ERROR_BEFORE_INIT                             = -2137657343; /* 0x8095F001 */
+constexpr int SSL_ERROR_ALREADY_INITED                          = -2137657342; /* 0x8095F002 */
+constexpr int SSL_ERROR_BROKEN                                  = -2137657341; /* 0x8095F003 */
+constexpr int SSL_ERROR_NOT_FOUND                               = -2137657340; /* 0x8095F004 */
+constexpr int SSL_ERROR_INVALID_FORMAT                          = -2137657339; /* 0x8095F005 */
+constexpr int SSL_ERROR_INVALID_ID                              = -2137657338; /* 0x8095F006 */
+constexpr int SSL_ERROR_INVALID_VALUE                           = -2137657337; /* 0x8095F007 */
+constexpr int SSL_ERROR_OUT_OF_SIZE                             = -2137657336; /* 0x8095F008 */
+constexpr int SSL_ERROR_INTERNAL                                = -2137657335; /* 0x8095F009 */
+constexpr int SSL_ERROR_INVALID_CERT                            = -2137657334; /* 0x8095F00A */
+constexpr int SSL_ERROR_CN_CHECK                                = -2137657333; /* 0x8095F00B */
+constexpr int SSL_ERROR_UNKNOWN_CA                              = -2137657332; /* 0x8095F00C */
+constexpr int SSL_ERROR_NOT_AFTER_CHECK                         = -2137657331; /* 0x8095F00D */
+constexpr int SSL_ERROR_NOT_BEFORE_CHECK                        = -2137657330; /* 0x8095F00E */
+constexpr int SSL_ERROR_EAGAIN                                  = -2137657329; /* 0x8095F00F */
+constexpr int SSL_ERROR_FATAL_ALERT                             = -2137657328; /* 0x8095F010 */
+constexpr int SSL_ERROR_BUSY                                    = -2137657326; /* 0x8095F012 */
+constexpr int SSL_ERROR_WANT_POLLIN                             = -2137657325; /* 0x8095F013 */
+constexpr int SSL_ERROR_WANT_POLLOUT                            = -2137657324; /* 0x8095F014 */
+constexpr int SSL_ERROR_INSUFFICIENT_STACKSIZE                  = -2137657323; /* 0x8095F015 */
+constexpr int SSL_ERROR_APPLICATION_VERIFICATION_CALLBACK_CHECK = -2137657091; /* 0x8095F0FD */
+constexpr int SSL_ERROR_OUT_OF_MEMORY                           = -2137712683; /* 0x809517D5 */
+constexpr int SSL_ERROR_READ_TIMEOUT                            = -2137712880; /* 0x80951710 */
+constexpr int SSL_ERROR_SOCKET_CLOSED                           = -2137712883; /* 0x8095170D */
+constexpr int SSL_ERROR_BAD_LENGTH                              = -2137712781; /* 0x80951773 */
+constexpr int SSL_ERROR_INDEX_OOB                               = -2137712776; /* 0x80951778 */
+constexpr int SSL_ERROR_INVALID_ARG                             = -2137712774; /* 0x8095177A */
+constexpr int SSL_ERROR_EOF                                     = -2137712772; /* 0x8095177C */
+constexpr int SSL_ERROR_BAD_EXPONENT                            = -2137712771; /* 0x8095177D */
+constexpr int SSL_ERROR_INCOMPLETE_SEARCH                       = -2137712770; /* 0x8095177E */
+constexpr int SSL_ERROR_INTERNAL_ERROR                          = -2137712769; /* 0x8095177F */
+constexpr int SSL_ERROR_BAD_CERT_LENGTH                         = -2137710382; /* 0x809520D2 */
+constexpr int SSL_ERROR_BAD_SIGN_ALGO                           = -2137710383; /* 0x809520D1 */
+constexpr int SSL_ERROR_MISMATCH_PUBLIC_KEYS                    = -2137710381; /* 0x809520D3 */
+constexpr int SSL_ERROR_KEY_BLOB_CORRUPT                        = -2137710380; /* 0x809520D4 */
+
+constexpr int HTTP_ERROR_BEFORE_INIT                 = -2143088639; /*(0x80431001)	*/
+constexpr int HTTP_ERROR_ALREADY_INITED              = -2143088608; /*(0x80431020)	*/
+constexpr int HTTP_ERROR_BUSY                        = -2143088607; /*(0x80431021)	*/
+constexpr int HTTP_ERROR_OUT_OF_MEMORY               = -2143088606; /*(0x80431022)	*/
+constexpr int HTTP_ERROR_NOT_FOUND                   = -2143088603; /*(0x80431025)	*/
+constexpr int HTTP_ERROR_INVALID_VERSION             = -2143088534; /*(0x8043106a)	*/
+constexpr int HTTP_ERROR_INVALID_ID                  = -2143088384; /*(0x80431100)	*/
+constexpr int HTTP_ERROR_OUT_OF_SIZE                 = -2143088380; /*(0x80431104)	*/
+constexpr int HTTP_ERROR_INVALID_VALUE               = -2143088130; /*(0x804311fe)	*/
+constexpr int HTTP_ERROR_INVALID_URL                 = -2143080352; /*(0x80433060)	*/
+constexpr int HTTP_ERROR_UNKNOWN_SCHEME              = -2143088543; /*(0x80431061)	*/
+constexpr int HTTP_ERROR_NETWORK                     = -2143088541; /*(0x80431063)	*/
+constexpr int HTTP_ERROR_BAD_RESPONSE                = -2143088540; /*(0x80431064)	*/
+constexpr int HTTP_ERROR_BEFORE_SEND                 = -2143088539; /*(0x80431065)	*/
+constexpr int HTTP_ERROR_AFTER_SEND                  = -2143088538; /*(0x80431066)	*/
+constexpr int HTTP_ERROR_TIMEOUT                     = -2143088536; /*(0x80431068)	*/
+constexpr int HTTP_ERROR_UNKNOWN_AUTH_TYPE           = -2143088535; /*(0x80431069)	*/
+constexpr int HTTP_ERROR_UNKNOWN_METHOD              = -2143088533; /*(0x8043106b)	*/
+constexpr int HTTP_ERROR_READ_BY_HEAD_METHOD         = -2143088529; /*(0x8043106f)	*/
+constexpr int HTTP_ERROR_NOT_IN_COM                  = -2143088528; /*(0x80431070)	*/
+constexpr int HTTP_ERROR_NO_CONTENT_LENGTH           = -2143088527; /*(0x80431071)	*/
+constexpr int HTTP_ERROR_CHUNK_ENC                   = -2143088526; /*(0x80431072)	*/
+constexpr int HTTP_ERROR_TOO_LARGE_RESPONSE_HEADER   = -2143088525; /*(0x80431073)	*/
+constexpr int HTTP_ERROR_SSL                         = -2143088523; /*(0x80431075)	*/
+constexpr int HTTP_ERROR_INSUFFICIENT_STACKSIZE      = -2143088522; /*(0x80431076)	*/
+constexpr int HTTP_ERROR_ABORTED                     = -2143088512; /*(0x80431080)	*/
+constexpr int HTTP_ERROR_UNKNOWN                     = -2143088511; /*(0x80431081)	*/
+constexpr int HTTP_ERROR_EAGAIN                      = -2143088510; /*(0x80431082)	*/
+constexpr int HTTP_ERROR_PROXY                       = -2143088508; /*(0x80431084)	*/
+constexpr int HTTP_ERROR_BROKEN                      = -2143088507; /*(0x80431085)	*/
+constexpr int HTTP_ERROR_PARSE_HTTP_NOT_FOUND        = -2143084507; /*(0x80432025)	*/
+constexpr int HTTP_ERROR_PARSE_HTTP_INVALID_RESPONSE = -2143084448; /*(0x80432060)	*/
+constexpr int HTTP_ERROR_PARSE_HTTP_INVALID_VALUE    = -2143084034; /*(0x804321fe)	*/
+constexpr int HTTP_ERROR_RESOLVER_EPACKET            = -2143068159; /*(0x80436001)	*/
+constexpr int HTTP_ERROR_RESOLVER_ENODNS             = -2143068158; /*(0x80436002)	*/
+constexpr int HTTP_ERROR_RESOLVER_ETIMEDOUT          = -2143068157; /*(0x80436003)	*/
+constexpr int HTTP_ERROR_RESOLVER_ENOSUPPORT         = -2143068156; /*(0x80436004)	*/
+constexpr int HTTP_ERROR_RESOLVER_EFORMAT            = -2143068155; /*(0x80436005)	*/
+constexpr int HTTP_ERROR_RESOLVER_ESERVERFAILURE     = -2143068154; /*(0x80436006)	*/
+constexpr int HTTP_ERROR_RESOLVER_ENOHOST            = -2143068153; /*(0x80436007)	*/
+constexpr int HTTP_ERROR_RESOLVER_ENOTIMPLEMENTED    = -2143068152; /*(0x80436008)	*/
+constexpr int HTTP_ERROR_RESOLVER_ESERVERREFUSED     = -2143068151; /*(0x80436009)	*/
+constexpr int HTTP_ERROR_RESOLVER_ENORECORD          = -2143068150; /*(0x8043600a)	*/
+constexpr int HTTPS_ERROR_CERT                       = -2143072160; /*(0x80435060)	*/
+constexpr int HTTPS_ERROR_HANDSHAKE                  = -2143072159; /*(0x80435061)	*/
+constexpr int HTTPS_ERROR_IO                         = -2143072158; /*(0x80435062)	*/
+constexpr int HTTPS_ERROR_INTERNAL                   = -2143072157; /*(0x80435063)	*/
+constexpr int HTTPS_ERROR_PROXY                      = -2143072156; /*(0x80435064)	*/
+
+} // namespace Network
+
+namespace PlayGo {
+
+constexpr int PLAYGO_ERROR_UNKNOWN             = -2135818239; /* 0x80B20001 */
+constexpr int PLAYGO_ERROR_FATAL               = -2135818238; /* 0x80B20002 */
+constexpr int PLAYGO_ERROR_NO_MEMORY           = -2135818237; /* 0x80B20003 */
+constexpr int PLAYGO_ERROR_INVALID_ARGUMENT    = -2135818236; /* 0x80B20004 */
+constexpr int PLAYGO_ERROR_NOT_INITIALIZED     = -2135818235; /* 0x80B20005 */
+constexpr int PLAYGO_ERROR_ALREADY_INITIALIZED = -2135818234; /* 0x80B20006 */
+constexpr int PLAYGO_ERROR_ALREADY_STARTED     = -2135818233; /* 0x80B20007 */
+constexpr int PLAYGO_ERROR_NOT_STARTED         = -2135818232; /* 0x80B20008 */
+constexpr int PLAYGO_ERROR_BAD_HANDLE          = -2135818231; /* 0x80B20009 */
+constexpr int PLAYGO_ERROR_BAD_POINTER         = -2135818230; /* 0x80B2000A */
+constexpr int PLAYGO_ERROR_BAD_SIZE            = -2135818229; /* 0x80B2000B */
+constexpr int PLAYGO_ERROR_BAD_CHUNK_ID        = -2135818228; /* 0x80B2000C */
+constexpr int PLAYGO_ERROR_BAD_SPEED           = -2135818227; /* 0x80B2000D */
+constexpr int PLAYGO_ERROR_NOT_SUPPORT_PLAYGO  = -2135818226; /* 0x80B2000E */
+constexpr int PLAYGO_ERROR_EPERM               = -2135818225; /* 0x80B2000F */
+constexpr int PLAYGO_ERROR_BAD_LOCUS           = -2135818224; /* 0x80B20010 */
+constexpr int PLAYGO_ERROR_NEED_DATA_DISC      = -2135818223; /* 0x80B20011 */
+
+} // namespace PlayGo
+
+namespace UserService {
+
+constexpr int USER_SERVICE_ERROR_INTERNAL                = -2137653247; /* 0x80960001 */
+constexpr int USER_SERVICE_ERROR_NOT_INITIALIZED         = -2137653246; /* 0x80960002 */
+constexpr int USER_SERVICE_ERROR_ALREADY_INITIALIZED     = -2137653245; /* 0x80960003 */
+constexpr int USER_SERVICE_ERROR_NO_MEMORY               = -2137653244; /* 0x80960004 */
+constexpr int USER_SERVICE_ERROR_INVALID_ARGUMENT        = -2137653243; /* 0x80960005 */
+constexpr int USER_SERVICE_ERROR_OPERATION_NOT_SUPPORTED = -2137653242; /* 0x80960006 */
+constexpr int USER_SERVICE_ERROR_NO_EVENT                = -2137653241; /* 0x80960007 */
+constexpr int USER_SERVICE_ERROR_NOT_LOGGED_IN           = -2137653239; /* 0x80960009 */
+constexpr int USER_SERVICE_ERROR_BUFFER_TOO_SHORT        = -2137653238; /* 0x8096000A */
+
+} // namespace UserService
 
 } // namespace Kyty::Libs
 

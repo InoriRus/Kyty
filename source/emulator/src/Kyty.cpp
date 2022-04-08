@@ -9,6 +9,7 @@
 #include "Kyty/Core/Vector.h"
 #include "Kyty/Scripts/Scripts.h"
 
+#include "Emulator/Audio.h"
 #include "Emulator/Common.h"
 #include "Emulator/Config.h"
 #include "Emulator/Controller.h"
@@ -19,6 +20,7 @@
 #include "Emulator/Kernel/Memory.h"
 #include "Emulator/Kernel/Pthread.h"
 #include "Emulator/Libs/Libs.h"
+#include "Emulator/Network.h"
 #include "Emulator/Profiler.h"
 #include "Emulator/RuntimeLinker.h"
 #include "Emulator/Timer.h"
@@ -75,31 +77,35 @@ static void Init(const Scripts::ScriptVar& cfg)
 
 	auto* slist = Core::SubsystemsList::Instance();
 
-	auto* log         = Log::LogSubsystem::Instance();
-	auto* core        = Core::CoreSubsystem::Instance();
-	auto* scripts     = Scripts::ScriptsSubsystem::Instance();
+	auto* audio       = Libs::Audio::AudioSubsystem::Instance();
 	auto* config      = Config::ConfigSubsystem::Instance();
-	auto* pthread     = Libs::LibKernel::PthreadSubsystem::Instance();
-	auto* timer       = Loader::Timer::TimerSubsystem::Instance();
-	auto* file_system = Libs::LibKernel::FileSystem::FileSystemSubsystem::Instance();
-	auto* memory      = Libs::LibKernel::Memory::MemorySubsystem::Instance();
-	auto* graphics    = Libs::Graphics::GraphicsSubsystem::Instance();
-	auto* profiler    = Profiler::ProfilerSubsystem::Instance();
 	auto* controller  = Libs::Controller::ControllerSubsystem::Instance();
+	auto* core        = Core::CoreSubsystem::Instance();
+	auto* file_system = Libs::LibKernel::FileSystem::FileSystemSubsystem::Instance();
+	auto* graphics    = Libs::Graphics::GraphicsSubsystem::Instance();
+	auto* log         = Log::LogSubsystem::Instance();
+	auto* memory      = Libs::LibKernel::Memory::MemorySubsystem::Instance();
+	auto* network     = Libs::Network::NetworkSubsystem::Instance();
+	auto* profiler    = Profiler::ProfilerSubsystem::Instance();
+	auto* pthread     = Libs::LibKernel::PthreadSubsystem::Instance();
+	auto* scripts     = Scripts::ScriptsSubsystem::Instance();
+	auto* timer       = Loader::Timer::TimerSubsystem::Instance();
 
 	slist->Add(config, {core, scripts});
 	slist->InitAll(true);
 
 	Config::Load(cfg);
 
-	slist->Add(log, {core, config});
-	slist->Add(pthread, {core, log, timer});
-	slist->Add(timer, {core, log});
-	slist->Add(memory, {core, log});
+	slist->Add(audio, {core, log, pthread, memory});
 	slist->Add(controller, {core, log, config});
 	slist->Add(file_system, {core, log, pthread});
 	slist->Add(graphics, {core, log, pthread, memory, config, profiler, controller});
+	slist->Add(log, {core, config});
+	slist->Add(memory, {core, log});
+	slist->Add(network, {core, log, pthread});
 	slist->Add(profiler, {core, config});
+	slist->Add(pthread, {core, log, timer});
+	slist->Add(timer, {core, log});
 
 	slist->InitAll(true);
 }
@@ -156,6 +162,22 @@ KYTY_SCRIPT_FUNC(kyty_load_elf_func)
 			program->dbg_print_reloc = true;
 		}
 	}
+
+	return 0;
+}
+
+KYTY_SCRIPT_FUNC(kyty_save_main_elf_func)
+{
+	if (Scripts::ArgGetVarCount() != 1)
+	{
+		EXIT("invalid args\n");
+	}
+
+	Scripts::ScriptVar elf = Scripts::ArgGetVar(0);
+
+	auto* rt = Core::Singleton<Loader::RuntimeLinker>::Instance();
+
+	rt->SaveMainProgram(Libs::LibKernel::FileSystem::GetRealFilename(elf.ToString()));
 
 	return 0;
 }
@@ -342,6 +364,7 @@ void kyty_reg()
 	Scripts::RegisterFunc("kyty_init", LuaFunc::kyty_init_func, LuaFunc::kyty_help);
 	Scripts::RegisterFunc("kyty_load_cfg", LuaFunc::kyty_load_cfg_func, LuaFunc::kyty_help);
 	Scripts::RegisterFunc("kyty_load_elf", LuaFunc::kyty_load_elf_func, LuaFunc::kyty_help);
+	Scripts::RegisterFunc("kyty_save_main_elf", LuaFunc::kyty_save_main_elf_func, LuaFunc::kyty_help);
 	Scripts::RegisterFunc("kyty_load_symbols", LuaFunc::kyty_load_symbols_func, LuaFunc::kyty_help);
 	Scripts::RegisterFunc("kyty_dbg_dump", LuaFunc::kyty_dbg_dump_func, LuaFunc::kyty_help);
 	Scripts::RegisterFunc("kyty_execute", LuaFunc::kyty_execute_func, LuaFunc::kyty_help);

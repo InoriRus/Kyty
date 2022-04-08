@@ -683,6 +683,24 @@ Program* RuntimeLinker::LoadProgram(const String& elf_name)
 	return program;
 }
 
+void RuntimeLinker::SaveMainProgram(const String& elf_name)
+{
+	EXIT_NOT_IMPLEMENTED(!Core::Thread::IsMainThread());
+
+	Core::LockGuard lock(m_mutex);
+
+	for (const auto* p: m_programs)
+	{
+		EXIT_IF(p->elf == nullptr);
+
+		if (!p->elf->IsShared())
+		{
+			p->elf->Save(elf_name);
+			break;
+		}
+	}
+}
+
 void RuntimeLinker::Clear()
 {
 	// EXIT_NOT_IMPLEMENTED(!Core::Thread::IsMainThread());

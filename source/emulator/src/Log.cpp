@@ -143,6 +143,13 @@ void SetDirection(Direction dir)
 	g_dir = dir;
 }
 
+Direction GetDirection()
+{
+	EXIT_IF(!Log::g_log_initialized);
+
+	return g_dir;
+}
+
 void SetOutputFile(const String& file_name, Core::File::Encoding enc)
 {
 	EXIT_IF(!Log::g_log_initialized);

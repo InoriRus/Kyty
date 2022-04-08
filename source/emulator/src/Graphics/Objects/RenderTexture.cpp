@@ -165,6 +165,7 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 	switch (pixel_format) // NOLINT
 	{
 		case static_cast<uint64_t>(RenderTextureFormat::R8G8B8A8Unorm): vk_format = VK_FORMAT_R8G8B8A8_UNORM; break;
+		case static_cast<uint64_t>(RenderTextureFormat::B8G8R8A8Unorm): vk_format = VK_FORMAT_B8G8R8A8_UNORM; break;
 		default: EXIT("unknown format: %" PRIu64 "\n", pixel_format);
 	}
 
@@ -267,6 +268,7 @@ static void* create2_func(GraphicContext* ctx, CommandBuffer* buffer, const uint
 	switch (pixel_format) // NOLINT
 	{
 		case static_cast<uint64_t>(RenderTextureFormat::R8G8B8A8Unorm): vk_format = VK_FORMAT_R8G8B8A8_UNORM; break;
+		case static_cast<uint64_t>(RenderTextureFormat::B8G8R8A8Unorm): vk_format = VK_FORMAT_B8G8R8A8_UNORM; break;
 		default: EXIT("unknown format: %" PRIu64 "\n", pixel_format);
 	}
 

@@ -44,6 +44,17 @@ static Elf64_Ehdr* load_ehdr_64(Core::File& f)
 	return ehdr;
 }
 
+static void save_ehdr_64(Core::File& f, const Elf64_Ehdr* ehdr)
+{
+	EXIT_IF(ehdr == nullptr);
+
+	uint32_t bytes_written = 0;
+
+	f.Write(ehdr, sizeof(Elf64_Ehdr), &bytes_written);
+
+	EXIT_IF(bytes_written == 0);
+}
+
 static Elf64_Phdr* load_phdr_64(Core::File& f, uint64_t offset, Elf64_Half num)
 {
 	auto* phdr = new Elf64_Phdr[num];
@@ -52,6 +63,18 @@ static Elf64_Phdr* load_phdr_64(Core::File& f, uint64_t offset, Elf64_Half num)
 	f.Read(phdr, sizeof(Elf64_Phdr) * num);
 
 	return phdr;
+}
+
+static void save_phdr_64(Core::File& f, uint64_t offset, Elf64_Half num, const Elf64_Phdr* phdr)
+{
+	EXIT_IF(phdr == nullptr);
+
+	uint32_t bytes_written = 0;
+
+	f.Seek(offset);
+	f.Write(phdr, sizeof(Elf64_Phdr) * num, &bytes_written);
+
+	EXIT_IF(bytes_written == 0);
 }
 
 static Elf64_Shdr* load_shdr_64(Core::File& f, uint64_t offset, Elf64_Half num)
@@ -67,6 +90,23 @@ static Elf64_Shdr* load_shdr_64(Core::File& f, uint64_t offset, Elf64_Half num)
 	f.Read(shdr, sizeof(Elf64_Shdr) * num);
 
 	return shdr;
+}
+
+static void save_shdr_64(Core::File& f, uint64_t offset, Elf64_Half num, const Elf64_Shdr* shdr)
+{
+	if (num == 0)
+	{
+		return;
+	}
+
+	EXIT_IF(shdr == nullptr);
+
+	uint32_t bytes_written = 0;
+
+	f.Seek(offset);
+	f.Write(shdr, sizeof(Elf64_Shdr) * num, &bytes_written);
+
+	EXIT_IF(bytes_written == 0);
 }
 
 static void* load_dynamic_64(Elf64* f, uint64_t offset, uint64_t size)
@@ -596,6 +636,72 @@ void Elf64::Open(const String& file_name)
 				m_dynamic_data = load_dynamic_64(this, m_phdr[i].p_offset, m_phdr[i].p_filesz);
 			}
 		}
+	}
+}
+
+void Elf64::Save(const String& file_name)
+{
+	EXIT_IF(!IsValid());
+
+	if (IsValid())
+	{
+		Core::File f;
+		f.Create(file_name);
+
+		if (f.IsInvalid())
+		{
+			EXIT("Can't create %s\n", file_name.C_Str());
+		}
+
+		save_ehdr_64(f, m_ehdr);
+
+		save_phdr_64(f, m_ehdr->e_phoff, m_ehdr->e_phnum, m_phdr);
+		save_shdr_64(f, m_ehdr->e_shoff, m_ehdr->e_shnum, m_shdr);
+
+		for (uint16_t i = 0; i < m_ehdr->e_phnum; i++)
+		{
+			if (m_phdr[i].p_filesz == 0u)
+			{
+				continue;
+			}
+
+			auto* buf = new char[static_cast<uint32_t>(m_phdr[i].p_filesz)];
+
+			LoadSegment(reinterpret_cast<uint64_t>(buf), m_phdr[i].p_offset, m_phdr[i].p_filesz);
+
+			uint32_t bytes_written = 0;
+
+			f.Seek(m_phdr[i].p_offset);
+			f.Write(buf, static_cast<uint32_t>(m_phdr[i].p_filesz), &bytes_written);
+
+			EXIT_IF(bytes_written == 0);
+
+			delete[] buf;
+		}
+
+		for (uint16_t i = 0; i < m_ehdr->e_shnum; i++)
+		{
+			if (m_shdr[i].sh_size == 0u)
+			{
+				continue;
+			}
+
+			auto* buf = new char[static_cast<uint32_t>(m_shdr[i].sh_size)];
+
+			m_f->Seek(m_shdr[i].sh_offset);
+			m_f->Read(buf, static_cast<uint32_t>(m_shdr[i].sh_size));
+
+			uint32_t bytes_written = 0;
+
+			f.Seek(m_shdr[i].sh_offset);
+			f.Write(buf, static_cast<uint32_t>(m_shdr[i].sh_size), &bytes_written);
+
+			EXIT_IF(bytes_written == 0);
+
+			delete[] buf;
+		}
+
+		f.Close();
 	}
 }
 

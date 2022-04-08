@@ -2,6 +2,7 @@
 #include "Kyty/Core/String.h"
 
 #include "Emulator/Common.h"
+#include "Emulator/Libs/Errno.h"
 #include "Emulator/Libs/Libs.h"
 #include "Emulator/SymbolDatabase.h"
 
@@ -17,7 +18,7 @@ static KYTY_SYSV_ABI int UserServiceInitialize(const void* /*params*/)
 {
 	PRINT_NAME();
 
-	return 0;
+	return OK;
 }
 
 static KYTY_SYSV_ABI int UserServiceGetInitialUser(int* user_id)
@@ -28,7 +29,16 @@ static KYTY_SYSV_ABI int UserServiceGetInitialUser(int* user_id)
 
 	*user_id = 1;
 
-	return 0;
+	return OK;
+}
+
+static KYTY_SYSV_ABI int UserServiceGetEvent(void* event)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(event == nullptr);
+
+	return USER_SERVICE_ERROR_NO_EVENT;
 }
 
 } // namespace UserService
@@ -37,6 +47,7 @@ LIB_DEFINE(InitUserService_1)
 {
 	LIB_FUNC("j3YMu1MVNNo", UserService::UserServiceInitialize);
 	LIB_FUNC("CdWp0oHWGr0", UserService::UserServiceGetInitialUser);
+	LIB_FUNC("yH17Q6NWtVg", UserService::UserServiceGetEvent);
 }
 
 } // namespace Kyty::Libs

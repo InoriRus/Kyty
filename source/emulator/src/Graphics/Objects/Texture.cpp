@@ -26,6 +26,10 @@ static VkFormat get_texture_format(uint32_t dfmt, uint32_t nfmt)
 	{
 		return VK_FORMAT_R8G8B8A8_UNORM;
 	}
+	if (nfmt == 0 && dfmt == 1)
+	{
+		return VK_FORMAT_R8_UNORM;
+	}
 	if (nfmt == 9 && dfmt == 37)
 	{
 		return VK_FORMAT_BC3_SRGB_BLOCK;

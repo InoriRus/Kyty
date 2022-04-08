@@ -212,7 +212,8 @@ static String dbg_fmt_to_str(const ShaderInstruction& inst)
 		case ShaderInstructionFormat::Vdata4VaddrSvSoffsIdxen: return U"Vdata4VaddrSvSoffsIdxen"; break;
 		case ShaderInstructionFormat::Vdata4VaddrSvSoffsIdxenFloat4: return U"Vdata4VaddrSvSoffsIdxenFloat4"; break;
 		case ShaderInstructionFormat::Vdata4Vaddr2SvSoffsOffenIdxenFloat4: return U"Vdata4Vaddr2SvSoffsOffenIdxenFloat4"; break;
-		case ShaderInstructionFormat::Vdata3Vaddr3StSsDmask7: return U"Vdata4Vaddr3StSsDmask7"; break;
+		case ShaderInstructionFormat::Vdata1Vaddr3StSsDmask1: return U"Vdata1Vaddr3StSsDmask1"; break;
+		case ShaderInstructionFormat::Vdata3Vaddr3StSsDmask7: return U"Vdata3Vaddr3StSsDmask7"; break;
 		case ShaderInstructionFormat::Vdata4Vaddr3StSsDmaskF: return U"Vdata4Vaddr3StSsDmaskF"; break;
 		case ShaderInstructionFormat::Vdata4Vaddr3StDmaskF: return U"Vdata4Vaddr3StDmaskF"; break;
 		case ShaderInstructionFormat::Vdata4Vaddr4StDmaskF: return U"Vdata4Vaddr4StDmaskF"; break;
@@ -286,6 +287,7 @@ static String dbg_fmt_print(const ShaderInstruction& inst)
 			case ShaderInstructionFormat::Compr: s = U"compr"; break;
 			case ShaderInstructionFormat::Vm: s = U"vm"; break;
 			case ShaderInstructionFormat::L: s = String::FromPrintf("label_%04" PRIx32, inst.pc + 4 + inst.src[0].constant.i); break;
+			case ShaderInstructionFormat::Dmask1: s = U"dmask:0x1"; break;
 			case ShaderInstructionFormat::Dmask7: s = U"dmask:0x7"; break;
 			case ShaderInstructionFormat::DmaskF: s = U"dmask:0xf"; break;
 			case ShaderInstructionFormat::Gds: s = U"gds"; break;
@@ -1532,7 +1534,7 @@ KYTY_SHADER_PARSER(shader_parse_mimg)
 	EXIT_NOT_IMPLEMENTED(glc == 1);
 	EXIT_NOT_IMPLEMENTED(slc == 1);
 	EXIT_NOT_IMPLEMENTED(unrm == 1);
-	EXIT_NOT_IMPLEMENTED(dmask != 0xf && dmask != 0x7);
+	// EXIT_NOT_IMPLEMENTED(dmask != 0xf && dmask != 0x7);
 
 	uint32_t size = 2;
 
@@ -1584,14 +1586,27 @@ KYTY_SHADER_PARSER(shader_parse_mimg)
 			inst.src[0].size = 3;
 			inst.src[1].size = 8;
 			inst.src[2].size = 4;
-			if (dmask == 0x7)
+			switch (dmask)
 			{
-				inst.format   = ShaderInstructionFormat::Vdata3Vaddr3StSsDmask7;
-				inst.dst.size = 3;
-			} else if (dmask == 0xf)
-			{
-				inst.format   = ShaderInstructionFormat::Vdata4Vaddr3StSsDmaskF;
-				inst.dst.size = 4;
+				case 0x1:
+				{
+					inst.format   = ShaderInstructionFormat::Vdata1Vaddr3StSsDmask1;
+					inst.dst.size = 1;
+					break;
+				}
+				case 0x7:
+				{
+					inst.format   = ShaderInstructionFormat::Vdata3Vaddr3StSsDmask7;
+					inst.dst.size = 3;
+					break;
+				}
+				case 0xf:
+				{
+					inst.format   = ShaderInstructionFormat::Vdata4Vaddr3StSsDmaskF;
+					inst.dst.size = 4;
+					break;
+				}
+				default:;
 			}
 			break;
 		default: printf("%s", dst->DbgDump().C_Str()); EXIT("unknown mimg opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 "\n", opcode, pc);
@@ -1600,7 +1615,7 @@ KYTY_SHADER_PARSER(shader_parse_mimg)
 	if (inst.format == ShaderInstructionFormat::Unknown)
 	{
 		printf("%s", dst->DbgDump().C_Str());
-		EXIT("unknown mimg format for opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 "\n", opcode, pc)
+		EXIT("unknown mimg format for opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 ", dmask: 0x%" PRIx32 "\n", opcode, pc, dmask);
 	}
 
 	dst->GetInstructions().Add(inst);

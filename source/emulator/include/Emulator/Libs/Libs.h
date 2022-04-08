@@ -18,9 +18,9 @@
 #define LIB_DEFINE(name) void name(Loader::SymbolDatabase* s)
 // NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define LIB_NAME(l, m)                                                                                                                     \
-	static thread_local bool PRINT_NAME_ENABLED = true;                                                                                    \
-	static constexpr char    g_library[]        = l;                                                                                       \
-	static constexpr char    g_module[]         = m;
+	[[maybe_unused]] static thread_local bool PRINT_NAME_ENABLED = true;                                                                   \
+	static constexpr char                     g_library[]        = l;                                                                      \
+	static constexpr char                     g_module[]         = m;
 // NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define LIB_VERSION(l, lv, m, mv1, mv2)                                                                                                    \
 	LIB_NAME(l, m);                                                                                                                        \
@@ -65,8 +65,11 @@
 #define PRINT_NAME()                                                                                                                       \
 	if (PRINT_NAME_ENABLED)                                                                                                                \
 	{                                                                                                                                      \
-		Kyty::printf(FG_CYAN "[%d][%s] %s::%s::%s()" DEFAULT "\n", Core::Thread::GetThreadIdUnique(),                                      \
-		             Loader::Timer::GetTime().ToString("HH24:MI:SS.FFF").C_Str(), g_library, g_module, __func__);                          \
+		if (Kyty::Log::GetDirection() != Kyty::Log::Direction::Silent)                                                                     \
+		{                                                                                                                                  \
+			Kyty::printf(FG_CYAN "[%d][%s] %s::%s::%s()" DEFAULT "\n", Core::Thread::GetThreadIdUnique(),                                  \
+			             Loader::Timer::GetTime().ToString("HH24:MI:SS.FFF").C_Str(), g_library, g_module, __func__);                      \
+		}                                                                                                                                  \
 	}
 
 namespace Kyty {

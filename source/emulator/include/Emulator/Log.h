@@ -68,8 +68,9 @@ enum class Direction
 	File
 };
 
-void SetDirection(Direction dir);
-void SetOutputFile(const String& file_name, Core::File::Encoding enc = Core::File::Encoding::Utf8);
+Direction GetDirection();
+void      SetDirection(Direction dir);
+void      SetOutputFile(const String& file_name, Core::File::Encoding enc = Core::File::Encoding::Utf8);
 
 bool   IsColoredPrintf();
 String RemoveColors(const String& str);

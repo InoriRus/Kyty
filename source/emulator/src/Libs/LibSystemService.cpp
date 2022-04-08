@@ -1,3 +1,4 @@
+#include "Kyty/Core/Common.h"
 #include "Kyty/Core/DbgAssert.h"
 #include "Kyty/Core/String.h"
 
@@ -79,6 +80,16 @@ namespace SystemService {
 [[maybe_unused]] constexpr int PARAM_ENTER_BUTTON_ASSIGN_CIRCLE = 0;
 [[maybe_unused]] constexpr int PARAM_ENTER_BUTTON_ASSIGN_CROSS  = 1;
 
+struct SystemServiceStatus
+{
+	int32_t event_num                     = 0;
+	bool    is_system_ui_overlaid         = false;
+	bool    is_in_background_execution    = false;
+	bool    is_cpu_mode_7cpu_normal       = true;
+	bool    is_game_live_streaming_on_air = false;
+	bool    is_out_of_vr_play_area        = false;
+};
+
 static int KYTY_SYSV_ABI SystemServiceHideSplashScreen()
 {
 	PRINT_NAME();
@@ -116,12 +127,27 @@ static int KYTY_SYSV_ABI SystemServiceParamGetInt(int param_id, int* value)
 	return OK;
 }
 
+static int KYTY_SYSV_ABI SystemServiceGetStatus(SystemServiceStatus* status)
+{
+	PRINT_NAME();
+
+	if (status == nullptr)
+	{
+		return SYSTEM_SERVICE_ERROR_PARAMETER;
+	}
+
+	*status = SystemServiceStatus();
+
+	return OK;
+}
+
 } // namespace SystemService
 
 LIB_DEFINE(InitSystemService_1)
 {
 	LIB_FUNC("Vo5V8KAwCmk", SystemService::SystemServiceHideSplashScreen);
 	LIB_FUNC("fZo48un7LK4", SystemService::SystemServiceParamGetInt);
+	LIB_FUNC("rPo6tV8D9bM", SystemService::SystemServiceGetStatus);
 }
 
 } // namespace Kyty::Libs

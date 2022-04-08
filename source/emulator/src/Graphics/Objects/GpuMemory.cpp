@@ -102,7 +102,7 @@ public:
 
 	static bool Enabled()
 	{
-		static const bool enabled = !Core::dbg_is_debugger_present();
+		static const bool enabled = false; // !Core::dbg_is_debugger_present();
 		return enabled;
 	}
 

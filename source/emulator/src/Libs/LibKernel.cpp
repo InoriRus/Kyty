@@ -122,6 +122,17 @@ static KYTY_SYSV_ABI void stack_chk_fail()
 	EXIT("stack fail!!!");
 }
 
+static KYTY_SYSV_ABI int sigprocmask(int /*how*/, const void* /*set*/, void* /*oset*/)
+{
+	// PRINT_NAME();
+
+	// printf("\t how = %d\n", how);
+	// printf("\t set = %016" PRIx64 "\n", reinterpret_cast<uint64_t>(set));
+	// printf("\t oset = %016" PRIx64 "\n", reinterpret_cast<uint64_t>(oset));
+
+	return 0;
+}
+
 static KYTY_SYSV_ABI KernelModule KernelLoadStartModule(const char* module_file_name, size_t args, const void* argp, uint32_t flags,
                                                         const KernelLoadModuleOpt* opt, int* res)
 {
@@ -511,6 +522,9 @@ LIB_DEFINE(InitLibKernel_1_Pthread)
 	LIB_FUNC("8+s5BzZjxSg", LibKernel::PthreadAttrGetaffinity);
 	LIB_FUNC("nsYoNRywwNg", LibKernel::PthreadAttrInit);
 	LIB_FUNC("JaRMy+QcpeU", LibKernel::PthreadAttrGetdetachstate);
+	LIB_FUNC("Ru36fiTtJzA", LibKernel::PthreadAttrGetstackaddr);
+	LIB_FUNC("-fA+7ZlGDQs", LibKernel::PthreadAttrGetstacksize);
+	LIB_FUNC("txHtngJ+eyc", LibKernel::PthreadAttrGetguardsize);
 	LIB_FUNC("UTXzJbWhhTE", LibKernel::PthreadAttrSetstacksize);
 	LIB_FUNC("-Wreprtu0Qs", LibKernel::PthreadAttrSetdetachstate);
 	LIB_FUNC("eXbUSpEaTsA", LibKernel::PthreadAttrSetinheritsched);
@@ -573,6 +587,7 @@ LIB_DEFINE(InitLibKernel_1)
 	LIB_FUNC("Xjoosiw+XPI", LibKernel::KernelUuidCreate);
 	LIB_FUNC("WslcK1FQcGI", LibKernel::KernelIsNeoMode);
 	LIB_FUNC("9BcDykPmo1I", LibKernel::get_error_addr);
+	LIB_FUNC("6xVpy0Fdq+I", LibKernel::sigprocmask);
 
 	LIB_FUNC("1jfXLRVzisc", LibKernel::KernelUsleep);
 	LIB_FUNC("rNhWz+lvOMU", LibKernel::KernelSetThreadDtors);

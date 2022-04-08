@@ -530,9 +530,9 @@ static void rt_check(const HW::RenderTarget& rt)
 		// EXIT_NOT_IMPLEMENTED(rt.dcc_max_uncompressed_block_size != 0x00000002);
 		EXIT_NOT_IMPLEMENTED(rt.dcc.max_compressed_block_size != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(rt.dcc.min_compressed_block_size != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(rt.dcc.color_transform != 0x00000000);
+		// EXIT_NOT_IMPLEMENTED(rt.dcc.color_transform != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(rt.dcc.enable_overwrite_combiner != false);
-		EXIT_NOT_IMPLEMENTED(rt.dcc.force_independent_blocks != false);
+		// EXIT_NOT_IMPLEMENTED(rt.dcc.force_independent_blocks != false);
 		EXIT_NOT_IMPLEMENTED(rt.cmask.addr != 0x0000000000000000);
 		EXIT_NOT_IMPLEMENTED(rt.cmask_slice.slice_minus1 != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(rt.fmask.addr != 0x0000000000000000);
@@ -733,7 +733,7 @@ static void mc_print(const char* func, const HW::ModeControl& c)
 
 static void mc_check(const HW::ModeControl& c)
 {
-	EXIT_NOT_IMPLEMENTED(c.cull_front != false);
+	// EXIT_NOT_IMPLEMENTED(c.cull_front != false);
 	// EXIT_NOT_IMPLEMENTED(c.cull_back != false);
 	EXIT_NOT_IMPLEMENTED(c.face != false);
 	EXIT_NOT_IMPLEMENTED(c.poly_mode != 0);
@@ -771,10 +771,10 @@ static void bc_check(const HW::BlendControl& c, const HW::BlendColor& color, con
 	// EXIT_NOT_IMPLEMENTED(c.color_srcblend != 0);
 	EXIT_NOT_IMPLEMENTED(c.color_comb_fcn != 0);
 	// EXIT_NOT_IMPLEMENTED(c.color_destblend != 0);
-	EXIT_NOT_IMPLEMENTED(c.alpha_srcblend != 0);
+	// EXIT_NOT_IMPLEMENTED(c.alpha_srcblend != 0);
 	EXIT_NOT_IMPLEMENTED(c.alpha_comb_fcn != 0);
-	EXIT_NOT_IMPLEMENTED(c.alpha_destblend != 0);
-	EXIT_NOT_IMPLEMENTED(c.separate_alpha_blend != false);
+	// EXIT_NOT_IMPLEMENTED(c.alpha_destblend != 0);
+	// EXIT_NOT_IMPLEMENTED(c.separate_alpha_blend != false);
 	// EXIT_NOT_IMPLEMENTED(c.enable != false);
 	EXIT_NOT_IMPLEMENTED(color.red != 0.0f);
 	EXIT_NOT_IMPLEMENTED(color.green != 0.0f);
@@ -2863,7 +2863,7 @@ VulkanDescriptorSet* DescriptorCache::GetDescriptor(Stage stage, VulkanBuffer** 
 		gds_buffer_info[i].range  = VK_WHOLE_SIZE;
 	}
 
-	int binding_num = 0;
+	uint32_t binding_num = 0;
 
 	constexpr uint32_t B_MAX = 5;
 
@@ -3321,6 +3321,23 @@ void GraphicsRenderRenderTextureBarrier(CommandBuffer* buffer, uint64_t vaddr, u
 	}
 }
 
+void GraphicsRenderDepthStencilBarrier(CommandBuffer* buffer, uint64_t vaddr, uint64_t size)
+{
+	EXIT_IF(buffer == nullptr);
+	EXIT_IF(buffer->IsInvalid());
+
+	Core::LockGuard lock(g_render_ctx->GetMutex());
+
+	auto* vk_buffer = buffer->GetPool()->buffers[buffer->GetIndex()];
+
+	auto images = FindDepthStencil(vaddr, size, false);
+
+	for (auto* image: images)
+	{
+		GraphicsRenderDepthStencilBarrier(vk_buffer, image);
+	}
+}
+
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 static void FindRenderDepthInfo(CommandBuffer* /*buffer*/, const HW::HardwareContext& hw, RenderDepthInfo* r)
 {
@@ -3500,6 +3517,8 @@ static void FindRenderColorInfo(CommandBuffer* buffer, const HW::HardwareContext
 	uint32_t format            = 0;
 	bool     render_to_texture = false;
 
+	auto video_image = VideoOut::VideoOutGetImage(rt.base.addr);
+
 	if (rt.attrib.tile_mode == 0x8)
 	{
 		tile = false;
@@ -3507,7 +3526,7 @@ static void FindRenderColorInfo(CommandBuffer* buffer, const HW::HardwareContext
 	{
 		tile = true;
 
-		if (rt.info.format == 0xa && rt.info.channel_type == 0x0 && rt.info.channel_order == 0x0 && rt.size.width == rt.size.height)
+		if (rt.info.format == 0xa && rt.info.channel_type == 0x0 && (rt.info.channel_order == 0x0 || rt.info.channel_order == 0x1))
 		{
 			render_to_texture = true;
 		}
@@ -3520,26 +3539,38 @@ static void FindRenderColorInfo(CommandBuffer* buffer, const HW::HardwareContext
 		EXIT("unknown tile mode: %u\n", rt.attrib.tile_mode);
 	}
 
+	if (render_to_texture && video_image.image != nullptr)
+	{
+		render_to_texture = false;
+	}
+
 	if (render_to_texture)
 	{
+		RenderTextureFormat rt_format = RenderTextureFormat::Unknown;
+
 		if (rt.info.format == 0xa && rt.info.channel_type == 0x0 && rt.info.channel_order == 0x0)
 		{
-			// Render to texture
-			RenderTextureObject vulkan_buffer_info(RenderTextureFormat::R8G8B8A8Unorm, width, height, tile, rt.info.neo_mode, pitch);
-			auto*               buffer_vulkan = static_cast<Graphics::RenderTextureVulkanImage*>(
-                Graphics::GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), buffer, rt.base.addr, size, vulkan_buffer_info));
-			EXIT_NOT_IMPLEMENTED(buffer_vulkan == nullptr);
-			r->type          = RenderColorType::RenderTexture;
-			r->base_addr     = rt.base.addr;
-			r->vulkan_buffer = buffer_vulkan;
-			r->buffer_size   = size;
+			rt_format = RenderTextureFormat::R8G8B8A8Unorm;
+		} else if (rt.info.format == 0xa && rt.info.channel_type == 0x0 && rt.info.channel_order == 0x1)
+		{
+			rt_format = RenderTextureFormat::B8G8R8A8Unorm;
 		} else
 		{
 			EXIT("unknown format");
 		}
+
+		// Render to texture
+		RenderTextureObject vulkan_buffer_info(rt_format, width, height, tile, rt.info.neo_mode, pitch);
+		auto*               buffer_vulkan = static_cast<Graphics::RenderTextureVulkanImage*>(
+            Graphics::GpuMemoryCreateObject(g_render_ctx->GetGraphicCtx(), buffer, rt.base.addr, size, vulkan_buffer_info));
+		EXIT_NOT_IMPLEMENTED(buffer_vulkan == nullptr);
+		r->type          = RenderColorType::RenderTexture;
+		r->base_addr     = rt.base.addr;
+		r->vulkan_buffer = buffer_vulkan;
+		r->buffer_size   = size;
 	} else
 	{
-		if (rt.info.format == 0xa && rt.info.channel_type == 0x6 && rt.info.channel_order == 0x1)
+		if (rt.info.format == 0xa && (rt.info.channel_type == 0x6 || rt.info.channel_type == 0x0) && rt.info.channel_order == 0x1)
 		{
 			format = 0x80000000;
 		} else
@@ -3547,7 +3578,6 @@ static void FindRenderColorInfo(CommandBuffer* buffer, const HW::HardwareContext
 			EXIT("unknown format");
 		}
 
-		auto video_image = VideoOut::VideoOutGetImage(rt.base.addr);
 		if (video_image.image == nullptr)
 		{
 			// Offscreen buffer
@@ -3679,7 +3709,7 @@ static void PrepareTextures(CommandBuffer* buffer, const ShaderTextureResources&
 
 		EXIT_NOT_IMPLEMENTED(r.Base() == 0);
 		EXIT_NOT_IMPLEMENTED(r.MinLod() != 0);
-		EXIT_NOT_IMPLEMENTED(r.Dfmt() != 10 && r.Dfmt() != 37 && r.Dfmt() != 4);
+		EXIT_NOT_IMPLEMENTED(r.Dfmt() != 1 && r.Dfmt() != 10 && r.Dfmt() != 37 && r.Dfmt() != 4);
 		EXIT_NOT_IMPLEMENTED(r.Nfmt() != 9 && r.Nfmt() != 0 && r.Nfmt() != 7);
 		// EXIT_NOT_IMPLEMENTED(r.Width() != 511);
 		// EXIT_NOT_IMPLEMENTED(r.Height() != 511);
@@ -3815,9 +3845,9 @@ static void PrepareSamplers(const ShaderSamplerResources& samplers, uint64_t* sa
 	{
 		auto r = samplers.samplers[i];
 
-		EXIT_NOT_IMPLEMENTED(r.ClampX() != 0);
-		EXIT_NOT_IMPLEMENTED(r.ClampY() != 0);
-		EXIT_NOT_IMPLEMENTED(r.ClampZ() != 0);
+		// EXIT_NOT_IMPLEMENTED(r.ClampX() != 0);
+		// EXIT_NOT_IMPLEMENTED(r.ClampY() != 0);
+		// EXIT_NOT_IMPLEMENTED(r.ClampZ() != 0);
 		// EXIT_NOT_IMPLEMENTED(r.MaxAnisoRatio() != 0);
 		EXIT_NOT_IMPLEMENTED(r.DepthCompareFunc() != 0);
 		EXIT_NOT_IMPLEMENTED(r.ForceUnormCoords() != false);
@@ -3832,7 +3862,7 @@ static void PrepareSamplers(const ShaderSamplerResources& samplers, uint64_t* sa
 		// EXIT_NOT_IMPLEMENTED(r.MaxLod() != 4095);
 		EXIT_NOT_IMPLEMENTED(r.PerfMip() != 0);
 		EXIT_NOT_IMPLEMENTED(r.PerfZ() != 0);
-		EXIT_NOT_IMPLEMENTED(r.LodBias() != 0);
+		// EXIT_NOT_IMPLEMENTED(r.LodBias() != 0);
 		EXIT_NOT_IMPLEMENTED(r.LodBiasSec() != 0);
 		// EXIT_NOT_IMPLEMENTED(r.XyMagFilter() != 1);
 		// EXIT_NOT_IMPLEMENTED(r.XyMinFilter() != 1);
@@ -4184,9 +4214,9 @@ void GraphicsRenderDrawIndexAuto(CommandBuffer* buffer, HW::HardwareContext* ctx
 
 	switch (ucfg->GetPrimType())
 	{
-		case 4: topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST; break;
-		case 17: topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP; break;
-		case 19: topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN; break;
+		case 4: topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST; break;   // kPrimitiveTypeTriList
+		case 17: topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP; break; // kPrimitiveTypeRectList
+		case 19: topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN; break;   // kPrimitiveTypeQuadList
 		default: EXIT("unknown primitive type: %u\n", ucfg->GetPrimType());
 	}
 
@@ -4239,8 +4269,11 @@ void GraphicsRenderDrawIndexAuto(CommandBuffer* buffer, HW::HardwareContext* ctx
 			vkCmdDraw(vk_buffer, 4, 1, 0, 0);
 			break;
 		case 19:
-			EXIT_NOT_IMPLEMENTED(index_count != 4);
-			vkCmdDraw(vk_buffer, 4, 1, 0, 0);
+			EXIT_NOT_IMPLEMENTED((index_count & 0x3u) != 0);
+			for (uint32_t i = 0; i < index_count; i += 4)
+			{
+				vkCmdDraw(vk_buffer, 4, 1, i, 0);
+			}
 			break;
 		default: EXIT("unknown primitive type: %u\n", ucfg->GetPrimType());
 	}

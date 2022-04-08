@@ -72,6 +72,7 @@ public:
 	void WriteBack();
 	void MemoryBarrier();
 	void RenderTextureBarrier(uint64_t vaddr, uint64_t size);
+	void DepthStencilBarrier(uint64_t vaddr, uint64_t size);
 	void DispatchDirect(uint32_t thread_group_x, uint32_t thread_group_y, uint32_t thread_group_z, uint32_t mode);
 	void WaitFlipDone(uint32_t video_out_handle, uint32_t display_buffer_index);
 	void TriggerEvent(uint32_t event_type, uint32_t event_index);
@@ -1115,6 +1116,15 @@ void CommandProcessor::RenderTextureBarrier(uint64_t vaddr, uint64_t size)
 	GraphicsRenderRenderTextureBarrier(m_buffer[m_current_buffer], vaddr, size);
 }
 
+void CommandProcessor::DepthStencilBarrier(uint64_t vaddr, uint64_t size)
+{
+	Core::LockGuard lock(m_mutex);
+
+	EXIT_IF(m_current_buffer < 0 || m_current_buffer >= VK_BUFFERS_NUM);
+
+	GraphicsRenderDepthStencilBarrier(m_buffer[m_current_buffer], vaddr, size);
+}
+
 void CommandProcessor::TriggerEvent(uint32_t event_type, uint32_t event_index)
 {
 	Core::LockGuard lock(m_mutex);
@@ -1902,6 +1912,17 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_vs_shader)
 	return 28;
 }
 
+KYTY_HW_CTX_PARSER(hw_ctx_update_vs_shader)
+{
+	EXIT_NOT_IMPLEMENTED(cmd_id != 0xc01b103c);
+
+	auto shader_modifier = buffer[0];
+
+	cp->GetCtx()->UpdateVsShader(reinterpret_cast<const HW::VsStageRegisters*>(buffer + 1), shader_modifier);
+
+	return 28;
+}
+
 KYTY_HW_CTX_PARSER(hw_ctx_set_vs_embedded)
 {
 	EXIT_NOT_IMPLEMENTED(cmd_id != 0xc01b1034);
@@ -1957,6 +1978,25 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_ps_shader)
 	r.m_cbShaderMask = buffer[11];
 
 	cp->GetCtx()->SetPsShader(&r);
+
+	return 39;
+}
+
+KYTY_HW_CTX_PARSER(hw_ctx_update_ps_shader)
+{
+	EXIT_NOT_IMPLEMENTED(cmd_id != 0xc0261040);
+
+	HW::PsStageRegisters r {};
+
+	r.data_addr       = (static_cast<uint64_t>(buffer[0]) << 8u) | (static_cast<uint64_t>(buffer[1]) << 40u);
+	r.vgprs           = (buffer[2] >> Pm4::SPI_SHADER_PGM_RSRC1_PS_VGPRS_SHIFT) & Pm4::SPI_SHADER_PGM_RSRC1_PS_VGPRS_MASK;
+	r.sgprs           = (buffer[2] >> Pm4::SPI_SHADER_PGM_RSRC1_PS_SGPRS_SHIFT) & Pm4::SPI_SHADER_PGM_RSRC1_PS_SGPRS_MASK;
+	r.scratch_en      = (buffer[3] >> Pm4::SPI_SHADER_PGM_RSRC2_PS_SCRATCH_EN_SHIFT) & Pm4::SPI_SHADER_PGM_RSRC2_PS_SCRATCH_EN_MASK;
+	r.user_sgpr       = (buffer[3] >> Pm4::SPI_SHADER_PGM_RSRC2_PS_USER_SGPR_SHIFT) & Pm4::SPI_SHADER_PGM_RSRC2_PS_USER_SGPR_MASK;
+	r.wave_cnt_en     = (buffer[3] >> Pm4::SPI_SHADER_PGM_RSRC2_PS_WAVE_CNT_EN_SHIFT) & Pm4::SPI_SHADER_PGM_RSRC2_PS_WAVE_CNT_EN_MASK;
+	r.shader_z_format = buffer[4];
+
+	cp->GetCtx()->UpdatePsShader(&r);
 
 	return 39;
 }
@@ -2500,7 +2540,12 @@ KYTY_CP_OP_PARSER(cp_op_acquire_mem)
 			// target_mask:     0x00004000 (Depth Target)
 			// extended_action: 0x04000000 (FlushAndInvalidateDbCache)
 			// action:          0x38 (WriteBackAndInvalidateL1andL2)
-			KYTY_NOT_IMPLEMENTED;
+			EXIT_IF(target_mask != 0x00004000);
+			EXIT_IF(extended_action != 0x04000000);
+			EXIT_IF(action != 0x38);
+
+			cp->DepthStencilBarrier(base_lo << 8u, size_lo << 8u);
+			cp->WriteBack();
 		}
 		break;
 		default:
@@ -2668,6 +2713,8 @@ KYTY_CP_OP_PARSER(cp_op_nop)
 		case Pm4::R_POP_MARKER: return cp_op_pop_marker(cp, cmd_id, buffer, dw, num_dw); break;
 		case Pm4::R_VS_EMBEDDED: return hw_ctx_set_vs_embedded(cp, cmd_id, 0, buffer, dw); break;
 		case Pm4::R_PS_EMBEDDED: return hw_ctx_set_ps_embedded(cp, cmd_id, 0, buffer, dw); break;
+		case Pm4::R_VS_UPDATE: return hw_ctx_update_vs_shader(cp, cmd_id, 0, buffer, dw); break;
+		case Pm4::R_PS_UPDATE: return hw_ctx_update_ps_shader(cp, cmd_id, 0, buffer, dw); break;
 		default: break;
 	}
 

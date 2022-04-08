@@ -534,6 +534,15 @@ public:
 		m_vs.vs_shader_modifier = shader_modifier;
 		m_vs.vs_embedded        = false;
 	}
+	void UpdateVsShader(const VsStageRegisters* vs_regs, uint32_t shader_modifier)
+	{
+		m_vs.vs_regs.m_spiShaderPgmLoVs    = vs_regs->m_spiShaderPgmLoVs;
+		m_vs.vs_regs.m_spiShaderPgmHiVs    = vs_regs->m_spiShaderPgmHiVs;
+		m_vs.vs_regs.m_spiShaderPgmRsrc1Vs = vs_regs->m_spiShaderPgmRsrc1Vs;
+		m_vs.vs_regs.m_spiShaderPgmRsrc2Vs = vs_regs->m_spiShaderPgmRsrc2Vs;
+		m_vs.vs_shader_modifier            = shader_modifier;
+		m_vs.vs_embedded                   = false;
+	}
 	void SetVsEmbedded(uint32_t id, uint32_t shader_modifier)
 	{
 		m_vs.vs_embedded_id     = id;
@@ -545,6 +554,17 @@ public:
 	{
 		m_ps.ps_regs     = *ps_regs;
 		m_ps.ps_embedded = false;
+	}
+	void UpdatePsShader(const PsStageRegisters* ps_regs)
+	{
+		m_ps.ps_regs.data_addr       = ps_regs->data_addr;
+		m_ps.ps_regs.vgprs           = ps_regs->vgprs;
+		m_ps.ps_regs.sgprs           = ps_regs->sgprs;
+		m_ps.ps_regs.scratch_en      = ps_regs->scratch_en;
+		m_ps.ps_regs.user_sgpr       = ps_regs->user_sgpr;
+		m_ps.ps_regs.wave_cnt_en     = ps_regs->wave_cnt_en;
+		m_ps.ps_regs.shader_z_format = ps_regs->shader_z_format;
+		m_ps.ps_embedded             = false;
 	}
 	void SetPsEmbedded(uint32_t id)
 	{
