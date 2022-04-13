@@ -18,7 +18,7 @@ static KYTY_SYSV_ABI int SysmoduleLoadModule(uint16_t id)
 {
 	PRINT_NAME();
 
-	printf("\tid = %d\n", static_cast<int>(id));
+	printf("\t id = %d\n", static_cast<int>(id));
 
 	return 0;
 }
@@ -27,7 +27,7 @@ static KYTY_SYSV_ABI int SysmoduleUnloadModule(uint16_t id)
 {
 	PRINT_NAME();
 
-	printf("\tid = %d\n", static_cast<int>(id));
+	printf("\t id = %d\n", static_cast<int>(id));
 
 	return 0;
 }
@@ -36,7 +36,7 @@ static KYTY_SYSV_ABI int SysmoduleLoadModuleInternalWithArg(uint16_t id, int arg
 {
 	PRINT_NAME();
 
-	printf("\tid = %d\n", static_cast<int>(id));
+	printf("\t id = %d\n", static_cast<int>(id));
 
 	EXIT_IF(arg1 != 0);
 	EXIT_IF(arg2 != 0);
@@ -48,6 +48,15 @@ static KYTY_SYSV_ABI int SysmoduleLoadModuleInternalWithArg(uint16_t id, int arg
 	return 0;
 }
 
+static KYTY_SYSV_ABI int SysmoduleIsLoaded(uint16_t id)
+{
+	PRINT_NAME();
+
+	printf("\t id = %d\n", static_cast<int>(id));
+
+	return 0;
+}
+
 } // namespace Sysmodule
 
 LIB_DEFINE(InitSysmodule_1)
@@ -55,6 +64,7 @@ LIB_DEFINE(InitSysmodule_1)
 	LIB_FUNC("eR2bZFAAU0Q", Sysmodule::SysmoduleUnloadModule);
 	LIB_FUNC("hHrGoGoNf+s", Sysmodule::SysmoduleLoadModuleInternalWithArg);
 	LIB_FUNC("g8cM39EUZ6o", Sysmodule::SysmoduleLoadModule);
+	LIB_FUNC("fMP5NHUOaMk", Sysmodule::SysmoduleIsLoaded);
 }
 
 } // namespace Kyty::Libs

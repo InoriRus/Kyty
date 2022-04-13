@@ -82,11 +82,13 @@ if (KYTY_LINKER STREQUAL LD)
 	set(KYTY_LD_OPTIONS "-Wl,--image-base=0x100000000000")
 endif()
 
-project(Kyty${KYTY_PROJECT_NAME}${CMAKE_BUILD_TYPE}${KYTY_COMPILER} VERSION 0.0.13)
+project(Kyty${KYTY_PROJECT_NAME}${CMAKE_BUILD_TYPE}${KYTY_COMPILER} VERSION 0.0.14)
 
 include(src_script.cmake)
 
 include_directories(	
+	3rdparty/gtest/include
+	3rdparty/gtest
 	3rdparty/lua/include
 	3rdparty/rijndael/source
 	3rdparty/miniz
@@ -121,15 +123,16 @@ if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 12.0.0)
 		#scripts_obj
 		#sys_obj
 		launcher
+		unit_test
 	)
 	list(APPEND KYTY_CLANG_TYDY 
 		emulator_obj
 		core_obj
-		#core
 		#math_obj
 		#scripts_obj
 		#sys_obj
 		launcher
+		unit_test
 	)
 endif()
 
@@ -139,6 +142,7 @@ config_compiler_and_linker()
   
 add_subdirectory(3rdparty)
 add_subdirectory(emulator)
+add_subdirectory(unit_test)
 if(NOT ${KYTY_PROJECT_NAME} MATCHES "Build_Tools")
 	add_subdirectory(launcher)
 endif()
@@ -146,6 +150,15 @@ add_subdirectory(lib)
 
 add_executable(fc_script ${KYTY_SCRIPT_SRC}) 
 
+if(MINGW)
+	SET(UNIT_TEST_LIB -Wl,--whole-archive unit_test -Wl,--no-whole-archive)
+endif()	
+
+if(MSVC)
+	SET(UNIT_TEST_LIB unit_test)
+endif()	
+
+target_link_libraries(fc_script ${UNIT_TEST_LIB})
 target_link_libraries(fc_script core)
 target_link_libraries(fc_script sys)
 target_link_libraries(fc_script math)
@@ -163,6 +176,7 @@ target_link_libraries(fc_script zstd)
 target_link_libraries(fc_script easy_profiler)
 target_link_libraries(fc_script ws2_32)
 target_link_libraries(fc_script psapi)
+target_link_libraries(fc_script cpuinfo)
 if (CLANG AND NOT MSVC)
 target_link_libraries(fc_script pthread)
 endif()

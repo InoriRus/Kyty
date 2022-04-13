@@ -6,7 +6,10 @@
 #include "Emulator/Jit.h"
 #include "Emulator/Profiler.h"
 
-#include <new>
+#include "cpuinfo.h"
+
+//#include <atomic>
+//#include <new>
 
 // NOLINTNEXTLINE
 //#define NTDDI_VERSION 0x0A000005
@@ -51,6 +54,12 @@ SystemInfo GetSystemInfo()
 	ret.NumberOfProcessors        = system_info.dwNumberOfProcessors;
 	ret.ProcessorLevel            = system_info.wProcessorLevel;
 	ret.ProcessorRevision         = system_info.wProcessorRevision;
+
+	const auto* p = cpuinfo_get_package(0);
+
+	EXIT_IF(p == nullptr);
+
+	ret.ProcessorName = String::FromUtf8(p->name);
 
 	return ret;
 }
@@ -278,6 +287,11 @@ static VirtualMemory::Mode get_protection_flag(DWORD mode)
 		case PAGE_EXECUTE_READWRITE: return VirtualMemory::Mode::ExecuteReadWrite;
 		default: return VirtualMemory::Mode::NoAccess;
 	}
+}
+
+void Init()
+{
+	cpuinfo_initialize();
 }
 
 uint64_t Alloc(uint64_t address, uint64_t size, Mode mode)

@@ -410,6 +410,13 @@ int KYTY_SYSV_ABI KernelIsNeoMode()
 	return (Config::IsNeo() ? 1 : 0);
 }
 
+int KYTY_SYSV_ABI clock_gettime(int clock_id, LibKernel::KernelTimespec* time)
+{
+	PRINT_NAME();
+
+	return POSIX_CALL(LibKernel::KernelClockGettime(clock_id, time));
+}
+
 } // namespace LibKernel
 
 namespace Posix {
@@ -423,9 +430,17 @@ int KYTY_SYSV_ABI clock_gettime(int clock_id, LibKernel::KernelTimespec* time)
 	return POSIX_CALL(LibKernel::KernelClockGettime(clock_id, time));
 }
 
+int KYTY_SYSV_ABI nanosleep(const LibKernel::KernelTimespec* rqtp, LibKernel::KernelTimespec* rmtp)
+{
+	PRINT_NAME();
+
+	return POSIX_CALL(LibKernel::KernelNanosleep(rqtp, rmtp));
+}
+
 LIB_DEFINE(InitLibKernel_1_Posix)
 {
 	LIB_FUNC("lLMT9vJAck0", clock_gettime);
+	LIB_FUNC("yS8U2TGCe1A", nanosleep);
 
 	LIB_FUNC("7H0iTOciTLo", Posix::pthread_mutex_lock);
 	LIB_FUNC("2Z+PpY6CaJg", Posix::pthread_mutex_unlock);
@@ -543,6 +558,7 @@ LIB_DEFINE(InitLibKernel_1_Pthread)
 	LIB_FUNC("WKAXJ4XBPQ4", LibKernel::PthreadCondWait);
 	LIB_FUNC("JGgj7Uvrl+A", LibKernel::PthreadCondBroadcast);
 	LIB_FUNC("BmMjYxmew1w", LibKernel::PthreadCondTimedwait);
+	LIB_FUNC("m5-2bsNfv7s", LibKernel::PthreadCondattrInit);
 
 	LIB_FUNC("QBi7HCK03hw", LibKernel::KernelClockGettime);
 	LIB_FUNC("ejekcaNQNq0", LibKernel::KernelGettimeofday);
@@ -588,6 +604,7 @@ LIB_DEFINE(InitLibKernel_1)
 	LIB_FUNC("WslcK1FQcGI", LibKernel::KernelIsNeoMode);
 	LIB_FUNC("9BcDykPmo1I", LibKernel::get_error_addr);
 	LIB_FUNC("6xVpy0Fdq+I", LibKernel::sigprocmask);
+	LIB_FUNC("lLMT9vJAck0", LibKernel::clock_gettime);
 
 	LIB_FUNC("1jfXLRVzisc", LibKernel::KernelUsleep);
 	LIB_FUNC("rNhWz+lvOMU", LibKernel::KernelSetThreadDtors);

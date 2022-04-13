@@ -74,6 +74,12 @@ int KYTY_SYSV_ABI  NpRegisterPlusEventCallback(void* callback, void* userdata);
 
 } // namespace NpManager
 
+namespace NpManagerForToolkit {
+
+int KYTY_SYSV_ABI NpRegisterStateCallbackForToolkit(void* callback, void* userdata);
+
+} // namespace NpManagerForToolkit
+
 namespace NpTrophy {
 
 int KYTY_SYSV_ABI NpTrophyCreateHandle(int* handle);

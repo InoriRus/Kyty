@@ -17,6 +17,29 @@ namespace Kyty::Libs::Network {
 class Network
 {
 public:
+	class Id
+	{
+	public:
+		explicit Id(int id): m_id(id - 1) {}
+		[[nodiscard]] int  ToInt() const { return m_id + 1; }
+		[[nodiscard]] bool IsValid() const { return m_id >= 0; }
+
+		friend class Network;
+
+	private:
+		Id() = default;
+		static Id Invalid() { return Id(); }
+		static Id Create(int net_id)
+		{
+			Id r;
+			r.m_id = net_id;
+			return r;
+		}
+		[[nodiscard]] int GetId() const { return m_id; }
+
+		int m_id = -1;
+	};
+
 	Network()          = default;
 	virtual ~Network() = default;
 
@@ -25,14 +48,14 @@ public:
 	int  PoolCreate(const char* name, int size);
 	bool PoolDestroy(int memid);
 
-	int  SslInit(uint64_t pool_size);
-	bool SslTerm(int ssl_ctx_id);
+	Id   SslInit(uint64_t pool_size);
+	bool SslTerm(Id ssl_ctx_id);
 
-	int  HttpInit(int memid, int ssl_ctx_id, uint64_t pool_size);
-	bool HttpTerm(int http_ctx_id);
-	int  HttpCreateTemplate(int http_ctx_id, const char* user_agent, int http_ver, bool is_auto_proxy_conf);
-	bool HttpDeleteTemplate(int tmpl_id);
-	bool HttpValid(int http_ctx_id);
+	Id   HttpInit(int memid, Id ssl_ctx_id, uint64_t pool_size);
+	bool HttpTerm(Id http_ctx_id);
+	Id   HttpCreateTemplate(Id http_ctx_id, const char* user_agent, int http_ver, bool is_auto_proxy_conf);
+	bool HttpDeleteTemplate(Id tmpl_id);
+	bool HttpValid(Id http_ctx_id);
 
 private:
 	struct Pool
@@ -122,7 +145,7 @@ bool Network::PoolDestroy(int memid)
 	return false;
 }
 
-int Network::SslInit(uint64_t pool_size)
+Network::Id Network::SslInit(uint64_t pool_size)
 {
 	Core::LockGuard lock(m_mutex);
 
@@ -133,20 +156,20 @@ int Network::SslInit(uint64_t pool_size)
 			m_ssl[id].used = true;
 			m_ssl[id].size = pool_size;
 
-			return id;
+			return Id::Create(id);
 		}
 	}
 
-	return -1;
+	return Id::Invalid();
 }
 
-bool Network::SslTerm(int ssl_ctx_id)
+bool Network::SslTerm(Id ssl_ctx_id)
 {
 	Core::LockGuard lock(m_mutex);
 
-	if (ssl_ctx_id >= 0 && ssl_ctx_id < SSL_MAX && m_ssl[ssl_ctx_id].used)
+	if (ssl_ctx_id.GetId() >= 0 && ssl_ctx_id.GetId() < SSL_MAX && m_ssl[ssl_ctx_id.GetId()].used)
 	{
-		m_ssl[ssl_ctx_id].used = false;
+		m_ssl[ssl_ctx_id.GetId()].used = false;
 
 		return true;
 	}
@@ -154,11 +177,12 @@ bool Network::SslTerm(int ssl_ctx_id)
 	return false;
 }
 
-int Network::HttpInit(int memid, int ssl_ctx_id, uint64_t pool_size)
+Network::Id Network::HttpInit(int memid, Id ssl_ctx_id, uint64_t pool_size)
 {
 	Core::LockGuard lock(m_mutex);
 
-	if (ssl_ctx_id >= 0 && ssl_ctx_id < SSL_MAX && m_ssl[ssl_ctx_id].used && memid >= 0 && memid < POOLS_MAX && m_pools[memid].used)
+	if (ssl_ctx_id.GetId() >= 0 && ssl_ctx_id.GetId() < SSL_MAX && m_ssl[ssl_ctx_id.GetId()].used && memid >= 0 && memid < POOLS_MAX &&
+	    m_pools[memid].used)
 	{
 		for (int id = 0; id < HTTP_MAX; id++)
 		{
@@ -166,31 +190,31 @@ int Network::HttpInit(int memid, int ssl_ctx_id, uint64_t pool_size)
 			{
 				m_http[id].used       = true;
 				m_http[id].size       = pool_size;
-				m_http[id].ssl_ctx_id = ssl_ctx_id;
+				m_http[id].ssl_ctx_id = ssl_ctx_id.GetId();
 				m_http[id].memid      = memid;
 
-				return id;
+				return Id::Create(id);
 			}
 		}
 	}
 
-	return -1;
+	return Id::Invalid();
 }
 
-bool Network::HttpValid(int http_ctx_id)
+bool Network::HttpValid(Id http_ctx_id)
 {
 	Core::LockGuard lock(m_mutex);
 
-	return (http_ctx_id >= 0 && http_ctx_id < HTTP_MAX && m_http[http_ctx_id].used);
+	return (http_ctx_id.GetId() >= 0 && http_ctx_id.GetId() < HTTP_MAX && m_http[http_ctx_id.GetId()].used);
 }
 
-bool Network::HttpTerm(int http_ctx_id)
+bool Network::HttpTerm(Id http_ctx_id)
 {
 	Core::LockGuard lock(m_mutex);
 
 	if (HttpValid(http_ctx_id))
 	{
-		m_http[http_ctx_id].used = false;
+		m_http[http_ctx_id.GetId()].used = false;
 
 		return true;
 	}
@@ -198,18 +222,18 @@ bool Network::HttpTerm(int http_ctx_id)
 	return false;
 }
 
-int Network::HttpCreateTemplate(int http_ctx_id, const char* user_agent, int http_ver, bool is_auto_proxy_conf)
+Network::Id Network::HttpCreateTemplate(Id http_ctx_id, const char* user_agent, int http_ver, bool is_auto_proxy_conf)
 {
 	Core::LockGuard lock(m_mutex);
 
-	if (http_ctx_id >= 0 && http_ctx_id < HTTP_MAX && m_http[http_ctx_id].used)
+	if (http_ctx_id.GetId() >= 0 && http_ctx_id.GetId() < HTTP_MAX && m_http[http_ctx_id.GetId()].used)
 	{
 		HttpTemplate tn {};
 		tn.used               = true;
 		tn.http_ver           = http_ver;
 		tn.user_agent         = String::FromUtf8(user_agent);
 		tn.is_auto_proxy_conf = is_auto_proxy_conf;
-		tn.http_ctx_id        = http_ctx_id;
+		tn.http_ctx_id        = http_ctx_id.GetId();
 
 		int index = 0;
 		for (auto& t: m_templates)
@@ -217,26 +241,26 @@ int Network::HttpCreateTemplate(int http_ctx_id, const char* user_agent, int htt
 			if (!t.used)
 			{
 				t = tn;
-				return index;
+				return Id::Create(index);
 			}
 			index++;
 		}
 
 		m_templates.Add(tn);
 
-		return index;
+		return Id::Create(index);
 	}
 
-	return -1;
+	return Id::Invalid();
 }
 
-bool Network::HttpDeleteTemplate(int tmpl_id)
+bool Network::HttpDeleteTemplate(Id tmpl_id)
 {
 	Core::LockGuard lock(m_mutex);
 
-	if (m_templates.IndexValid(tmpl_id) && m_templates.At(tmpl_id).used)
+	if (m_templates.IndexValid(tmpl_id.GetId()) && m_templates.At(tmpl_id.GetId()).used)
 	{
-		m_templates[tmpl_id].used = false;
+		m_templates[tmpl_id.GetId()].used = false;
 
 		return true;
 	}
@@ -364,14 +388,14 @@ int KYTY_SYSV_ABI SslInit(uint64_t pool_size)
 
 	EXIT_NOT_IMPLEMENTED(pool_size == 0);
 
-	int id = g_net->SslInit(pool_size);
+	auto id = g_net->SslInit(pool_size);
 
-	if (id < 0)
+	if (!id.IsValid())
 	{
 		return SSL_ERROR_OUT_OF_SIZE;
 	}
 
-	return id + 1;
+	return id.ToInt();
 }
 
 int KYTY_SYSV_ABI SslTerm(int ssl_ctx_id)
@@ -380,7 +404,7 @@ int KYTY_SYSV_ABI SslTerm(int ssl_ctx_id)
 
 	EXIT_IF(g_net == nullptr);
 
-	if (!g_net->SslTerm(ssl_ctx_id - 1))
+	if (!g_net->SslTerm(Network::Id(ssl_ctx_id)))
 	{
 		return SSL_ERROR_INVALID_ID;
 	}
@@ -406,14 +430,14 @@ int KYTY_SYSV_ABI HttpInit(int memid, int ssl_ctx_id, uint64_t pool_size)
 
 	EXIT_NOT_IMPLEMENTED(pool_size == 0);
 
-	int id = g_net->HttpInit(memid, ssl_ctx_id - 1, pool_size);
+	auto id = g_net->HttpInit(memid, Network::Id(ssl_ctx_id), pool_size);
 
-	if (id < 0)
+	if (!id.IsValid())
 	{
 		return HTTP_ERROR_OUT_OF_MEMORY;
 	}
 
-	return id + 1;
+	return id.ToInt();
 }
 
 int KYTY_SYSV_ABI HttpTerm(int http_ctx_id)
@@ -422,7 +446,7 @@ int KYTY_SYSV_ABI HttpTerm(int http_ctx_id)
 
 	EXIT_IF(g_net == nullptr);
 
-	if (!g_net->HttpTerm(http_ctx_id - 1))
+	if (!g_net->HttpTerm(Network::Id(http_ctx_id)))
 	{
 		return HTTP_ERROR_INVALID_ID;
 	}
@@ -441,14 +465,14 @@ int KYTY_SYSV_ABI HttpCreateTemplate(int http_ctx_id, const char* user_agent, in
 
 	EXIT_IF(g_net == nullptr);
 
-	int id = g_net->HttpCreateTemplate(http_ctx_id, user_agent, http_ver, is_auto_proxy_conf != 0);
+	auto id = g_net->HttpCreateTemplate(Network::Id(http_ctx_id), user_agent, http_ver, is_auto_proxy_conf != 0);
 
-	if (id < 0)
+	if (!id.IsValid())
 	{
 		return HTTP_ERROR_OUT_OF_MEMORY;
 	}
 
-	return id + 1;
+	return id.ToInt();
 }
 
 int KYTY_SYSV_ABI HttpDeleteTemplate(int tmpl_id)
@@ -457,7 +481,7 @@ int KYTY_SYSV_ABI HttpDeleteTemplate(int tmpl_id)
 
 	EXIT_IF(g_net == nullptr);
 
-	if (!g_net->HttpDeleteTemplate(tmpl_id - 1))
+	if (!g_net->HttpDeleteTemplate(Network::Id(tmpl_id)))
 	{
 		return HTTP_ERROR_INVALID_ID;
 	}
@@ -689,6 +713,19 @@ int KYTY_SYSV_ABI NpRegisterPlusEventCallback(void* /*callback*/, void* /*userda
 
 } // namespace NpManager
 
+namespace NpManagerForToolkit {
+
+LIB_NAME("NpManagerForToolkit", "NpManager");
+
+int KYTY_SYSV_ABI NpRegisterStateCallbackForToolkit(void* /*callback*/, void* /*userdata*/)
+{
+	PRINT_NAME();
+
+	return OK;
+}
+
+} // namespace NpManagerForToolkit
+
 namespace NpTrophy {
 
 LIB_NAME("NpTrophy", "NpTrophy");
@@ -719,7 +756,7 @@ int KYTY_SYSV_ABI NpWebApiInitialize(int http_ctx_id, size_t pool_size)
 	printf("\t http_ctx_id = %d\n", http_ctx_id);
 	printf("\t pool_size   = %" PRIu64 "\n", pool_size);
 
-	EXIT_NOT_IMPLEMENTED(!g_net->HttpValid(http_ctx_id - 1));
+	EXIT_NOT_IMPLEMENTED(!g_net->HttpValid(Network::Id(http_ctx_id)));
 
 	static int id = 0;
 

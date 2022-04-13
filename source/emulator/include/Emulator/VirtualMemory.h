@@ -2,6 +2,7 @@
 #define EMULATOR_INCLUDE_EMULATOR_VIRTUALMEMORY_H_
 
 #include "Kyty/Core/Common.h"
+#include "Kyty/Core/String.h"
 
 #include "Emulator/Common.h"
 
@@ -26,6 +27,7 @@ struct SystemInfo
 	uint32_t              AllocationGranularity;
 	uint16_t              ProcessorLevel;
 	uint16_t              ProcessorRevision;
+	String                ProcessorName;
 };
 
 SystemInfo GetSystemInfo();
@@ -93,6 +95,8 @@ inline bool IsExecute(Mode mode)
 {
 	return (mode == Mode::Execute || mode == Mode::ExecuteRead || mode == Mode::ExecuteWrite || mode == Mode::ExecuteReadWrite);
 }
+
+void Init();
 
 uint64_t Alloc(uint64_t address, uint64_t size, Mode mode);
 uint64_t AllocAligned(uint64_t address, uint64_t size, Mode mode, uint64_t alignment);

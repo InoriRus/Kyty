@@ -14,6 +14,11 @@ LIB_VERSION("UserService", 1, "UserService", 1, 1);
 
 namespace UserService {
 
+struct UserServiceLoginUserIdList
+{
+	int user_id[4];
+};
+
 static KYTY_SYSV_ABI int UserServiceInitialize(const void* /*params*/)
 {
 	PRINT_NAME();
@@ -41,6 +46,20 @@ static KYTY_SYSV_ABI int UserServiceGetEvent(void* event)
 	return USER_SERVICE_ERROR_NO_EVENT;
 }
 
+static KYTY_SYSV_ABI int UserServiceGetLoginUserIdList(UserServiceLoginUserIdList* user_id_list)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(user_id_list == nullptr);
+
+	user_id_list->user_id[0] = 1;
+	user_id_list->user_id[1] = -1;
+	user_id_list->user_id[2] = -1;
+	user_id_list->user_id[3] = -1;
+
+	return OK;
+}
+
 } // namespace UserService
 
 LIB_DEFINE(InitUserService_1)
@@ -48,6 +67,7 @@ LIB_DEFINE(InitUserService_1)
 	LIB_FUNC("j3YMu1MVNNo", UserService::UserServiceInitialize);
 	LIB_FUNC("CdWp0oHWGr0", UserService::UserServiceGetInitialUser);
 	LIB_FUNC("yH17Q6NWtVg", UserService::UserServiceGetEvent);
+	LIB_FUNC("fPhymKNvK-A", UserService::UserServiceGetLoginUserIdList);
 }
 
 } // namespace Kyty::Libs

@@ -9,7 +9,7 @@ CheckOptions:
   - key: cppcoreguidelines-pro-type-member-init.IgnoreArrays
     value: 1
   - key: cppcoreguidelines-macro-usage.AllowedRegexp
-    value: (KYTY_*)|(EXIT*)|(ASSERT*)
+    value: (KYTY_*)|(EXIT*)|(ASSERT*)|(UT_*)
   - key: readability-identifier-naming.ClassCase
     value: CamelCase
   - key: readability-identifier-naming.MemberCase

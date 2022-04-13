@@ -12,13 +12,15 @@ namespace Kyty::Libs {
 struct VaContext;
 struct VaList;
 
-using libc_print_func_t   = KYTY_FORMAT_PRINTF(1, 2) KYTY_SYSV_ABI int (*)(const char* str, ...);
-using libc_print_v_func_t = int (*)(VaContext* c);
-using libc_vprint_func_t  = int (*)(const char* str, VaList* c);
+using libc_printf_std_func_t   = KYTY_FORMAT_PRINTF(1, 2) KYTY_SYSV_ABI int (*)(const char* str, ...);
+using libc_printf_ctx_func_t   = int (*)(VaContext* c);
+using libc_snprintf_ctx_func_t = int (*)(VaContext* c);
+using libc_vprintf_func_t      = int (*)(const char* str, VaList* c);
 
-libc_print_func_t   GetPrintFunc();
-libc_print_v_func_t GetPrintFuncV();
-libc_vprint_func_t  GetVPrintFunc();
+libc_printf_std_func_t   GetPrintfStdFunc();
+libc_printf_ctx_func_t   GetPrintfCtxFunc();
+libc_snprintf_ctx_func_t GetSnrintfCtxFunc();
+libc_vprintf_func_t      GetVprintfFunc();
 
 } // namespace Kyty::Libs
 

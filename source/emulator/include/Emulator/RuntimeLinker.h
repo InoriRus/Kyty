@@ -135,6 +135,7 @@ public:
 
 	Program* LoadProgram(const String& elf_name);
 	void     SaveMainProgram(const String& elf_name);
+	void     SaveProgram(Program* program, const String& elf_name);
 	void     UnloadProgram(Program* program);
 
 	[[nodiscard]] uint64_t GetEntry();

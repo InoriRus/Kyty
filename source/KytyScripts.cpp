@@ -11,6 +11,7 @@
 #include "Kyty/Scripts/Scripts.h"
 #include "Kyty/Sys/SysDbg.h"
 #include "Kyty/Sys/SysSync.h"
+#include "Kyty/UnitTest.h"
 
 #include "Emulator/Emulator.h"
 
@@ -22,6 +23,7 @@ using namespace Math;
 using namespace Scripts;
 using namespace Emulator;
 using namespace BuildTools;
+using namespace UnitTest;
 
 #if KYTY_PLATFORM == KYTY_PLATFORM_ANDROID
 #error "can't compile for android"
@@ -100,8 +102,9 @@ int main(int argc, char* argv[])
 
 	slist.SetArgs(argc, argv);
 
-	auto Scripts = ScriptsSubsystem::Instance();
-	auto Core    = CoreSubsystem::Instance();
+	auto Scripts  = ScriptsSubsystem::Instance();
+	auto Core     = CoreSubsystem::Instance();
+	auto UnitTest = UnitTestSubsystem::Instance();
 #if KYTY_PROJECT != KYTY_PROJECT_BUILD_TOOLS
 	auto Math     = MathSubsystem::Instance();
 	auto SDL      = SDLSubsystem::Instance();
@@ -119,6 +122,7 @@ int main(int argc, char* argv[])
 	slist.Add(Emulator, {Core, Scripts});
 #endif
 	slist.Add(BuildTools, {Core, Scripts});
+	slist.Add(UnitTest, {Core});
 
 	if (!slist.InitAll(false))
 	{

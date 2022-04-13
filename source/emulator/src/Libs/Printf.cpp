@@ -506,7 +506,7 @@ static inline unsigned int _strnlen_s(const char* str, size_t maxsize)
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-int my_vprint(const char* format, VaList* va_list)
+static int kyty_printf_internal(bool sn, char* sn_s, size_t sn_n, const char* format, VaList* va_list)
 {
 	Vector<char> buffer;
 
@@ -854,40 +854,64 @@ int my_vprint(const char* format, VaList* va_list)
 	// termination
 	out(static_cast<char>(0), &buffer, idx < maxlen ? idx : maxlen - 1U, maxlen);
 
-	printf(FG_BRIGHT_MAGENTA "%s" DEFAULT, buffer.GetDataConst());
+	if (sn)
+	{
+		snprintf(sn_s, sn_n, "%s", buffer.GetDataConst());
+	} else
+	{
+		printf(FG_BRIGHT_MAGENTA "%s" DEFAULT, buffer.GetDataConst());
+	}
 
 	// return written chars without terminating \0
 	return static_cast<int>(idx);
 }
 
-int my_print_v(VaContext* ctx)
+static int kyty_vprintf(const char* format, VaList* va_list)
+{
+	return kyty_printf_internal(false, nullptr, 0, format, va_list);
+}
+
+static int kyty_printf_ctx(VaContext* ctx)
 {
 	const char* format = VaArg_ptr<const char>(&ctx->va_list);
 
-	return my_vprint(format, &ctx->va_list);
+	return kyty_printf_internal(false, nullptr, 0, format, &ctx->va_list);
 }
 
-int KYTY_SYSV_ABI my_print2(VA_ARGS)
+static int kyty_snprintf_ctx(VaContext* ctx)
 {
-	// NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init,hicpp-member-init)
-	VA_CONTEXT(ctx);
+	char*       s      = VaArg_ptr<char>(&ctx->va_list);
+	size_t      n      = VaArg_size_t(&ctx->va_list);
+	const char* format = VaArg_ptr<const char>(&ctx->va_list);
 
-	return my_print_v(&ctx);
+	return kyty_printf_internal(true, s, n, format, &ctx->va_list);
 }
 
-libc_print_func_t GetPrintFunc()
+static int KYTY_SYSV_ABI kyty_printf_std(VA_ARGS)
 {
-	return reinterpret_cast<libc_print_func_t>(my_print2);
+	VA_CONTEXT(ctx); // NOLINT(cppcoreguidelines-pro-type-member-init,hicpp-member-init)
+
+	return kyty_printf_ctx(&ctx);
 }
 
-libc_print_v_func_t GetPrintFuncV()
+libc_printf_std_func_t GetPrintfStdFunc()
 {
-	return my_print_v;
+	return reinterpret_cast<libc_printf_std_func_t>(kyty_printf_std);
 }
 
-libc_vprint_func_t GetVPrintFunc()
+libc_printf_ctx_func_t GetPrintfCtxFunc()
 {
-	return my_vprint;
+	return kyty_printf_ctx;
+}
+
+libc_snprintf_ctx_func_t GetSnrintfCtxFunc()
+{
+	return kyty_snprintf_ctx;
+}
+
+libc_vprintf_func_t GetVprintfFunc()
+{
+	return kyty_vprintf;
 }
 
 } // namespace Kyty::Libs

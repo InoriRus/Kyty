@@ -2310,6 +2310,7 @@ int KYTY_SYSV_ABI KernelClockGettime(KernelClockid clock_id, KernelTimespec* tp)
 	switch (clock_id)
 	{
 		case 0: pclock_id = CLOCK_REALTIME; break;
+		case 13:
 		case 4: pclock_id = CLOCK_MONOTONIC; break;
 		default: EXIT("unknown clock_id: %d", clock_id);
 	}
@@ -2419,7 +2420,7 @@ int KYTY_SYSV_ABI KernelNanosleep(const KernelTimespec* rqtp, KernelTimespec* rm
 {
 	PRINT_NAME();
 
-	if (rqtp == nullptr || rmtp == nullptr)
+	if (rqtp == nullptr)
 	{
 		return KERNEL_ERROR_EFAULT;
 	}
@@ -2438,7 +2439,11 @@ int KYTY_SYSV_ABI KernelNanosleep(const KernelTimespec* rqtp, KernelTimespec* rm
 	Core::Thread::SleepNano(nanos);
 	double ts = t.GetTimeS();
 	printf("\tactual: %g nanoseconds\n", ts * 1000000000.0);
-	sec_to_timespec(rmtp, ts);
+
+	if (rmtp != nullptr)
+	{
+		sec_to_timespec(rmtp, ts);
+	}
 
 	return OK;
 }
@@ -2546,14 +2551,14 @@ int KYTY_SYSV_ABI pthread_cond_wait(LibKernel::PthreadCond* cond, LibKernel::Pth
 
 int KYTY_SYSV_ABI pthread_mutex_lock(LibKernel::PthreadMutex* mutex)
 {
-	PRINT_NAME();
+	// PRINT_NAME();
 
 	return POSIX_PTHREAD_CALL(LibKernel::PthreadMutexLock(mutex));
 }
 
 int KYTY_SYSV_ABI pthread_mutex_unlock(LibKernel::PthreadMutex* mutex)
 {
-	PRINT_NAME();
+	// PRINT_NAME();
 
 	return POSIX_PTHREAD_CALL(LibKernel::PthreadMutexUnlock(mutex));
 }

@@ -16,6 +16,7 @@
 #include "Emulator/Graphics/Utils.h"
 #include "Emulator/Graphics/VideoOut.h"
 #include "Emulator/Profiler.h"
+#include "Emulator/VirtualMemory.h"
 
 #include "SDL.h"
 #include "SDL_error.h"
@@ -230,6 +231,7 @@ struct WindowContext
 	GameApi*             game                 = nullptr;
 
 	char device_name[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE] = {0};
+	char processor_name[64]                            = {0};
 
 	Core::Mutex   mutex;
 	bool          graphic_initialized = false;
@@ -2016,6 +2018,7 @@ static void VulkanCreate(WindowContext* ctx)
 	printf("Select device: %s\n", device_properties.deviceName);
 
 	memcpy(ctx->device_name, device_properties.deviceName, sizeof(ctx->device_name));
+	memcpy(ctx->processor_name, Loader::GetSystemInfo().ProcessorName.C_Str(), sizeof(ctx->processor_name));
 
 	ctx->graphic_ctx.device =
 	    VulkanCreateDevice(ctx->graphic_ctx.physical_device, ctx->surface, &r, VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT,
@@ -2109,8 +2112,8 @@ void WindowShowFps()
 	EXIT_IF(g_window_ctx == nullptr);
 	EXIT_IF(g_window_ctx->game == nullptr);
 
-	auto fps = String::FromPrintf("[%s], frame: %d, fps: %f", g_window_ctx->device_name, g_window_ctx->game->m_frame_num,
-	                              g_window_ctx->game->m_current_fps);
+	auto fps = String::FromPrintf("[%s] [%s], frame: %d, fps: %f", g_window_ctx->device_name, g_window_ctx->processor_name,
+	                              g_window_ctx->game->m_frame_num, g_window_ctx->game->m_current_fps);
 
 	SDL_SetWindowTitle(g_window_ctx->window, fps.C_Str());
 }

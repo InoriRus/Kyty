@@ -14,7 +14,7 @@ constexpr int OK = 0;
 		auto result = func;                                                                                                                \
 		if (result != OK)                                                                                                                  \
 		{                                                                                                                                  \
-			*GetErrorAddr() = LibKernel::KernelToPosix(result);                                                                            \
+			*Posix::GetErrorAddr() = LibKernel::KernelToPosix(result);                                                                     \
 			return -1;                                                                                                                     \
 		}                                                                                                                                  \
 		return 0;                                                                                                                          \
@@ -39,7 +39,7 @@ constexpr int OK = 0;
 		auto result = func;                                                                                                                \
 		if (result != OK)                                                                                                                  \
 		{                                                                                                                                  \
-			*GetErrorAddr() = Network::NetToPosix(result);                                                                                 \
+			*Posix::GetErrorAddr() = Network::NetToPosix(result);                                                                          \
 			return -1;                                                                                                                     \
 		}                                                                                                                                  \
 		return 0;                                                                                                                          \
@@ -322,6 +322,32 @@ constexpr int VIDEO_OUT_ERROR_ENOMEM                           = -2144792564; /*
 
 } // namespace VideoOut
 
+namespace Audio {
+
+constexpr int AUDIO_OUT_ERROR_NOT_OPENED          = -2144993279; /* 0x80260001 */
+constexpr int AUDIO_OUT_ERROR_BUSY                = -2144993278; /* 0x80260002 */
+constexpr int AUDIO_OUT_ERROR_INVALID_PORT        = -2144993277; /* 0x80260003 */
+constexpr int AUDIO_OUT_ERROR_INVALID_POINTER     = -2144993276; /* 0x80260004 */
+constexpr int AUDIO_OUT_ERROR_PORT_FULL           = -2144993275; /* 0x80260005 */
+constexpr int AUDIO_OUT_ERROR_INVALID_SIZE        = -2144993274; /* 0x80260006 */
+constexpr int AUDIO_OUT_ERROR_INVALID_FORMAT      = -2144993273; /* 0x80260007 */
+constexpr int AUDIO_OUT_ERROR_INVALID_SAMPLE_FREQ = -2144993272; /* 0x80260008 */
+constexpr int AUDIO_OUT_ERROR_INVALID_VOLUME      = -2144993271; /* 0x80260009 */
+constexpr int AUDIO_OUT_ERROR_INVALID_PORT_TYPE   = -2144993270; /* 0x8026000A */
+constexpr int AUDIO_OUT_ERROR_INVALID_CONF_TYPE   = -2144993268; /* 0x8026000C */
+constexpr int AUDIO_OUT_ERROR_OUT_OF_MEMORY       = -2144993267; /* 0x8026000D */
+constexpr int AUDIO_OUT_ERROR_ALREADY_INIT        = -2144993266; /* 0x8026000E */
+constexpr int AUDIO_OUT_ERROR_NOT_INIT            = -2144993265; /* 0x8026000F */
+constexpr int AUDIO_OUT_ERROR_MEMORY              = -2144993264; /* 0x80260010 */
+constexpr int AUDIO_OUT_ERROR_SYSTEM_RESOURCE     = -2144993263; /* 0x80260011 */
+constexpr int AUDIO_OUT_ERROR_TRANS_EVENT         = -2144993262; /* 0x80260012 */
+constexpr int AUDIO_OUT_ERROR_INVALID_FLAG        = -2144993261; /* 0x80260013 */
+constexpr int AUDIO_OUT_ERROR_INVALID_MIXLEVEL    = -2144993260; /* 0x80260014 */
+constexpr int AUDIO_OUT_ERROR_INVALID_ARG         = -2144993259; /* 0x80260015 */
+constexpr int AUDIO_OUT_ERROR_INVALID_PARAM       = -2144993258; /* 0x80260016 */
+
+} // namespace Audio
+
 namespace SystemService {
 
 constexpr int SYSTEM_SERVICE_ERROR_INTERNAL                        = -2136932351; /* 0x80A10001 */
@@ -587,6 +613,34 @@ constexpr int USER_SERVICE_ERROR_NOT_LOGGED_IN           = -2137653239; /* 0x809
 constexpr int USER_SERVICE_ERROR_BUFFER_TOO_SHORT        = -2137653238; /* 0x8096000A */
 
 } // namespace UserService
+
+namespace SaveData {
+
+constexpr int SAVE_DATA_ERROR_PARAMETER                            = -2137063424; /* 0x809F0000 */
+constexpr int SAVE_DATA_ERROR_NOT_INITIALIZED                      = -2137063423; /* 0x809F0001 */
+constexpr int SAVE_DATA_ERROR_OUT_OF_MEMORY                        = -2137063422; /* 0x809F0002 */
+constexpr int SAVE_DATA_ERROR_BUSY                                 = -2137063421; /* 0x809F0003 */
+constexpr int SAVE_DATA_ERROR_NOT_MOUNTED                          = -2137063420; /* 0x809F0004 */
+constexpr int SAVE_DATA_ERROR_NO_PERMISSION                        = -2137063419; /* 0x809F0005 */
+constexpr int SAVE_DATA_ERROR_FINGERPRINT_MISMATCH                 = -2137063418; /* 0x809F0006 */
+constexpr int SAVE_DATA_ERROR_EXISTS                               = -2137063417; /* 0x809F0007 */
+constexpr int SAVE_DATA_ERROR_NOT_FOUND                            = -2137063416; /* 0x809F0008 */
+constexpr int SAVE_DATA_ERROR_NO_SPACE_FS                          = -2137063414; /* 0x809F000A */
+constexpr int SAVE_DATA_ERROR_INTERNAL                             = -2137063413; /* 0x809F000B */
+constexpr int SAVE_DATA_ERROR_MOUNT_FULL                           = -2137063412; /* 0x809F000C */
+constexpr int SAVE_DATA_ERROR_BAD_MOUNTED                          = -2137063411; /* 0x809F000D */
+constexpr int SAVE_DATA_ERROR_FILE_NOT_FOUND                       = -2137063410; /* 0x809F000E */
+constexpr int SAVE_DATA_ERROR_BROKEN                               = -2137063409; /* 0x809F000F */
+constexpr int SAVE_DATA_ERROR_INVALID_LOGIN_USER                   = -2137063407; /* 0x809F0011 */
+constexpr int SAVE_DATA_ERROR_MEMORY_NOT_READY                     = -2137063406; /* 0x809F0012 */
+constexpr int SAVE_DATA_ERROR_BACKUP_BUSY                          = -2137063405; /* 0x809F0013 */
+constexpr int SAVE_DATA_ERROR_NOT_REGIST_CALLBACK                  = -2137063403; /* 0x809F0015 */
+constexpr int SAVE_DATA_ERROR_BUSY_FOR_SAVING                      = -2137063402; /* 0x809F0016 */
+constexpr int SAVE_DATA_ERROR_LIMITATION_OVER                      = -2137063401; /* 0x809F0017 */
+constexpr int SAVE_DATA_ERROR_EVENT_BUSY                           = -2137063400; /* 0x809F0018 */
+constexpr int SAVE_DATA_ERROR_PARAMSFO_TRANSFER_TITLE_ID_NOT_FOUND = -2137063399; /* 0x809F0019 */
+
+} // namespace SaveData
 
 } // namespace Kyty::Libs
 

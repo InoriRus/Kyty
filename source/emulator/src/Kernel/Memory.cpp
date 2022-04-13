@@ -90,6 +90,8 @@ KYTY_SUBSYSTEM_INIT(Memory)
 {
 	g_physical_memory = new PhysicalMemory;
 	g_flexible_memory = new FlexibleMemory;
+
+	VirtualMemory::Init();
 }
 
 KYTY_SUBSYSTEM_UNEXPECTED_SHUTDOWN(Memory) {}

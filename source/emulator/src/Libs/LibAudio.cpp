@@ -7,6 +7,22 @@
 
 namespace Kyty::Libs {
 
+namespace LibAudioOut {
+
+LIB_VERSION("AudioOut", 1, "AudioOut", 1, 1);
+
+namespace AudioOut = Audio::AudioOut;
+
+LIB_DEFINE(InitAudio_1_AudioOut)
+{
+	LIB_FUNC("JfEPXVxhFqA", AudioOut::AudioOutInit);
+	LIB_FUNC("ekNvsT22rsY", AudioOut::AudioOutOpen);
+	LIB_FUNC("b+uAV89IlxE", AudioOut::AudioOutSetVolume);
+	LIB_FUNC("w3PdaSTSwGE", AudioOut::AudioOutOutputs);
+}
+
+} // namespace LibAudioOut
+
 namespace LibVoiceQoS {
 
 LIB_VERSION("VoiceQoS", 1, "VoiceQoS", 0, 0);
@@ -22,6 +38,7 @@ LIB_DEFINE(InitAudio_1_VoiceQoS)
 
 LIB_DEFINE(InitAudio_1)
 {
+	LibAudioOut::InitAudio_1_AudioOut(s);
 	LibVoiceQoS::InitAudio_1_VoiceQoS(s);
 }
 

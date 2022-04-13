@@ -1,6 +1,7 @@
 #include "Kyty/Core/Common.h"
 #include "Kyty/Core/DbgAssert.h"
 #include "Kyty/Core/LinkList.h"
+#include "Kyty/Core/MSpace.h"
 #include "Kyty/Core/Singleton.h"
 #include "Kyty/Core/String.h"
 
@@ -59,21 +60,20 @@ static KYTY_SYSV_ABI int atexit(void (*func)())
 	return 0;
 }
 
-static KYTY_SYSV_ABI int printf(VA_ARGS)
+static KYTY_SYSV_ABI int libc_printf(VA_ARGS)
 {
-	// NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init,hicpp-member-init)
-	VA_CONTEXT(ctx);
+	VA_CONTEXT(ctx); // NOLINT(cppcoreguidelines-pro-type-member-init,hicpp-member-init)
 
 	PRINT_NAME();
 
-	return GetPrintFuncV()(&ctx);
+	return GetPrintfCtxFunc()(&ctx);
 }
 
 static KYTY_SYSV_ABI int puts(const char* s)
 {
 	PRINT_NAME();
 
-	return GetPrintFunc()("%s\n", s);
+	return GetPrintfStdFunc()("%s\n", s);
 }
 
 static KYTY_SYSV_ABI void catchReturnFromMain(int status)
@@ -161,7 +161,16 @@ int KYTY_SYSV_ABI vprintf(const char* str, VaList* c)
 {
 	PRINT_NAME();
 
-	return GetVPrintFunc()(str, c);
+	return GetVprintfFunc()(str, c);
+}
+
+static KYTY_SYSV_ABI int snprintf(VA_ARGS)
+{
+	VA_CONTEXT(ctx); // NOLINT(cppcoreguidelines-pro-type-member-init,hicpp-member-init)
+
+	PRINT_NAME();
+
+	return GetSnrintfCtxFunc()(&ctx);
 }
 
 int KYTY_SYSV_ABI fflush(FILE* stream)
@@ -180,6 +189,49 @@ void* KYTY_SYSV_ABI memset(void* s, int c, size_t n)
 	return ::memset(s, c, n);
 }
 
+void* KYTY_SYSV_ABI LibcMspaceCreate(const char* name, void* base, size_t capacity, uint32_t flag)
+{
+	PRINT_NAME();
+
+	printf("\t name     = %s\n", name);
+	printf("\t base     = %016" PRIx64 "\n", reinterpret_cast<uint64_t>(base));
+	printf("\t capacity = %016" PRIx64 "\n", capacity);
+	printf("\t flag     = %u\n", flag);
+
+	EXIT_NOT_IMPLEMENTED(flag != 0 && flag != 1);
+	EXIT_NOT_IMPLEMENTED(name == nullptr);
+	EXIT_NOT_IMPLEMENTED(base == nullptr);
+	EXIT_NOT_IMPLEMENTED(capacity == 0);
+
+	bool thread_safe = true;
+
+	if (flag == 1)
+	{
+		thread_safe = false;
+	}
+
+	auto* msp = Core::MSpaceCreate(name, base, capacity, thread_safe, nullptr);
+
+	EXIT_NOT_IMPLEMENTED(msp == nullptr);
+
+	return msp;
+}
+
+void* KYTY_SYSV_ABI LibcMspaceMalloc(void* msp, size_t size)
+{
+	PRINT_NAME();
+
+	printf("\t size = %016" PRIx64 "\n", size);
+
+	auto* buf = Core::MSpaceMalloc(msp, size);
+
+	printf("\t buf  = %016" PRIx64 "\n", reinterpret_cast<uint64_t>(buf));
+
+	EXIT_NOT_IMPLEMENTED(buf == nullptr);
+
+	return buf;
+}
+
 LIB_DEFINE(InitLibcInternal_1)
 {
 	LibcInternalExt::InitLibcInternalExt_1(s);
@@ -190,8 +242,13 @@ LIB_DEFINE(InitLibcInternal_1)
 	LIB_FUNC("GMpvxPFW924", LibcInternal::vprintf);
 	LIB_FUNC("MUjC4lbHrK4", LibcInternal::fflush);
 	LIB_FUNC("8zTFvBIAIN8", LibcInternal::memset);
+	LIB_FUNC("eLdDw6l0-bU", LibcInternal::snprintf);
 
+	LIB_FUNC("tsvEmnenz48", LibC::cxa_atexit);
 	LIB_FUNC("H2e8t5ScQGc", LibC::cxa_finalize);
+
+	LIB_FUNC("-hn1tcVHq5Q", LibcInternal::LibcMspaceCreate);
+	LIB_FUNC("OJjm-QOIHlI", LibcInternal::LibcMspaceMalloc);
 }
 
 } // namespace LibcInternal
@@ -200,6 +257,8 @@ LIB_USING(LibC);
 
 LIB_DEFINE(InitLibC_1)
 {
+	EXIT("deprecated\n");
+
 	LibcInternal::InitLibcInternal_1(s);
 
 	LIB_OBJECT("P330P3dFF68", &LibC::g_need_flag);
@@ -207,7 +266,7 @@ LIB_DEFINE(InitLibC_1)
 	LIB_FUNC("uMei1W9uyNo", LibC::exit);
 	LIB_FUNC("bzQExy189ZI", LibC::init_env);
 	LIB_FUNC("8G2LB+A3rzg", LibC::atexit);
-	LIB_FUNC("hcuQgD53UxM", LibC::printf);
+	LIB_FUNC("hcuQgD53UxM", LibC::libc_printf);
 	LIB_FUNC("YQ0navp+YIc", LibC::puts);
 	LIB_FUNC("XKRegsFpEpk", LibC::catchReturnFromMain);
 	LIB_FUNC("tsvEmnenz48", LibC::cxa_atexit);

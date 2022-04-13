@@ -1,3 +1,4 @@
+add_subdirectory(cpuinfo)
 add_subdirectory(lua)
 add_subdirectory(sdl2)
 add_subdirectory(rijndael)

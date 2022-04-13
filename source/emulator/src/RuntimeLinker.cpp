@@ -675,7 +675,8 @@ Program* RuntimeLinker::LoadProgram(const String& elf_name)
 	}
 
 	if (elf_name.FilenameWithoutExtension().EndsWith(U"libc") || elf_name.FilenameWithoutExtension().EndsWith(U"Fios2") ||
-	    elf_name.FilenameWithoutExtension().EndsWith(U"Fios2_debug"))
+	    elf_name.FilenameWithoutExtension().EndsWith(U"Fios2_debug") || elf_name.FilenameWithoutExtension().EndsWith(U"NpToolkit") ||
+	    elf_name.FilenameWithoutExtension().EndsWith(U"NpToolkit2"))
 	{
 		program->fail_if_global_not_resolved = false;
 	}
@@ -698,6 +699,23 @@ void RuntimeLinker::SaveMainProgram(const String& elf_name)
 			p->elf->Save(elf_name);
 			break;
 		}
+	}
+}
+
+void RuntimeLinker::SaveProgram(Program* program, const String& elf_name)
+{
+	EXIT_NOT_IMPLEMENTED(!Core::Thread::IsMainThread());
+
+	Core::LockGuard lock(m_mutex);
+
+	if (auto index = m_programs.Find(program); m_programs.IndexValid(index))
+	{
+		EXIT_IF(m_programs.At(index)->elf == nullptr);
+
+		m_programs.At(index)->elf->Save(elf_name);
+	} else
+	{
+		EXIT("program not found");
 	}
 }
 

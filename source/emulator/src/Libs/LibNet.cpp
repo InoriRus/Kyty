@@ -137,6 +137,19 @@ LIB_DEFINE(InitNet_1_NpManager)
 
 } // namespace LibNpManager
 
+namespace LibNpManagerForToolkit {
+
+LIB_VERSION("NpManagerForToolkit", 1, "NpManager", 1, 1);
+
+namespace NpManagerForToolkit = Network::NpManagerForToolkit;
+
+LIB_DEFINE(InitNet_1_NpManagerForToolkit)
+{
+	LIB_FUNC("0c7HbXRKUt4", NpManagerForToolkit::NpRegisterStateCallbackForToolkit);
+}
+
+} // namespace LibNpManagerForToolkit
+
 namespace LibNpTrophy {
 
 LIB_VERSION("NpTrophy", 1, "NpTrophy", 1, 1);
@@ -170,6 +183,7 @@ LIB_DEFINE(InitNet_1)
 	LibHttp::InitNet_1_Http(s);
 	LibNetCtl::InitNet_1_NetCtl(s);
 	LibNpManager::InitNet_1_NpManager(s);
+	LibNpManagerForToolkit::InitNet_1_NpManagerForToolkit(s);
 	LibNpTrophy::InitNet_1_NpTrophy(s);
 	LibNpWebApi::InitNet_1_NpWebApi(s);
 }

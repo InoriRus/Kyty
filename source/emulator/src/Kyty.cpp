@@ -1,4 +1,3 @@
-#include "Kyty/Core/Common.h"
 #include "Kyty/Core/Core.h"
 #include "Kyty/Core/DbgAssert.h"
 #include "Kyty/Core/MagicEnum.h"
@@ -8,6 +7,7 @@
 #include "Kyty/Core/Threads.h"
 #include "Kyty/Core/Vector.h"
 #include "Kyty/Scripts/Scripts.h"
+#include "Kyty/UnitTest.h"
 
 #include "Emulator/Audio.h"
 #include "Emulator/Common.h"
@@ -58,6 +58,7 @@ static void print_system_info()
 	printf("AllocationGranularity     = %" PRIu32 "\n", info.AllocationGranularity);
 	printf("ProcessorLevel            = %" PRIu16 "\n", info.ProcessorLevel);
 	printf("ProcessorRevision         = 0x%04" PRIx16 "\n", info.ProcessorRevision);
+	printf("ProcessorName             = %s\n", info.ProcessorName.C_Str());
 }
 
 static void kyty_close()
@@ -144,7 +145,7 @@ KYTY_SCRIPT_FUNC(kyty_init_func)
 
 KYTY_SCRIPT_FUNC(kyty_load_elf_func)
 {
-	if (Scripts::ArgGetVarCount() != 1 && Scripts::ArgGetVarCount() != 2)
+	if (Scripts::ArgGetVarCount() != 1 && Scripts::ArgGetVarCount() != 2 && Scripts::ArgGetVarCount() != 3)
 	{
 		EXIT("invalid args\n");
 	}
@@ -155,12 +156,19 @@ KYTY_SCRIPT_FUNC(kyty_load_elf_func)
 
 	auto* program = rt->LoadProgram(Libs::LibKernel::FileSystem::GetRealFilename(elf.ToString()));
 
-	if (Scripts::ArgGetVarCount() == 2)
+	if (Scripts::ArgGetVarCount() >= 2)
 	{
 		if (Scripts::ArgGetVar(1).ToInteger() == 1)
 		{
 			program->dbg_print_reloc = true;
 		}
+	}
+
+	if (Scripts::ArgGetVarCount() >= 3)
+	{
+		auto save_name = Scripts::ArgGetVar(2).ToString();
+
+		rt->SaveProgram(program, Libs::LibKernel::FileSystem::GetRealFilename(save_name));
 	}
 
 	return 0;
@@ -355,6 +363,16 @@ KYTY_SCRIPT_FUNC(kyty_shader_printf)
 	return 0;
 }
 
+KYTY_SCRIPT_FUNC(kyty_run_tests)
+{
+	if (!UnitTest::unit_test_all())
+	{
+		EXIT("test failed\n");
+	}
+
+	return 0;
+}
+
 void kyty_help() {}
 
 } // namespace LuaFunc
@@ -371,6 +389,7 @@ void kyty_reg()
 	Scripts::RegisterFunc("kyty_mount", LuaFunc::kyty_mount_func, LuaFunc::kyty_help);
 	Scripts::RegisterFunc("kyty_shader_disable", LuaFunc::kyty_shader_disable, LuaFunc::kyty_help);
 	Scripts::RegisterFunc("kyty_shader_printf", LuaFunc::kyty_shader_printf, LuaFunc::kyty_help);
+	Scripts::RegisterFunc("kyty_run_tests", LuaFunc::kyty_run_tests, LuaFunc::kyty_help);
 }
 
 #else
