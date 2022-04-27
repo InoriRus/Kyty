@@ -283,9 +283,9 @@ int KYTY_SYSV_ABI KernelOpen(const char* path, int flags, uint16_t mode)
 
 	auto flags_u = static_cast<uint32_t>(flags);
 
-	printf("\tpath = %s\n", path);
-	printf("\tflags = %08" PRIx32 "\n", flags_u);
-	printf("\tmode = %04" PRIx16 "\n", mode);
+	printf("\t path = %s\n", path);
+	printf("\t flags = %08" PRIx32 "\n", flags_u);
+	printf("\t mode = %04" PRIx16 "\n", mode);
 
 	bool nonblock  = (flags_u & 0x0004u) != 0;
 	bool append    = (flags_u & 0x0008u) != 0;
@@ -330,13 +330,18 @@ int KYTY_SYSV_ABI KernelOpen(const char* path, int flags, uint16_t mode)
 		return KERNEL_ERROR_EACCES;
 	}
 
-	if (directory)
+	bool dir_exist = Core::File::IsDirectoryExisting(file->real_name);
+
+	if (directory || dir_exist)
 	{
-		if (!Core::File::IsDirectoryExisting(file->real_name))
+		if (!dir_exist)
 		{
 			g_files->DeleteDescriptor(descriptor);
 			return KERNEL_ERROR_ENOTDIR;
 		}
+
+		EXIT_NOT_IMPLEMENTED(!directory && rw_mode != Core::File::Mode::Read);
+		EXIT_NOT_IMPLEMENTED(!directory && (trunc || creat));
 
 		file->dents       = Core::File::GetDirEntries(file->real_name);
 		file->dents_index = 0;
@@ -352,8 +357,6 @@ int KYTY_SYSV_ABI KernelOpen(const char* path, int flags, uint16_t mode)
 	} else
 	{
 		bool result = false;
-
-		EXIT_NOT_IMPLEMENTED(Core::File::IsDirectoryExisting(file->real_name));
 
 		if (creat)
 		{
@@ -703,7 +706,7 @@ int KYTY_SYSV_ABI KernelStat(const char* path, FileStat* sb)
 		return KERNEL_ERROR_EINVAL;
 	}
 
-	printf("\tKernelStat: %s\n", path);
+	printf("\t KernelStat: %s\n", path);
 
 	String path_s         = String::FromUtf8(path);
 	auto   real_file_name = g_mount_points->GetRealFilename(path_s);
@@ -714,7 +717,7 @@ int KYTY_SYSV_ABI KernelStat(const char* path, FileStat* sb)
 
 	if (!is_dir && !is_file)
 	{
-		printf("\tfile not found\n");
+		printf("\t file not found\n");
 		return KERNEL_ERROR_ENOENT;
 	}
 
@@ -891,9 +894,9 @@ int KYTY_SYSV_ABI KernelGetdirentries(int fd, char* buf, int nbytes, int64_t* ba
 
 	EXIT_IF(!file->opened);
 
-	printf("\tdir    = %s\n", file->real_name.C_Str());
-	printf("\tnbytes = %d\n", nbytes);
-	printf("\tindex = %d\n", file->dents_index);
+	printf("\t dir    = %s\n", file->real_name.C_Str());
+	printf("\t nbytes = %d\n", nbytes);
+	printf("\t index = %d\n", file->dents_index);
 
 	if (basep != nullptr)
 	{
@@ -911,7 +914,7 @@ int KYTY_SYSV_ABI KernelGetdirentries(int fd, char* buf, int nbytes, int64_t* ba
 	auto str_size = str.Size() - 1;
 	EXIT_NOT_IMPLEMENTED(str_size > 255);
 
-	printf("\tname  = %s\n", str.GetDataConst());
+	printf("\t name  = %s\n", str.GetDataConst());
 
 	*reinterpret_cast<uint32_t*>(buf + 0) = entry.name.Hash();
 	*reinterpret_cast<uint16_t*>(buf + 4) = 512;
@@ -921,6 +924,47 @@ int KYTY_SYSV_ABI KernelGetdirentries(int fd, char* buf, int nbytes, int64_t* ba
 	buf[8 + 255] = '\0';
 
 	return 512;
+}
+
+int KYTY_SYSV_ABI KernelGetdents(int fd, char* buf, int nbytes)
+{
+	PRINT_NAME();
+
+	return KernelGetdirentries(fd, buf, nbytes, nullptr);
+}
+
+int KYTY_SYSV_ABI KernelMkdir(const char* path, uint16_t mode)
+{
+	PRINT_NAME();
+
+	EXIT_IF(g_mount_points == nullptr || g_files == nullptr);
+
+	if (path == nullptr)
+	{
+		return KERNEL_ERROR_EINVAL;
+	}
+
+	printf("\t path = %s\n", path);
+	printf("\t mode = %04" PRIx16 "\n", mode);
+
+	String real_name = g_mount_points->GetRealDirectory(String::FromUtf8(path));
+
+	if (Core::File::IsDirectoryExisting(real_name))
+	{
+		return KERNEL_ERROR_EEXIST;
+	}
+
+	if (!Core::File::CreateDirectory(real_name))
+	{
+		return KERNEL_ERROR_EIO;
+	}
+
+	if (!Core::File::IsDirectoryExisting(real_name))
+	{
+		return KERNEL_ERROR_ENOENT;
+	}
+
+	return OK;
 }
 
 } // namespace Kyty::Libs::LibKernel::FileSystem

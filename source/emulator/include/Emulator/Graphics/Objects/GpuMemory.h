@@ -73,6 +73,7 @@ public:
 	KYTY_CLASS_DEFAULT_COPY(GpuObject);
 
 	virtual bool Equal(const uint64_t* other) const = 0;
+	// virtual bool Reuse(const uint64_t* /*other*/) const { return false; };
 
 	[[nodiscard]] virtual create_func_t              GetCreateFunc() const            = 0;
 	[[nodiscard]] virtual create_from_objects_func_t GetCreateFromObjectsFunc() const = 0;
@@ -90,9 +91,10 @@ void GpuMemoryInit();
 
 void  GpuMemorySetAllocatedRange(uint64_t vaddr, uint64_t size);
 void  GpuMemoryFree(GraphicContext* ctx, uint64_t vaddr, uint64_t size, bool unmap);
-void* GpuMemoryCreateObject(GraphicContext* ctx, CommandBuffer* buffer, uint64_t vaddr, uint64_t size, const GpuObject& info);
-void* GpuMemoryCreateObject(GraphicContext* ctx, CommandBuffer* buffer, const uint64_t* vaddr, const uint64_t* size, int vaddr_num,
+void* GpuMemoryCreateObject(uint64_t submit_id, GraphicContext* ctx, CommandBuffer* buffer, uint64_t vaddr, uint64_t size,
                             const GpuObject& info);
+void* GpuMemoryCreateObject(uint64_t submit_id, GraphicContext* ctx, CommandBuffer* buffer, const uint64_t* vaddr, const uint64_t* size,
+                            int vaddr_num, const GpuObject& info);
 void  GpuMemoryResetHash(GraphicContext* ctx, const uint64_t* vaddr, const uint64_t* size, int vaddr_num, GpuMemoryObjectType type);
 void  GpuMemoryDbgDump();
 void  GpuMemoryFlush(GraphicContext* ctx);
@@ -101,7 +103,7 @@ void  GpuMemoryWriteBack(GraphicContext* ctx);
 bool  GpuMemoryCheckAccessViolation(uint64_t vaddr, uint64_t size);
 bool  GpuMemoryWatcherEnabled();
 
-Vector<GpuMemoryObject> GpuMemoryFindObjects(uint64_t vaddr, uint64_t size, bool exact, bool only_first);
+Vector<GpuMemoryObject> GpuMemoryFindObjects(uint64_t vaddr, uint64_t size, GpuMemoryObjectType type, bool exact, bool only_first);
 
 bool VulkanAllocate(GraphicContext* ctx, VulkanMemory* mem);
 void VulkanFree(GraphicContext* ctx, VulkanMemory* mem);

@@ -354,13 +354,58 @@ String ShaderCode::DbgDump() const
 	String ret;
 	for (const auto& inst: m_instructions)
 	{
-		if (m_labels.Contains(inst.pc, [](auto label, auto pc) { return label.dst == pc; }))
+		if (m_labels.Contains(inst.pc, [](auto label, auto pc) { return label.GetDst() == pc; }))
 		{
 			ret += String::FromPrintf("label_%04" PRIx32 ":\n", inst.pc);
 		}
 		ret += String::FromPrintf("  %s\n", DbgInstructionToStr(inst).C_Str());
 	}
 	return ret;
+}
+
+bool ShaderCode::IsDiscardInstruction(uint32_t index) const
+{
+	if (!(index == 0 || index + 1 >= m_instructions.Size()))
+	{
+		const auto& prev_inst = m_instructions.At(index - 1);
+		const auto& inst      = m_instructions.At(index);
+		const auto& next_inst = m_instructions.At(index + 1);
+
+		return (inst.type == ShaderInstructionType::Exp && inst.format == ShaderInstructionFormat::Mrt0OffOffComprVmDone &&
+		        prev_inst.type == ShaderInstructionType::SMovB64 && prev_inst.format == ShaderInstructionFormat::Sdst2Ssrc02 &&
+		        prev_inst.dst.type == ShaderOperandType::ExecLo && prev_inst.src[0].type == ShaderOperandType::IntegerInlineConstant &&
+		        prev_inst.src[0].constant.i == 0 && next_inst.type == ShaderInstructionType::SEndpgm);
+	}
+	return false;
+}
+
+bool ShaderCode::IsDiscardBlock(uint32_t pc) const
+{
+	auto inst_count = m_instructions.Size();
+	for (uint32_t index = 0; index < inst_count; index++)
+	{
+		const auto& inst = m_instructions.At(index);
+		if (inst.pc == pc)
+		{
+			for (uint32_t i = index; i < inst_count; i++)
+			{
+				const auto& inst = m_instructions.At(i);
+
+				if (inst.type == ShaderInstructionType::SEndpgm || inst.type == ShaderInstructionType::SCbranchExecz ||
+				    inst.type == ShaderInstructionType::SCbranchScc0)
+				{
+					return false;
+				}
+
+				if (IsDiscardInstruction(i))
+				{
+					return true;
+				}
+			}
+			return false;
+		}
+	}
+	return false;
 }
 
 static ShaderOperand operand_parse(uint32_t code)
@@ -555,7 +600,7 @@ KYTY_SHADER_PARSER(shader_parse_sopp)
 
 	if (inst.type == ShaderInstructionType::SCbranchScc0 || inst.type == ShaderInstructionType::SCbranchExecz)
 	{
-		dst->GetLabels().Add(ShaderLabel({inst.pc + 4 + inst.src[0].constant.i, inst.pc}));
+		dst->GetLabels().Add(ShaderLabel(inst));
 	}
 
 	return 1;
@@ -1782,7 +1827,7 @@ KYTY_SHADER_PARSER(shader_parse)
 		}
 
 		if ((instruction == 0xBF810000 && (type == ShaderType::Vertex || type == ShaderType::Pixel || type == ShaderType::Compute) &&
-		     !dst->GetLabels().Contains(4 * static_cast<uint32_t>(ptr - src), [](auto label, auto pc) { return label.dst == pc; })) ||
+		     !dst->GetLabels().Contains(4 * static_cast<uint32_t>(ptr - src), [](auto label, auto pc) { return label.GetDst() == pc; })) ||
 		    (instruction == 0xBE802000 && type == ShaderType::Fetch))
 		{
 			break;

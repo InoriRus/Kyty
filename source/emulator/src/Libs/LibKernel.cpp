@@ -437,11 +437,21 @@ int KYTY_SYSV_ABI nanosleep(const LibKernel::KernelTimespec* rqtp, LibKernel::Ke
 	return POSIX_CALL(LibKernel::KernelNanosleep(rqtp, rmtp));
 }
 
+int KYTY_SYSV_ABI stat(const char* path, LibKernel::FileSystem::FileStat* sb)
+{
+	PRINT_NAME();
+
+	return POSIX_CALL(LibKernel::FileSystem::KernelStat(path, sb));
+}
+
 LIB_DEFINE(InitLibKernel_1_Posix)
 {
 	LIB_FUNC("lLMT9vJAck0", clock_gettime);
 	LIB_FUNC("yS8U2TGCe1A", nanosleep);
+	LIB_FUNC("E6ao34wPw+U", stat);
 
+	LIB_FUNC("OxhIB8LB-PQ", Posix::pthread_create);
+	LIB_FUNC("h9CcP3J0oVM", Posix::pthread_join);
 	LIB_FUNC("7H0iTOciTLo", Posix::pthread_mutex_lock);
 	LIB_FUNC("2Z+PpY6CaJg", Posix::pthread_mutex_unlock);
 	LIB_FUNC("ttHNfU+qDBU", Posix::pthread_mutex_init);
@@ -474,6 +484,8 @@ LIB_DEFINE(InitLibKernel_1_FS)
 	LIB_FUNC("AUXVxWeJU-A", FileSystem::KernelUnlink);
 	LIB_FUNC("taRWhTJFTgE", FileSystem::KernelGetdirentries);
 	LIB_FUNC("oib76F-12fk", FileSystem::KernelLseek);
+	LIB_FUNC("j2AIqSqJP0w", FileSystem::KernelGetdents);
+	LIB_FUNC("1-LFLmRFxxM", FileSystem::KernelMkdir);
 }
 
 LIB_DEFINE(InitLibKernel_1_Mem)
@@ -531,6 +543,7 @@ LIB_DEFINE(InitLibKernel_1_Pthread)
 	LIB_FUNC("bt3CTBKmGyI", LibKernel::PthreadSetaffinity);
 	LIB_FUNC("1tKyG7RlMJo", LibKernel::PthreadGetprio);
 	LIB_FUNC("W0Hpm2X0uPE", LibKernel::PthreadSetprio);
+	LIB_FUNC("T72hz6ffq08", LibKernel::PthreadYield);
 
 	LIB_FUNC("62KCwEMmzcM", LibKernel::PthreadAttrDestroy);
 	LIB_FUNC("x1X76arYMxU", LibKernel::PthreadAttrGet);
@@ -557,8 +570,10 @@ LIB_DEFINE(InitLibKernel_1_Pthread)
 	LIB_FUNC("g+PZd2hiacg", LibKernel::PthreadCondDestroy);
 	LIB_FUNC("WKAXJ4XBPQ4", LibKernel::PthreadCondWait);
 	LIB_FUNC("JGgj7Uvrl+A", LibKernel::PthreadCondBroadcast);
+	LIB_FUNC("kDh-NfxgMtE", LibKernel::PthreadCondSignal);
 	LIB_FUNC("BmMjYxmew1w", LibKernel::PthreadCondTimedwait);
 	LIB_FUNC("m5-2bsNfv7s", LibKernel::PthreadCondattrInit);
+	LIB_FUNC("waPcxYiR3WA", LibKernel::PthreadCondattrDestroy);
 
 	LIB_FUNC("QBi7HCK03hw", LibKernel::KernelClockGettime);
 	LIB_FUNC("ejekcaNQNq0", LibKernel::KernelGettimeofday);

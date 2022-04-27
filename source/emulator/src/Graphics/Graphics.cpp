@@ -225,6 +225,35 @@ int KYTY_SYSV_ABI GraphicsUpdatePsShader(uint32_t* cmd, uint64_t size, const uin
 	return OK;
 }
 
+int KYTY_SYSV_ABI GraphicsUpdatePsShader350(uint32_t* cmd, uint64_t size, const uint32_t* ps_regs)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(ps_regs == nullptr);
+	EXIT_NOT_IMPLEMENTED(size < 12 + 1);
+
+	printf("\t cmd_buffer      = %016" PRIx64 "\n", reinterpret_cast<uint64_t>(cmd));
+	printf("\t size            = %" PRIu64 "\n", size);
+
+	printf("\t ps_regs.m_spiShaderPgmLoPs    = %08" PRIx32 "\n", ps_regs[0]);
+	printf("\t ps_regs.m_spiShaderPgmHiPs    = %08" PRIx32 "\n", ps_regs[1]);
+	printf("\t ps_regs.m_spiShaderPgmRsrc1Ps = %08" PRIx32 "\n", ps_regs[2]);
+	printf("\t ps_regs.m_spiShaderPgmRsrc2Ps = %08" PRIx32 "\n", ps_regs[3]);
+	printf("\t ps_regs.m_spiShaderZFormat    = %08" PRIx32 "\n", ps_regs[4]);
+	printf("\t ps_regs.m_spiShaderColFormat  = %08" PRIx32 "\n", ps_regs[5]);
+	printf("\t ps_regs.m_spiPsInputEna       = %08" PRIx32 "\n", ps_regs[6]);
+	printf("\t ps_regs.m_spiPsInputAddr      = %08" PRIx32 "\n", ps_regs[7]);
+	printf("\t ps_regs.m_spiPsInControl      = %08" PRIx32 "\n", ps_regs[8]);
+	printf("\t ps_regs.m_spiBarycCntl        = %08" PRIx32 "\n", ps_regs[9]);
+	printf("\t ps_regs.m_dbShaderControl     = %08" PRIx32 "\n", ps_regs[10]);
+	printf("\t ps_regs.m_cbShaderMask        = %08" PRIx32 "\n", ps_regs[11]);
+
+	cmd[0] = KYTY_PM4(size, Pm4::IT_NOP, Pm4::R_PS_UPDATE);
+	memcpy(&cmd[1], ps_regs, 12 * 4);
+
+	return OK;
+}
+
 int KYTY_SYSV_ABI GraphicsSetCsShaderWithModifier(uint32_t* cmd, uint64_t size, const uint32_t* cs_regs, uint32_t shader_modifier)
 {
 	PRINT_NAME();

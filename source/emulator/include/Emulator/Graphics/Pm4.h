@@ -337,6 +337,14 @@ constexpr uint32_t PA_SU_LINE_CNTL             = 0x282;
 constexpr uint32_t PA_SU_LINE_CNTL_WIDTH_SHIFT = 0;
 constexpr uint32_t PA_SU_LINE_CNTL_WIDTH_MASK  = 0xFFFF;
 
+constexpr uint32_t PA_SC_MODE_CNTL_0                            = 0x292;
+constexpr uint32_t PA_SC_MODE_CNTL_0_MSAA_ENABLE_SHIFT          = 0;
+constexpr uint32_t PA_SC_MODE_CNTL_0_MSAA_ENABLE_MASK           = 0x1;
+constexpr uint32_t PA_SC_MODE_CNTL_0_VPORT_SCISSOR_ENABLE_SHIFT = 1;
+constexpr uint32_t PA_SC_MODE_CNTL_0_VPORT_SCISSOR_ENABLE_MASK  = 0x1;
+constexpr uint32_t PA_SC_MODE_CNTL_0_LINE_STIPPLE_ENABLE_SHIFT  = 2;
+constexpr uint32_t PA_SC_MODE_CNTL_0_LINE_STIPPLE_ENABLE_MASK   = 0x1;
+
 constexpr uint32_t DB_HTILE_SURFACE                               = 0x2AF;
 constexpr uint32_t DB_HTILE_SURFACE_LINEAR_SHIFT                  = 0;
 constexpr uint32_t DB_HTILE_SURFACE_LINEAR_MASK                   = 0x1;
@@ -354,6 +362,20 @@ constexpr uint32_t DB_HTILE_SURFACE_DST_OUTSIDE_ZERO_TO_ONE_SHIFT = 16;
 constexpr uint32_t DB_HTILE_SURFACE_DST_OUTSIDE_ZERO_TO_ONE_MASK  = 0x1;
 
 constexpr uint32_t VGT_SHADER_STAGES_EN = 0x2D5;
+
+constexpr uint32_t PA_SC_CENTROID_PRIORITY_0 = 0x2F5;
+
+constexpr uint32_t PA_SC_AA_CONFIG                             = 0x2F8;
+constexpr uint32_t PA_SC_AA_CONFIG_MSAA_NUM_SAMPLES_SHIFT      = 0;
+constexpr uint32_t PA_SC_AA_CONFIG_MSAA_NUM_SAMPLES_MASK       = 0x7;
+constexpr uint32_t PA_SC_AA_CONFIG_AA_MASK_CENTROID_DTMN_SHIFT = 4;
+constexpr uint32_t PA_SC_AA_CONFIG_AA_MASK_CENTROID_DTMN_MASK  = 0x1;
+constexpr uint32_t PA_SC_AA_CONFIG_MAX_SAMPLE_DIST_SHIFT       = 13;
+constexpr uint32_t PA_SC_AA_CONFIG_MAX_SAMPLE_DIST_MASK        = 0xF;
+constexpr uint32_t PA_SC_AA_CONFIG_MSAA_EXPOSED_SAMPLES_SHIFT  = 20;
+constexpr uint32_t PA_SC_AA_CONFIG_MSAA_EXPOSED_SAMPLES_MASK   = 0x7;
+
+constexpr uint32_t PA_SC_AA_SAMPLE_LOCS_PIXEL_X0Y0_0 = 0x2FE;
 
 constexpr uint32_t CB_COLOR0_BASE = 0x318;
 constexpr uint32_t CB_COLOR0_INFO = 0x31C;

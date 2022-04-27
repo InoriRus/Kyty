@@ -159,6 +159,12 @@ bool DepthStencilBufferObject::Equal(const uint64_t* other) const
 	        params[PARAM_HEIGHT] == other[PARAM_HEIGHT] && params[PARAM_HTILE] == other[PARAM_HTILE]);
 }
 
+// bool DepthStencilBufferObject::Reuse(const uint64_t* other) const
+//{
+//	return (params[PARAM_FORMAT] == other[PARAM_FORMAT] && params[PARAM_WIDTH] <= other[PARAM_WIDTH] &&
+//	        params[PARAM_HEIGHT] <= other[PARAM_HEIGHT] && params[PARAM_HTILE] == other[PARAM_HTILE]);
+//}
+
 GpuObject::create_func_t DepthStencilBufferObject::GetCreateFunc() const
 {
 	return create_func;

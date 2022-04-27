@@ -52,6 +52,8 @@ int KYTY_SYSV_ABI     KernelStat(const char* path, FileStat* sb);
 int KYTY_SYSV_ABI     KernelFstat(int d, FileStat* sb);
 int KYTY_SYSV_ABI     KernelUnlink(const char* path);
 int KYTY_SYSV_ABI     KernelGetdirentries(int fd, char* buf, int nbytes, int64_t* basep);
+int KYTY_SYSV_ABI     KernelGetdents(int fd, char* buf, int nbytes);
+int KYTY_SYSV_ABI     KernelMkdir(const char* path, uint16_t mode);
 
 } // namespace Kyty::Libs::LibKernel::FileSystem
 

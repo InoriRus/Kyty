@@ -452,27 +452,21 @@ void TileConvertTiledToLinear(void* dst, const void* src, TileMode mode, uint32_
 	}
 }
 
-void TileGetDepthSize(uint32_t width, uint32_t height, uint32_t z_format, uint32_t stencil_format, bool htile, bool neo,
-                      uint32_t* stencil_size, uint32_t* htile_size, uint32_t* depth_size, uint32_t* pitch)
+bool TileGetDepthSize(uint32_t width, uint32_t height, uint32_t pitch, uint32_t z_format, uint32_t stencil_format, bool htile, bool neo,
+                      TileSizeAlign* stencil_size, TileSizeAlign* htile_size, TileSizeAlign* depth_size)
 {
-	struct SizeAlign
-	{
-		uint32_t size;
-		uint32_t align;
-	};
-
 	struct DepthInfo
 	{
-		uint32_t  width;
-		uint32_t  height;
-		uint32_t  z_format;
-		uint32_t  stencil_format;
-		bool      tile;
-		bool      neo;
-		uint32_t  pitch;
-		SizeAlign stencil;
-		SizeAlign htile;
-		SizeAlign depth;
+		uint32_t      width          = 0;
+		uint32_t      height         = 0;
+		uint32_t      z_format       = 0;
+		uint32_t      stencil_format = 0;
+		bool          tile           = false;
+		bool          neo            = false;
+		uint32_t      pitch          = 0;
+		TileSizeAlign stencil        = {};
+		TileSizeAlign htile          = {};
+		TileSizeAlign depth          = {};
 	};
 
 	static const DepthInfo infos_base[] = {
@@ -513,6 +507,8 @@ void TileGetDepthSize(uint32_t width, uint32_t height, uint32_t z_format, uint32
 	    {3840, 2160, 3, 0, false, true, 3840, {0, 0}, {0, 0}, {33423360, 65536}},
 	    {1920, 1080, 3, 0, true, true, 1920, {0, 0}, {196608, 4096}, {8847360, 65536}},
 	    {1920, 1080, 3, 0, false, true, 1920, {0, 0}, {0, 0}, {8847360, 65536}},
+	    {1920, 1080, 3, 0, true, true, 2048, {0, 0}, {196608, 4096}, {9437184, 65536}},
+	    {1920, 1080, 3, 0, false, true, 2048, {0, 0}, {0, 0}, {9437184, 65536}},
 	    {1280, 720, 3, 0, true, true, 1280, {0, 0}, {131072, 4096}, {3932160, 65536}},
 	    {1280, 720, 3, 0, false, true, 1280, {0, 0}, {0, 0}, {3932160, 65536}},
 	    {3840, 2160, 1, 0, true, true, 3840, {0, 0}, {655360, 4096}, {16711680, 65536}},
@@ -544,187 +540,184 @@ void TileGetDepthSize(uint32_t width, uint32_t height, uint32_t z_format, uint32
 	EXIT_IF(depth_size == nullptr);
 	EXIT_IF(htile_size == nullptr);
 	EXIT_IF(stencil_size == nullptr);
-	EXIT_IF(pitch == nullptr);
 
 	if (neo)
 	{
 		for (const auto& i: infos_neo)
 		{
-			if (i.width == width && i.height == height && i.tile == htile && i.z_format == z_format && i.stencil_format == stencil_format)
+			if (i.width == width && i.height == height && i.pitch == pitch && i.tile == htile && i.z_format == z_format &&
+			    i.stencil_format == stencil_format)
 			{
-				*depth_size   = i.depth.size;
-				*htile_size   = i.htile.size;
-				*stencil_size = i.stencil.size;
-				*pitch        = i.pitch;
-				return;
+				*depth_size   = i.depth;
+				*htile_size   = i.htile;
+				*stencil_size = i.stencil;
+				return true;
 			}
 		}
 	} else
 	{
 		for (const auto& i: infos_base)
 		{
-			if (i.width == width && i.height == height && i.tile == htile && i.z_format == z_format && i.stencil_format == stencil_format)
+			if (i.width == width && i.height == height && i.pitch == pitch && i.tile == htile && i.z_format == z_format &&
+			    i.stencil_format == stencil_format)
 			{
-				*depth_size   = i.depth.size;
-				*htile_size   = i.htile.size;
-				*stencil_size = i.stencil.size;
-				*pitch        = i.pitch;
-				return;
+				*depth_size   = i.depth;
+				*htile_size   = i.htile;
+				*stencil_size = i.stencil;
+				return true;
 			}
 		}
 	}
-	*depth_size   = 0;
-	*htile_size   = 0;
-	*stencil_size = 0;
+	*depth_size   = TileSizeAlign();
+	*htile_size   = TileSizeAlign();
+	*stencil_size = TileSizeAlign();
+	return false;
 }
 
-void TileGetVideoOutSize(uint32_t width, uint32_t height, bool tile, bool neo, uint32_t* size, uint32_t* pitch)
+void TileGetVideoOutSize(uint32_t width, uint32_t height, uint32_t pitch, bool tile, bool neo, TileSizeAlign* size)
 {
 	EXIT_IF(size == nullptr);
-	EXIT_IF(pitch == nullptr);
 
 	uint32_t ret_size  = 0;
-	uint32_t ret_pitch = 0;
+	uint32_t ret_align = 0;
 
-	if (width == 3840 && height == 2160 && tile && !neo)
+	if (pitch == 3840)
 	{
-		ret_size  = 33423360;
-		ret_pitch = 3840;
-	}
-	if (width == 3840 && height == 2160 && tile && neo)
-	{
-		ret_size  = 33423360;
-		ret_pitch = 3840;
-	}
-	if (width == 3840 && height == 2160 && !tile && !neo)
-	{
-		ret_size  = 33177600;
-		ret_pitch = 3840;
-	}
-	if (width == 3840 && height == 2160 && !tile && neo)
-	{
-		ret_size  = 33177600;
-		ret_pitch = 3840;
-	}
-
-	if (width == 1920 && height == 1080 && tile && !neo)
-	{
-		ret_size  = 8355840;
-		ret_pitch = 1920;
-	}
-	if (width == 1920 && height == 1080 && tile && neo)
-	{
-		ret_size  = 8847360;
-		ret_pitch = 1920;
-	}
-	if (width == 1920 && height == 1080 && !tile && !neo)
-	{
-		ret_size  = 8294400;
-		ret_pitch = 1920;
-	}
-	if (width == 1920 && height == 1080 && !tile && neo)
-	{
-		ret_size  = 8294400;
-		ret_pitch = 1920;
+		if (width == 3840 && height == 2160 && tile && !neo)
+		{
+			ret_size  = 33423360;
+			ret_align = 32768;
+		}
+		if (width == 3840 && height == 2160 && tile && neo)
+		{
+			ret_size  = 33423360;
+			ret_align = 65536;
+		}
+		if (width == 3840 && height == 2160 && !tile && !neo)
+		{
+			ret_size  = 33177600;
+			ret_align = 256;
+		}
+		if (width == 3840 && height == 2160 && !tile && neo)
+		{
+			ret_size  = 33177600;
+			ret_align = 256;
+		}
 	}
 
-	if (width == 1280 && height == 720 && tile && !neo)
+	if (pitch == 1920)
 	{
-		ret_size  = 3932160;
-		ret_pitch = 1280;
-	}
-	if (width == 1280 && height == 720 && tile && neo)
-	{
-		ret_size  = 3932160;
-		ret_pitch = 1280;
-	}
-	if (width == 1280 && height == 720 && !tile && !neo)
-	{
-		ret_size  = 3686400;
-		ret_pitch = 1280;
-	}
-	if (width == 1280 && height == 720 && !tile && neo)
-	{
-		ret_size  = 3686400;
-		ret_pitch = 1280;
+		if (width == 1920 && height == 1080 && tile && !neo)
+		{
+			ret_size  = 8355840;
+			ret_align = 32768;
+		}
+		if (width == 1920 && height == 1080 && tile && neo)
+		{
+			ret_size  = 8847360;
+			ret_align = 65536;
+		}
+		if (width == 1920 && height == 1080 && !tile && !neo)
+		{
+			ret_size  = 8294400;
+			ret_align = 256;
+		}
+		if (width == 1920 && height == 1080 && !tile && neo)
+		{
+			ret_size  = 8294400;
+			ret_align = 256;
+		}
 	}
 
-	*size  = ret_size;
-	*pitch = ret_pitch;
+	if (pitch == 1280)
+	{
+		if (width == 1280 && height == 720 && tile && !neo)
+		{
+			ret_size  = 3932160;
+			ret_align = 32768;
+		}
+		if (width == 1280 && height == 720 && tile && neo)
+		{
+			ret_size  = 3932160;
+			ret_align = 65536;
+		}
+		if (width == 1280 && height == 720 && !tile && !neo)
+		{
+			ret_size  = 3686400;
+			ret_align = 256;
+		}
+		if (width == 1280 && height == 720 && !tile && neo)
+		{
+			ret_size  = 3686400;
+			ret_align = 256;
+		}
+	}
+
+	size->size  = ret_size;
+	size->align = ret_align;
 }
 
 void TileGetTextureSize(uint32_t dfmt, uint32_t nfmt, uint32_t width, uint32_t height, uint32_t pitch, uint32_t levels, uint32_t tile,
-                        bool neo, uint32_t* total_size, uint32_t* level_sizes, uint32_t* padded_width, uint32_t* padded_height)
+                        bool neo, TileSizeAlign* total_size, uint32_t* level_sizes, uint32_t* padded_width, uint32_t* padded_height)
 {
 	KYTY_PROFILER_FUNCTION();
 
 	struct Padded
 	{
-		uint32_t width;
-		uint32_t height;
+		uint32_t width  = 0;
+		uint32_t height = 0;
 	};
 
 	struct TextureInfo
 	{
-		uint32_t dfmt;
-		uint32_t nfmt;
-		uint32_t width;
-		uint32_t height;
-		uint32_t levels;
-		uint32_t tile;
-		bool     neo;
-		uint32_t size[16];
-		Padded   padded[16];
+		uint32_t      dfmt   = 0;
+		uint32_t      nfmt   = 0;
+		uint32_t      width  = 0;
+		uint32_t      height = 0;
+		uint32_t      pitch  = 0;
+		uint32_t      levels = 0;
+		uint32_t      tile   = 0;
+		bool          neo    = false;
+		TileSizeAlign size[16];
+		Padded        padded[16];
 	};
 
 	static const TextureInfo infos[] = {
 	    // clang-format off
 
-			// kDataFormatB8G8R8A8UnormSrgb, 512, 512, kTileModeDisplay_LinearAligned
-			{ 10, 9, 512, 512, 10, 8, false, {1048576, 262144, 65536, 16384, 4096, 1024, 512, 256, 256, 256, },
-			{ {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},  } },
-			{ 10, 9, 512, 512, 10, 8, true, {1048576, 262144, 65536, 16384, 4096, 1024, 512, 256, 256, 256, },
-			{ {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},  } },
-			// kDataFormatB8G8R8A8UnormSrgb, 512, 512, kTileModeThin_1dThin
-			{ 10, 9, 512, 512, 10, 13, false, {1048576, 262144, 65536, 16384, 4096, 1024, 256, 256, 256, 256, },
-			{ {512, 512}, {256, 256}, {128, 128}, {64, 64}, {32, 32}, {16, 16}, {8, 8}, {8, 8}, {8, 8}, {8, 8},  } },
-			{ 10, 9, 512, 512, 10, 13, true, {1048576, 262144, 65536, 16384, 4096, 1024, 256, 256, 256, 256, },
-			{ {512, 512}, {256, 256}, {128, 128}, {64, 64}, {32, 32}, {16, 16}, {8, 8}, {8, 8}, {8, 8}, {8, 8},  } },
-			// kDataFormatBc3UnormSrgb, 512, 512, kTileModeDisplay_LinearAligned
-			{ 37, 9, 512, 512, 10, 8, false, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
-			{ {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},  } },
-			{ 37, 9, 512, 512, 10, 8, true, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
-			{ {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},  } },
-			// kDataFormatBc3UnormSrgb, 512, 512, kTileModeThin_1dThin
-			{ 37, 9, 512, 512, 10, 13, false, {262144, 65536, 16384, 4096, 1024, 1024, 1024, 1024, 1024, 1024, },
-			{ {128, 128}, {64, 64}, {32, 32}, {16, 16}, {8, 8}, {8, 8}, {8, 8}, {8, 8}, {8, 8}, {8, 8},  } },
-			{ 37, 9, 512, 512, 10, 13, true, {262144, 65536, 16384, 4096, 1024, 1024, 1024, 1024, 1024, 1024, },
-			{ {128, 128}, {64, 64}, {32, 32}, {16, 16}, {8, 8}, {8, 8}, {8, 8}, {8, 8}, {8, 8}, {8, 8},  } },
-			// kDataFormatB8G8R8A8Unorm, 512, 512, kTileModeThin_1dThin
-			{ 10, 0, 512, 512, 10, 13, false, {1048576, 262144, 65536, 16384, 4096, 1024, 256, 256, 256, 256, },
-			{ {512, 512}, {256, 256}, {128, 128}, {64, 64}, {32, 32}, {16, 16}, {8, 8}, {8, 8}, {8, 8}, {8, 8},  } },
-			{ 10, 0, 512, 512, 10, 13, true, {1048576, 262144, 65536, 16384, 4096, 1024, 256, 256, 256, 256, },
-			{ {512, 512}, {256, 256}, {128, 128}, {64, 64}, {32, 32}, {16, 16}, {8, 8}, {8, 8}, {8, 8}, {8, 8},  } },
-			// kDataFormatB8G8R8A8Unorm, 512, 768, kTileModeThin_1dThin
-			{ 10, 0, 512, 768, 10, 13, false, {1572864, 1048576, 131072, 32768, 8192, 2048, 512, 256, 256, 256, },
-			{ {512, 768}, {256, 512}, {128, 256}, {64, 128}, {32, 64}, {16, 32}, {8, 16}, {8, 8}, {8, 8}, {8, 8},  } },
-			{ 10, 0, 512, 768, 10, 13, true, {1572864, 1048576, 131072, 32768, 8192, 2048, 512, 256, 256, 256, },
-			{ {512, 768}, {256, 512}, {128, 256}, {64, 128}, {32, 64}, {16, 32}, {8, 16}, {8, 8}, {8, 8}, {8, 8},  } },
-			// kDataFormatB8G8R8A8Unorm, 256, 256, kTileModeThin_2dThin
-			{ 10, 0, 256, 256, 9, 14, false, {262144, 65536, 16384, 4096, 1024, 256, 256, 256, 256, },
-			{ {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},  } },
-			{ 10, 0, 256, 256, 9, 14, true, {262144, 65536, 16384, 4096, 1024, 256, 256, 256, 256, },
-			{ {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},  } },
-			// kDataFormatR32Float, 1920, 1080, kTileModeDepth_2dThin_256
-			{ 4, 7, 1920, 1080, 11, 2, false, {8355840, 12615680, 1048576, 262144, 65536, 16384, 2048, 1024, 1024, 1024, 1024, },
-			{ {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},  } },
-			{ 4, 7, 1920, 1080, 11, 2, true, {8847360, 12124160, 1048576, 262144, 65536, 16384, 2048, 1024, 1024, 1024, 1024, },
-			{ {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},  } },
-			// kDataFormatR8Unorm, 2048, 2048, kTileModeDisplay_LinearAligned
-			{ 1, 0, 2048, 2048, 12, 8, false, {4194304, 1048576, 262144, 65536, 16384, 4096, 2048, 1024, 512, 256, 256, 256, },
-			{ {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},  } },
-			{ 1, 0, 2048, 2048, 12, 8, true, {4194304, 1048576, 262144, 65536, 16384, 4096, 2048, 1024, 512, 256, 256, 256, },
-			{ {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},  } },
+			// kDataFormatB8G8R8A8UnormSrgb, 512, 512, 0, 0, kTileModeDisplay_LinearAligned
+			{ 10, 9, 512, 512, 512, 10, 8, false, {{1048576, 256}, {262144, 256}, {65536, 256}, {16384, 256}, {4096, 256}, {1024, 256}, {512, 256}, {256, 256}, {256, 256}, {256, 256}, }, { {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},  } },
+			{ 10, 9, 512, 512, 512, 10, 8, true, {{1048576, 256}, {262144, 256}, {65536, 256}, {16384, 256}, {4096, 256}, {1024, 256}, {512, 256}, {256, 256}, {256, 256}, {256, 256}, }, { {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},  } },
+			// kDataFormatB8G8R8A8UnormSrgb, 512, 512, 0, 0, kTileModeThin_1dThin
+			{ 10, 9, 512, 512, 512, 10, 13, false, {{1048576, 256}, {262144, 256}, {65536, 256}, {16384, 256}, {4096, 256}, {1024, 256}, {256, 256}, {256, 256}, {256, 256}, {256, 256}, }, { {512, 512}, {256, 256}, {128, 128}, {64, 64}, {32, 32}, {16, 16}, {8, 8}, {8, 8}, {8, 8}, {8, 8},  } },
+			{ 10, 9, 512, 512, 512, 10, 13, true, {{1048576, 256}, {262144, 256}, {65536, 256}, {16384, 256}, {4096, 256}, {1024, 256}, {256, 256}, {256, 256}, {256, 256}, {256, 256}, }, { {512, 512}, {256, 256}, {128, 128}, {64, 64}, {32, 32}, {16, 16}, {8, 8}, {8, 8}, {8, 8}, {8, 8},  } },
+			// kDataFormatBc3UnormSrgb, 512, 512, 0, 0, kTileModeThin_1dThin
+			{ 37, 9, 512, 512, 512, 10, 13, false, {{262144, 256}, {65536, 256}, {16384, 256}, {4096, 256}, {1024, 256}, {1024, 256}, {1024, 256}, {1024, 256}, {1024, 256}, {1024, 256}, }, { {128, 128}, {64, 64}, {32, 32}, {16, 16}, {8, 8}, {8, 8}, {8, 8}, {8, 8}, {8, 8}, {8, 8},  } },
+			{ 37, 9, 512, 512, 512, 10, 13, true, {{262144, 256}, {65536, 256}, {16384, 256}, {4096, 256}, {1024, 256}, {1024, 256}, {1024, 256}, {1024, 256}, {1024, 256}, {1024, 256}, }, { {128, 128}, {64, 64}, {32, 32}, {16, 16}, {8, 8}, {8, 8}, {8, 8}, {8, 8}, {8, 8}, {8, 8},  } },
+			// kDataFormatB8G8R8A8Unorm, 512, 512, 0, 0, kTileModeThin_1dThin
+			{ 10, 0, 512, 512, 512, 10, 13, false, {{1048576, 256}, {262144, 256}, {65536, 256}, {16384, 256}, {4096, 256}, {1024, 256}, {256, 256}, {256, 256}, {256, 256}, {256, 256}, }, { {512, 512}, {256, 256}, {128, 128}, {64, 64}, {32, 32}, {16, 16}, {8, 8}, {8, 8}, {8, 8}, {8, 8},  } },
+			{ 10, 0, 512, 512, 512, 10, 13, true, {{1048576, 256}, {262144, 256}, {65536, 256}, {16384, 256}, {4096, 256}, {1024, 256}, {256, 256}, {256, 256}, {256, 256}, {256, 256}, }, { {512, 512}, {256, 256}, {128, 128}, {64, 64}, {32, 32}, {16, 16}, {8, 8}, {8, 8}, {8, 8}, {8, 8},  } },
+			// kDataFormatB8G8R8A8Unorm, 512, 768, 0, 0, kTileModeThin_1dThin
+			{ 10, 0, 512, 768, 512, 10, 13, false, {{1572864, 256}, {1048576, 256}, {131072, 256}, {32768, 256}, {8192, 256}, {2048, 256}, {512, 256}, {256, 256}, {256, 256}, {256, 256}, }, { {512, 768}, {256, 512}, {128, 256}, {64, 128}, {32, 64}, {16, 32}, {8, 16}, {8, 8}, {8, 8}, {8, 8},  } },
+			{ 10, 0, 512, 768, 512, 10, 13, true, {{1572864, 256}, {1048576, 256}, {131072, 256}, {32768, 256}, {8192, 256}, {2048, 256}, {512, 256}, {256, 256}, {256, 256}, {256, 256}, }, { {512, 768}, {256, 512}, {128, 256}, {64, 128}, {32, 64}, {16, 32}, {8, 16}, {8, 8}, {8, 8}, {8, 8},  } },
+			// kDataFormatB8G8R8A8Unorm, 256, 256, 0, 0, kTileModeThin_2dThin
+			{ 10, 0, 256, 256, 256, 9, 14, false, {{262144, 32768}, {65536, 32768}, {16384, 32768}, {4096, 32768}, {1024, 32768}, {256, 32768}, {256, 32768}, {256, 32768}, {256, 32768}, }, { {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},  } },
+			{ 10, 0, 256, 256, 256, 9, 14, true, {{262144, 65536}, {65536, 65536}, {16384, 65536}, {4096, 65536}, {1024, 65536}, {256, 65536}, {256, 65536}, {256, 65536}, {256, 65536}, }, { {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},  } },
+			// kDataFormatB8G8R8A8Unorm, 1920, 1080, 1920, 1, kTileModeDisplay_2dThin
+			{ 10, 0, 1920, 1080, 1920, 1, 10, false, {{8355840, 32768}, }, { {0, 0},  } },
+			{ 10, 0, 1920, 1080, 1920, 1, 10, true, {{8847360, 65536}, }, { {0, 0},  } },
+			// kDataFormatB8G8R8A8Unorm, 3840, 2160, 3840, 1, kTileModeDisplay_2dThin
+			{ 10, 0, 3840, 2160, 3840, 1, 10, false, {{33423360, 32768}, }, { {0, 0},  } },
+			{ 10, 0, 3840, 2160, 3840, 1, 10, true, {{33423360, 65536}, }, { {0, 0},  } },
+			// kDataFormatR32Float, 1920, 1080, 1920, 1, kTileModeDepth_2dThin_256
+			{ 4, 7, 1920, 1080, 1920, 1, 2, false, {{8355840, 32768}, }, { {0, 0},  } },
+			{ 4, 7, 1920, 1080, 1920, 1, 2, true, {{8847360, 65536}, }, { {0, 0},  } },
+			// kDataFormatR8Unorm, 2048, 2048, 0, 0, kTileModeDisplay_LinearAligned
+			{ 1, 0, 2048, 2048, 2048, 12, 8, false, {{4194304, 256}, {1048576, 256}, {262144, 256}, {65536, 256}, {16384, 256}, {4096, 256}, {2048, 256}, {1024, 256}, {512, 256}, {256, 256}, {256, 256}, {256, 256}, }, { {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},  } },
+			{ 1, 0, 2048, 2048, 2048, 12, 8, true, {{4194304, 256}, {1048576, 256}, {262144, 256}, {65536, 256}, {16384, 256}, {4096, 256}, {2048, 256}, {1024, 256}, {512, 256}, {256, 256}, {256, 256}, {256, 256}, }, { {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},  } },
+			// kDataFormatB8G8R8A8Unorm, 1, 1, 64, 0, kTileModeDisplay_LinearAligned
+			{ 10, 0, 1, 1, 64, 1, 8, false, {{256, 256}, }, { {0, 0},  } },
+			{ 10, 0, 1, 1, 64, 1, 8, true, {{256, 256}, }, { {0, 0},  } },
 
 	    // clang-format on
 	};
@@ -733,18 +726,19 @@ void TileGetTextureSize(uint32_t dfmt, uint32_t nfmt, uint32_t width, uint32_t h
 
 	for (const auto& i: infos)
 	{
-		if (i.dfmt == dfmt && i.nfmt == nfmt && i.width == width && i.width == pitch && i.height == height && i.levels >= levels &&
+		if (i.dfmt == dfmt && i.nfmt == nfmt && i.width == width && i.pitch == pitch && i.height == height && i.levels >= levels &&
 		    i.tile == tile && i.neo == neo)
 		{
 			for (uint32_t l = 0; l < levels; l++)
 			{
 				if (total_size != nullptr)
 				{
-					*total_size += i.size[l];
+					total_size->size += i.size[l].size;
+					total_size->align = i.size[l].align;
 				}
 				if (level_sizes != nullptr)
 				{
-					level_sizes[l] = i.size[l];
+					level_sizes[l] = i.size[l].size;
 				}
 				if (padded_width != nullptr)
 				{
@@ -759,12 +753,13 @@ void TileGetTextureSize(uint32_t dfmt, uint32_t nfmt, uint32_t width, uint32_t h
 		}
 	}
 
-	if (tile == 8 && levels == 1 && dfmt == 10 && nfmt == 9)
+	if (tile == 8 && levels == 1 && ((dfmt == 10 && nfmt == 9) || (dfmt == 10 && nfmt == 0)))
 	{
 		uint32_t size = pitch * height * 4;
 		if (total_size != nullptr)
 		{
-			*total_size = size;
+			total_size->size  = size;
+			total_size->align = 256;
 		}
 		if (level_sizes != nullptr)
 		{

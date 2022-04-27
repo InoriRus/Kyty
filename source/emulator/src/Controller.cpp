@@ -72,6 +72,12 @@ struct PadControllerInformation
 	int      device_class;
 };
 
+struct PadVibrationParam
+{
+	uint8_t large_motor;
+	uint8_t small_motor;
+};
+
 struct ControllerState
 {
 	uint64_t time                                  = 0;
@@ -93,9 +99,15 @@ public:
 	void Axis(int id, Axis axis, int value);
 	void GetConnectionInfo(bool* flag, int* count);
 	void ReadState(ControllerState* state, bool* flag, int* count);
+	int  ReadStates(ControllerState* states, int states_num, bool* flag, int* count);
 
 private:
 	static constexpr uint32_t STATES_MAX = 64;
+
+	struct StatePrivate
+	{
+		bool obtained = false;
+	};
 
 	void                          CheckActive();
 	[[nodiscard]] ControllerState GetLastState() const;
@@ -107,6 +119,7 @@ private:
 	bool            m_connected       = false;
 	int             m_connected_count = 0;
 	ControllerState m_states[STATES_MAX];
+	StatePrivate    m_private[STATES_MAX];
 	ControllerState m_last_state;
 	uint32_t        m_states_num  = 0;
 	uint32_t        m_first_state = 0;
@@ -205,8 +218,12 @@ void GameController::AddState(const ControllerState& state)
 		m_first_state = (m_first_state + 1) % STATES_MAX;
 	}
 
-	m_states[(m_first_state + m_states_num) % STATES_MAX] = state;
-	m_last_state                                          = state;
+	auto index = (m_first_state + m_states_num) % STATES_MAX;
+
+	m_states[index] = state;
+	m_last_state    = state;
+
+	m_private[index].obtained = false;
 
 	m_states_num++;
 }
@@ -297,6 +314,48 @@ void GameController::ReadState(ControllerState* state, bool* flag, int* count)
 	*flag  = m_connected;
 	*count = m_connected_count;
 	*state = GetLastState();
+}
+
+int GameController::ReadStates(ControllerState* states, int states_num, bool* flag, int* count)
+{
+	EXIT_IF(flag == nullptr);
+	EXIT_IF(count == nullptr);
+	EXIT_IF(states == nullptr);
+	EXIT_IF(states_num < 1 || states_num > STATES_MAX);
+
+	Core::LockGuard lock(m_mutex);
+
+	*flag  = m_connected;
+	*count = m_connected_count;
+
+	int ret_num = 0;
+
+	if (m_connected)
+	{
+		if (m_states_num == 0)
+		{
+			ret_num   = 1;
+			states[0] = m_last_state;
+		} else
+		{
+			for (uint32_t i = 0; i < m_states_num; i++)
+			{
+				if (ret_num >= states_num)
+				{
+					break;
+				}
+				auto index = (m_first_state + i) % STATES_MAX;
+				if (!m_private[index].obtained)
+				{
+					m_private[index].obtained = true;
+
+					states[ret_num++] = m_states[index];
+				}
+			}
+		}
+	}
+
+	return ret_num;
 }
 
 void ControllerConnect(int id)
@@ -429,6 +488,74 @@ int KYTY_SYSV_ABI PadReadState(int handle, PadData* data)
 	data->timestamp              = state.time;
 	data->connected_count        = connected_count;
 	data->device_unique_data_len = 0;
+
+	return OK;
+}
+
+int KYTY_SYSV_ABI PadRead(int handle, PadData* data, int num)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(num < 1 || num > 64);
+	EXIT_NOT_IMPLEMENTED(handle != 1);
+	EXIT_NOT_IMPLEMENTED(data == nullptr);
+
+	EXIT_IF(g_controller == nullptr);
+
+	int             connected_count = 0;
+	bool            connected       = false;
+	ControllerState states[64];
+
+	int ret_num = g_controller->ReadStates(states, num, &connected, &connected_count);
+
+	if (!connected)
+	{
+		ret_num = 1;
+	}
+
+	for (int i = 0; i < ret_num; i++)
+	{
+		data[i].buttons                = states[i].buttons;
+		data[i].left_stick_x           = states[i].axes[static_cast<int>(Axis::LeftX)];
+		data[i].left_stick_y           = states[i].axes[static_cast<int>(Axis::LeftY)];
+		data[i].right_stick_x          = states[i].axes[static_cast<int>(Axis::RightX)];
+		data[i].right_stick_y          = states[i].axes[static_cast<int>(Axis::RightY)];
+		data[i].analog_buttons_l2      = states[i].axes[static_cast<int>(Axis::TriggerLeft)];
+		data[i].analog_buttons_r2      = states[i].axes[static_cast<int>(Axis::TriggerRight)];
+		data[i].orientation_x          = 0.0f;
+		data[i].orientation_y          = 0.0f;
+		data[i].orientation_z          = 0.0f;
+		data[i].orientation_w          = 1.0f;
+		data[i].acceleration_x         = 0.0f;
+		data[i].acceleration_y         = 0.0f;
+		data[i].acceleration_z         = 0.0f;
+		data[i].angular_velocity_x     = 0.0f;
+		data[i].angular_velocity_y     = 0.0f;
+		data[i].angular_velocity_z     = 0.0f;
+		data[i].touch_data_touch_num   = 0;
+		data[i].touch_data_touch0_x    = 0;
+		data[i].touch_data_touch0_y    = 0;
+		data[i].touch_data_touch0_id   = 1;
+		data[i].touch_data_touch1_x    = 0;
+		data[i].touch_data_touch1_y    = 0;
+		data[i].touch_data_touch1_id   = 2;
+		data[i].connected              = connected;
+		data[i].timestamp              = states[i].time;
+		data[i].connected_count        = connected_count;
+		data[i].device_unique_data_len = 0;
+	}
+
+	return ret_num;
+}
+
+int KYTY_SYSV_ABI PadSetVibration(int handle, const PadVibrationParam* param)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(handle != 1);
+
+	printf("\t large_motor = %d\n", static_cast<int>(param->large_motor));
+	printf("\t small_motor = %d\n", static_cast<int>(param->small_motor));
 
 	return OK;
 }

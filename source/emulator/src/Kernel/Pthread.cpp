@@ -1774,6 +1774,8 @@ int KYTY_SYSV_ABI PthreadCondSignal(PthreadCond* cond)
 {
 	PRINT_NAME();
 
+	EXIT_NOT_IMPLEMENTED(cond == nullptr);
+
 	if (cond == nullptr)
 	{
 		return KERNEL_ERROR_EINVAL;
@@ -2266,6 +2268,13 @@ int KYTY_SYSV_ABI PthreadGetname(Pthread thread, char* name)
 	return OK;
 }
 
+void KYTY_SYSV_ABI PthreadYield()
+{
+	PRINT_NAME();
+
+	sched_yield();
+}
+
 int KYTY_SYSV_ABI KernelClockGetres(KernelClockid clock_id, KernelTimespec* tp)
 {
 	PRINT_NAME();
@@ -2534,6 +2543,21 @@ void* KYTY_SYSV_ABI PthreadGetspecific(PthreadKey key)
 namespace Posix {
 
 LIB_NAME("Posix", "libkernel");
+
+int KYTY_SYSV_ABI pthread_create(LibKernel::Pthread* thread, const LibKernel::PthreadAttr* attr, LibKernel::pthread_entry_func_t entry,
+                                 void* arg)
+{
+	PRINT_NAME();
+
+	return POSIX_PTHREAD_CALL(LibKernel::PthreadCreate(thread, attr, entry, arg, ""));
+}
+
+int KYTY_SYSV_ABI pthread_join(LibKernel::Pthread thread, void** value)
+{
+	PRINT_NAME();
+
+	return POSIX_PTHREAD_CALL(LibKernel::PthreadJoin(thread, value));
+}
 
 int KYTY_SYSV_ABI pthread_cond_broadcast(LibKernel::PthreadCond* cond)
 {

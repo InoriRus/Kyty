@@ -18,6 +18,7 @@ LIB_DEFINE(InitGraphicsDriver_1)
 	LIB_FUNC("bQVd5YzCal0", Graphics::GraphicsSetPsShader);
 	LIB_FUNC("5uFKckiJYRM", Graphics::GraphicsSetPsShader350);
 	LIB_FUNC("4MgRw-bVNQU", Graphics::GraphicsUpdatePsShader);
+	LIB_FUNC("mLVL7N7BVBg", Graphics::GraphicsUpdatePsShader350);
 	LIB_FUNC("Kx-h-nWQJ8A", Graphics::GraphicsSetCsShaderWithModifier);
 	LIB_FUNC("HlTPoZ-oY7Y", Graphics::GraphicsDrawIndex);
 	LIB_FUNC("GGsn7jMTxw4", Graphics::GraphicsDrawIndexAuto);

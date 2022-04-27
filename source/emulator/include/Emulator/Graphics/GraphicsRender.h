@@ -69,24 +69,29 @@ private:
 void GraphicsRenderInit();
 void GraphicsRenderCreateContext();
 
-void GraphicsRenderDrawIndex(CommandBuffer* buffer, HW::HardwareContext* ctx, HW::UserConfig* ucfg, uint32_t index_type_and_size,
-                             uint32_t index_count, const void* index_addr, uint32_t flags, uint32_t type);
-void GraphicsRenderDrawIndexAuto(CommandBuffer* buffer, HW::HardwareContext* ctx, HW::UserConfig* ucfg, uint32_t index_count,
-                                 uint32_t flags);
-void GraphicsRenderWriteAtEndOfPipe(CommandBuffer* buffer, uint64_t* dst_gpu_addr, uint64_t value);
-void GraphicsRenderWriteAtEndOfPipeClockCounter(CommandBuffer* buffer, uint64_t* dst_gpu_addr);
-void GraphicsRenderWriteAtEndOfPipe(CommandBuffer* buffer, uint32_t* dst_gpu_addr, uint32_t value);
-void GraphicsRenderWriteAtEndOfPipeGds(CommandBuffer* buffer, uint32_t* dst_gpu_addr, uint32_t dw_offset, uint32_t dw_num);
-void GraphicsRenderWriteAtEndOfPipeWithInterruptWriteBackFlip(CommandBuffer* buffer, uint32_t* dst_gpu_addr, uint32_t value, int handle,
-                                                              int index, int flip_mode, int64_t flip_arg);
-void GraphicsRenderWriteAtEndOfPipeWithFlip(CommandBuffer* buffer, uint32_t* dst_gpu_addr, uint32_t value, int handle, int index,
-                                            int flip_mode, int64_t flip_arg);
-void GraphicsRenderWriteAtEndOfPipeWithWriteBack(CommandBuffer* buffer, uint64_t* dst_gpu_addr, uint64_t value);
-void GraphicsRenderWriteAtEndOfPipeWithInterruptWriteBack(CommandBuffer* buffer, uint64_t* dst_gpu_addr, uint64_t value);
-void GraphicsRenderWriteAtEndOfPipeWithInterrupt(CommandBuffer* buffer, uint64_t* dst_gpu_addr, uint64_t value);
+void GraphicsRenderDrawIndex(uint64_t submit_id, CommandBuffer* buffer, HW::HardwareContext* ctx, HW::UserConfig* ucfg,
+                             uint32_t index_type_and_size, uint32_t index_count, const void* index_addr, uint32_t flags, uint32_t type);
+void GraphicsRenderDrawIndexAuto(uint64_t submit_id, CommandBuffer* buffer, HW::HardwareContext* ctx, HW::UserConfig* ucfg,
+                                 uint32_t index_count, uint32_t flags);
+void GraphicsRenderWriteAtEndOfPipe64(uint64_t submit_id, CommandBuffer* buffer, uint64_t* dst_gpu_addr, uint64_t value);
+void GraphicsRenderWriteAtEndOfPipeClockCounter(uint64_t submit_id, CommandBuffer* buffer, uint64_t* dst_gpu_addr);
+void GraphicsRenderWriteAtEndOfPipe32(uint64_t submit_id, CommandBuffer* buffer, uint32_t* dst_gpu_addr, uint32_t value);
+void GraphicsRenderWriteAtEndOfPipeGds32(uint64_t submit_id, CommandBuffer* buffer, uint32_t* dst_gpu_addr, uint32_t dw_offset,
+                                         uint32_t dw_num);
+void GraphicsRenderWriteAtEndOfPipeWithInterruptWriteBackFlip32(uint64_t submit_id, CommandBuffer* buffer, uint32_t* dst_gpu_addr,
+                                                                uint32_t value, int handle, int index, int flip_mode, int64_t flip_arg);
+void GraphicsRenderWriteAtEndOfPipeWithFlip32(uint64_t submit_id, CommandBuffer* buffer, uint32_t* dst_gpu_addr, uint32_t value, int handle,
+                                              int index, int flip_mode, int64_t flip_arg);
+void GraphicsRenderWriteAtEndOfPipeOnlyFlip(uint64_t submit_id, CommandBuffer* buffer, int handle, int index, int flip_mode,
+                                            int64_t flip_arg);
+void GraphicsRenderWriteAtEndOfPipeWithWriteBack64(uint64_t submit_id, CommandBuffer* buffer, uint64_t* dst_gpu_addr, uint64_t value);
+void GraphicsRenderWriteAtEndOfPipeWithInterruptWriteBack64(uint64_t submit_id, CommandBuffer* buffer, uint64_t* dst_gpu_addr,
+                                                            uint64_t value);
+void GraphicsRenderWriteAtEndOfPipeWithInterrupt64(uint64_t submit_id, CommandBuffer* buffer, uint64_t* dst_gpu_addr, uint64_t value);
+void GraphicsRenderWriteAtEndOfPipeWithInterrupt32(uint64_t submit_id, CommandBuffer* buffer, uint32_t* dst_gpu_addr, uint32_t value);
 void GraphicsRenderWriteBack();
-void GraphicsRenderDispatchDirect(CommandBuffer* buffer, HW::HardwareContext* ctx, uint32_t thread_group_x, uint32_t thread_group_y,
-                                  uint32_t thread_group_z, uint32_t mode);
+void GraphicsRenderDispatchDirect(uint64_t submit_id, CommandBuffer* buffer, HW::HardwareContext* ctx, uint32_t thread_group_x,
+                                  uint32_t thread_group_y, uint32_t thread_group_z, uint32_t mode);
 void GraphicsRenderMemoryBarrier(CommandBuffer* buffer);
 void GraphicsRenderRenderTextureBarrier(CommandBuffer* buffer, uint64_t vaddr, uint64_t size);
 void GraphicsRenderDepthStencilBarrier(CommandBuffer* buffer, uint64_t vaddr, uint64_t size);

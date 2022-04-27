@@ -54,15 +54,18 @@ public:
 	virtual ~LabelManager() { KYTY_NOT_IMPLEMENTED; }
 	KYTY_CLASS_NO_COPY(LabelManager);
 
-	Label* Create(GraphicContext* ctx, uint64_t* dst_gpu_addr, uint64_t value, LabelGpuObject::callback_t callback_1,
-	              LabelGpuObject::callback_t callback_2, const uint64_t* args);
-	Label* Create(GraphicContext* ctx, uint32_t* dst_gpu_addr, uint32_t value, LabelGpuObject::callback_t callback_1,
-	              LabelGpuObject::callback_t callback_2, const uint64_t* args);
+	Label* Create64(GraphicContext* ctx, uint64_t* dst_gpu_addr, uint64_t value, LabelGpuObject::callback_t callback_1,
+	                LabelGpuObject::callback_t callback_2, const uint64_t* args);
+	Label* Create32(GraphicContext* ctx, uint32_t* dst_gpu_addr, uint32_t value, LabelGpuObject::callback_t callback_1,
+	                LabelGpuObject::callback_t callback_2, const uint64_t* args);
 	void   Delete(Label* label);
 	void   Set(CommandBuffer* buffer, Label* label);
 
 private:
 	static void ThreadRun(void* data);
+
+	bool        Remove(Label* label);
+	static void Destroy(Label* label);
 
 	Core::Mutex    m_mutex;
 	Core::CondVar  m_cond_var;
@@ -104,17 +107,23 @@ void LabelManager::ThreadRun(void* data)
 			}
 		}
 
-		for (auto& label: deleted_labels)
-		{
-			manager->Delete(label);
-		}
-
 		if (active_count == 0)
 		{
 			manager->m_cond_var.Wait(&manager->m_mutex);
 		}
 
+		for (auto& label: deleted_labels)
+		{
+			bool removed = manager->Remove(label);
+			EXIT_NOT_IMPLEMENTED(!removed);
+		}
+
 		manager->m_mutex.Unlock();
+
+		for (auto& label: deleted_labels)
+		{
+			Destroy(label);
+		}
 
 		for (auto& label: fired_labels)
 		{
@@ -151,11 +160,11 @@ void LabelManager::ThreadRun(void* data)
 	}
 }
 
-Label* LabelManager::Create(GraphicContext* ctx, uint64_t* dst_gpu_addr, uint64_t value, LabelGpuObject::callback_t callback_1,
-                            LabelGpuObject::callback_t callback_2, const uint64_t* args)
+Label* LabelManager::Create64(GraphicContext* ctx, uint64_t* dst_gpu_addr, uint64_t value, LabelGpuObject::callback_t callback_1,
+                              LabelGpuObject::callback_t callback_2, const uint64_t* args)
 {
 	EXIT_IF(ctx == nullptr);
-	EXIT_IF(dst_gpu_addr == nullptr);
+	EXIT_IF(args == nullptr);
 
 	Core::LockGuard lock(m_mutex);
 
@@ -190,11 +199,10 @@ Label* LabelManager::Create(GraphicContext* ctx, uint64_t* dst_gpu_addr, uint64_
 	return label;
 }
 
-Label* LabelManager::Create(GraphicContext* ctx, uint32_t* dst_gpu_addr, uint32_t value, LabelGpuObject::callback_t callback_1,
-                            LabelGpuObject::callback_t callback_2, const uint64_t* args)
+Label* LabelManager::Create32(GraphicContext* ctx, uint32_t* dst_gpu_addr, uint32_t value, LabelGpuObject::callback_t callback_1,
+                              LabelGpuObject::callback_t callback_2, const uint64_t* args)
 {
 	EXIT_IF(ctx == nullptr);
-	EXIT_IF(dst_gpu_addr == nullptr);
 	EXIT_IF(args == nullptr);
 
 	Core::LockGuard lock(m_mutex);
@@ -229,7 +237,7 @@ Label* LabelManager::Create(GraphicContext* ctx, uint32_t* dst_gpu_addr, uint32_
 	return label;
 }
 
-void LabelManager::Delete(Label* label)
+bool LabelManager::Remove(Label* label)
 {
 	EXIT_IF(label == nullptr);
 	EXIT_IF(label->event == nullptr);
@@ -246,18 +254,35 @@ void LabelManager::Delete(Label* label)
 	if (label->status == LabelStatus::Active)
 	{
 		label->status = LabelStatus::ActiveDeleted;
-	} else
+
+		return false;
+	}
+
+	m_labels.RemoveAt(index);
+
+	return true;
+}
+
+void LabelManager::Destroy(Label* label)
+{
+	EXIT_IF(label == nullptr);
+	EXIT_IF(label->event == nullptr);
+	EXIT_IF(label->device == nullptr);
+	EXIT_IF(label->buffer == nullptr);
+
+	// All submitted commands that refer to event must have completed execution
+	label->buffer->CommandProcessorWait();
+
+	vkDestroyEvent(label->device, label->event, nullptr);
+
+	delete label;
+}
+
+void LabelManager::Delete(Label* label)
+{
+	if (Remove(label))
 	{
-		m_labels.RemoveAt(index);
-
-		EXIT_IF(label->buffer == nullptr);
-
-		// All submitted commands that refer to event must have completed execution
-		label->buffer->CommandProcessorWait();
-
-		vkDestroyEvent(label->device, label->event, nullptr);
-
-		delete label;
+		Destroy(label);
 	}
 }
 
@@ -300,20 +325,20 @@ void LabelInit()
 	g_label_manager = new LabelManager;
 }
 
-Label* LabelCreate(GraphicContext* ctx, uint64_t* dst_gpu_addr, uint64_t value, LabelGpuObject::callback_t callback_1,
-                   LabelGpuObject::callback_t callback_2, const uint64_t* args)
+Label* LabelCreate64(GraphicContext* ctx, uint64_t* dst_gpu_addr, uint64_t value, LabelGpuObject::callback_t callback_1,
+                     LabelGpuObject::callback_t callback_2, const uint64_t* args)
 {
 	EXIT_IF(g_label_manager == nullptr);
 
-	return g_label_manager->Create(ctx, dst_gpu_addr, value, callback_1, callback_2, args);
+	return g_label_manager->Create64(ctx, dst_gpu_addr, value, callback_1, callback_2, args);
 }
 
-Label* LabelCreate(GraphicContext* ctx, uint32_t* dst_gpu_addr, uint32_t value, LabelGpuObject::callback_t callback_1,
-                   LabelGpuObject::callback_t callback_2, const uint64_t* args)
+Label* LabelCreate32(GraphicContext* ctx, uint32_t* dst_gpu_addr, uint32_t value, LabelGpuObject::callback_t callback_1,
+                     LabelGpuObject::callback_t callback_2, const uint64_t* args)
 {
 	EXIT_IF(g_label_manager == nullptr);
 
-	return g_label_manager->Create(ctx, dst_gpu_addr, value, callback_1, callback_2, args);
+	return g_label_manager->Create32(ctx, dst_gpu_addr, value, callback_1, callback_2, args);
 }
 
 void LabelDelete(Label* label)
@@ -343,10 +368,10 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 	auto callback_1 = reinterpret_cast<LabelGpuObject::callback_t>(params[LabelGpuObject::PARAM_CALLBACK_1]);
 	auto callback_2 = reinterpret_cast<LabelGpuObject::callback_t>(params[LabelGpuObject::PARAM_CALLBACK_2]);
 
-	auto* label_obj = (*size == 8 ? LabelCreate(ctx, reinterpret_cast<uint64_t*>(*vaddr), value, callback_1, callback_2,
-	                                            params + LabelGpuObject::PARAM_ARG_1)
-	                              : (*size == 4 ? LabelCreate(ctx, reinterpret_cast<uint32_t*>(*vaddr), static_cast<uint32_t>(value),
-	                                                          callback_1, callback_2, params + LabelGpuObject::PARAM_ARG_1)
+	auto* label_obj = (*size == 8 ? LabelCreate64(ctx, reinterpret_cast<uint64_t*>(*vaddr), value, callback_1, callback_2,
+	                                              params + LabelGpuObject::PARAM_ARG_1)
+	                              : (*size == 4 ? LabelCreate32(ctx, reinterpret_cast<uint32_t*>(*vaddr), static_cast<uint32_t>(value),
+	                                                            callback_1, callback_2, params + LabelGpuObject::PARAM_ARG_1)
 	                                            : nullptr));
 
 	EXIT_NOT_IMPLEMENTED(label_obj == nullptr);

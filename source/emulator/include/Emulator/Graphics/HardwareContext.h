@@ -305,16 +305,42 @@ struct ColorControl
 	uint8_t op   = 0xCC;
 };
 
+struct ScanModeControl
+{
+	bool msaa_enable          = false;
+	bool vport_scissor_enable = false;
+	bool line_stipple_enable  = false;
+};
+
+struct AaSampleControl
+{
+	uint64_t centroid_priority = 0;
+	uint32_t locations[16]     = {};
+};
+
+struct AaConfig
+{
+	uint8_t msaa_num_samples      = 0;
+	bool    aa_mask_centroid_dtmn = false;
+	uint8_t max_sample_dist       = 0;
+	uint8_t msaa_exposed_samples  = 0;
+};
+
 struct Viewport
 {
-	float zmin    = 0.0f;
-	float zmax    = 0.0f;
-	float xscale  = 0.0f;
-	float xoffset = 0.0f;
-	float yscale  = 0.0f;
-	float yoffset = 0.0f;
-	float zscale  = 0.0f;
-	float zoffset = 0.0f;
+	float zmin                                  = 0.0f;
+	float zmax                                  = 0.0f;
+	float xscale                                = 0.0f;
+	float xoffset                               = 0.0f;
+	float yscale                                = 0.0f;
+	float yoffset                               = 0.0f;
+	float zscale                                = 0.0f;
+	float zoffset                               = 0.0f;
+	int   viewport_scissor_left                 = 0;
+	int   viewport_scissor_top                  = 0;
+	int   viewport_scissor_right                = 0;
+	int   viewport_scissor_bottom               = 0;
+	bool  viewport_scissor_window_offset_enable = false;
 };
 
 struct ScreenViewport
@@ -578,24 +604,30 @@ public:
 		m_cs.cs_shader_modifier = shader_modifier;
 	}
 
-	[[nodiscard]] const BlendColor&     GetBlendColor() const { return m_blend_color; }
-	void                                SetBlendColor(const BlendColor& color) { m_blend_color = color; }
-	[[nodiscard]] const ClipControl&    GetClipControl() const { return m_clip_control; }
-	void                                SetClipControl(const ClipControl& control) { m_clip_control = control; }
-	[[nodiscard]] const RenderControl&  GetRenderControl() const { return m_render_control; }
-	void                                SetRenderControl(const RenderControl& control) { m_render_control = control; }
-	[[nodiscard]] const DepthControl&   GetDepthControl() const { return m_depth_control; }
-	void                                SetDepthControl(const DepthControl& control) { m_depth_control = control; }
-	[[nodiscard]] const ModeControl&    GetModeControl() const { return m_mode_control; }
-	void                                SetModeControl(const ModeControl& control) { m_mode_control = control; }
-	[[nodiscard]] const EqaaControl&    GetEqaaControl() const { return m_eqaa_control; }
-	void                                SetEqaaControl(const EqaaControl& control) { m_eqaa_control = control; }
-	[[nodiscard]] const StencilControl& GetStencilControl() const { return m_stencil_control; }
-	void                                SetStencilControl(const StencilControl& control) { m_stencil_control = control; }
-	[[nodiscard]] const StencilMask&    GetStencilMask() const { return m_stencil_mask; }
-	void                                SetStencilMask(const StencilMask& mask) { m_stencil_mask = mask; }
-	[[nodiscard]] const ColorControl&   GetColorControl() const { return m_color_control; }
-	void                                SetColorControl(const ColorControl& control) { m_color_control = control; }
+	[[nodiscard]] const BlendColor&      GetBlendColor() const { return m_blend_color; }
+	void                                 SetBlendColor(const BlendColor& color) { m_blend_color = color; }
+	[[nodiscard]] const ClipControl&     GetClipControl() const { return m_clip_control; }
+	void                                 SetClipControl(const ClipControl& control) { m_clip_control = control; }
+	[[nodiscard]] const RenderControl&   GetRenderControl() const { return m_render_control; }
+	void                                 SetRenderControl(const RenderControl& control) { m_render_control = control; }
+	[[nodiscard]] const DepthControl&    GetDepthControl() const { return m_depth_control; }
+	void                                 SetDepthControl(const DepthControl& control) { m_depth_control = control; }
+	[[nodiscard]] const ModeControl&     GetModeControl() const { return m_mode_control; }
+	void                                 SetModeControl(const ModeControl& control) { m_mode_control = control; }
+	[[nodiscard]] const EqaaControl&     GetEqaaControl() const { return m_eqaa_control; }
+	void                                 SetEqaaControl(const EqaaControl& control) { m_eqaa_control = control; }
+	[[nodiscard]] const StencilControl&  GetStencilControl() const { return m_stencil_control; }
+	void                                 SetStencilControl(const StencilControl& control) { m_stencil_control = control; }
+	[[nodiscard]] const StencilMask&     GetStencilMask() const { return m_stencil_mask; }
+	void                                 SetStencilMask(const StencilMask& mask) { m_stencil_mask = mask; }
+	[[nodiscard]] const ColorControl&    GetColorControl() const { return m_color_control; }
+	void                                 SetColorControl(const ColorControl& control) { m_color_control = control; }
+	[[nodiscard]] const ScanModeControl& GetScanModeControl() const { return m_scan_mode_control; }
+	void                                 SetScanModeControl(const ScanModeControl& control) { m_scan_mode_control = control; }
+	[[nodiscard]] const AaSampleControl& GetAaSampleControl() const { return m_aa_sample_control; }
+	void                                 SetAaSampleControl(const AaSampleControl& control) { m_aa_sample_control = control; }
+	[[nodiscard]] const AaConfig&        GetAaConfig() const { return m_aa_config; }
+	void                                 SetAaConfig(const AaConfig& config) { m_aa_config = config; }
 
 	void SetVsUserSgpr(uint32_t id, uint32_t value, UserSgprType type)
 	{
@@ -636,13 +668,17 @@ public:
 private:
 	float m_line_width = 1.0f;
 
-	BlendControl   m_blend_control[8];
-	BlendColor     m_blend_color;
-	RenderTarget   m_render_targets[8];
-	uint32_t       m_render_target_mask = 0;
-	ScreenViewport m_screen_viewport;
-	ClipControl    m_clip_control;
-	ColorControl   m_color_control;
+	BlendControl    m_blend_control[8];
+	BlendColor      m_blend_color;
+	RenderTarget    m_render_targets[8];
+	uint32_t        m_render_target_mask = 0;
+	ScreenViewport  m_screen_viewport;
+	ClipControl     m_clip_control;
+	ColorControl    m_color_control;
+	ScanModeControl m_scan_mode_control;
+
+	AaSampleControl m_aa_sample_control;
+	AaConfig        m_aa_config;
 
 	VertexShaderInfo  m_vs;
 	PixelShaderInfo   m_ps;

@@ -18,6 +18,8 @@ LIB_DEFINE(InitPad_1)
 	LIB_FUNC("clVvL4ZDntw", Controller::PadSetMotionSensorState);
 	LIB_FUNC("gjP9-KQzoUk", Controller::PadGetControllerInformation);
 	LIB_FUNC("YndgXqQVV7c", Controller::PadReadState);
+	LIB_FUNC("q1cHNfGycLI", Controller::PadRead);
+	LIB_FUNC("yFVnOdGxvZY", Controller::PadSetVibration);
 }
 
 } // namespace Kyty::Libs

@@ -6,6 +6,8 @@
 #include "Emulator/Libs/Libs.h"
 #include "Emulator/SymbolDatabase.h"
 
+#include <cstdio>
+
 #ifdef KYTY_EMU_ENABLED
 
 namespace Kyty::Libs {
@@ -60,6 +62,16 @@ static KYTY_SYSV_ABI int UserServiceGetLoginUserIdList(UserServiceLoginUserIdLis
 	return OK;
 }
 
+static KYTY_SYSV_ABI int UserServiceGetUserName(int user_id, char* name, size_t size)
+{
+	EXIT_NOT_IMPLEMENTED(user_id != 1);
+	EXIT_NOT_IMPLEMENTED(size < 5);
+
+	snprintf(name, size, "%s", "Kyty");
+
+	return OK;
+}
+
 } // namespace UserService
 
 LIB_DEFINE(InitUserService_1)
@@ -68,6 +80,7 @@ LIB_DEFINE(InitUserService_1)
 	LIB_FUNC("CdWp0oHWGr0", UserService::UserServiceGetInitialUser);
 	LIB_FUNC("yH17Q6NWtVg", UserService::UserServiceGetEvent);
 	LIB_FUNC("fPhymKNvK-A", UserService::UserServiceGetLoginUserIdList);
+	LIB_FUNC("1xxcMiGu2fo", UserService::UserServiceGetUserName);
 }
 
 } // namespace Kyty::Libs

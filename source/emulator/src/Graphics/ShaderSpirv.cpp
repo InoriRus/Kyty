@@ -2036,16 +2036,23 @@ KYTY_RECOMPILER_FUNC(Recompile_Exp_Mrt0OffOffComprVmDone)
 {
 	EXIT_NOT_IMPLEMENTED(index == 0 || index + 1 >= code.GetInstructions().Size());
 
-	const auto& prev_inst = code.GetInstructions().At(index - 1);
-	const auto& inst      = code.GetInstructions().At(index);
-	const auto& next_inst = code.GetInstructions().At(index + 1);
-
-	if (!(prev_inst.type == ShaderInstructionType::SMovB64 && prev_inst.format == ShaderInstructionFormat::Sdst2Ssrc02 &&
-	      prev_inst.dst.type == ShaderOperandType::ExecLo && prev_inst.src[0].type == ShaderOperandType::IntegerInlineConstant &&
-	      prev_inst.src[0].constant.i == 0 && next_inst.type == ShaderInstructionType::SEndpgm))
+	if (!code.IsDiscardInstruction(index))
 	{
 		return false;
 	}
+
+	//	const auto& prev_inst = code.GetInstructions().At(index - 1);
+	//	const auto& inst      = code.GetInstructions().At(index);
+	//	const auto& next_inst = code.GetInstructions().At(index + 1);
+	//
+	//	if (!(prev_inst.type == ShaderInstructionType::SMovB64 && prev_inst.format == ShaderInstructionFormat::Sdst2Ssrc02 &&
+	//	      prev_inst.dst.type == ShaderOperandType::ExecLo && prev_inst.src[0].type == ShaderOperandType::IntegerInlineConstant &&
+	//	      prev_inst.src[0].constant.i == 0 && next_inst.type == ShaderInstructionType::SEndpgm))
+	//	{
+	//		return false;
+	//	}
+
+	const auto& inst = code.GetInstructions().At(index);
 
 	const auto* info = spirv->GetPsInputInfo();
 
@@ -3188,7 +3195,7 @@ KYTY_RECOMPILER_FUNC(Recompile_SCbranchExecz_Label)
 
 	EXIT_NOT_IMPLEMENTED(!operand_is_constant(inst.src[0]));
 
-	String label = String::FromPrintf("label_%04" PRIx32 "_%04" PRIx32, inst.pc + 4 + inst.src[0].constant.i, inst.pc);
+	String label = ShaderLabel(inst).ToString();
 
 	static const char32_t* text = UR"(
         %execz_u_<index> = OpLoad %uint %execz
@@ -3209,17 +3216,30 @@ KYTY_RECOMPILER_FUNC(Recompile_SCbranchScc0_Label)
 
 	EXIT_NOT_IMPLEMENTED(!operand_is_constant(inst.src[0]));
 
-	String label = String::FromPrintf("label_%04" PRIx32 "_%04" PRIx32, inst.pc + 4 + inst.src[0].constant.i, inst.pc);
+	auto   label     = ShaderLabel(inst);
+	String label_str = label.ToString();
 
-	static const char32_t* text = UR"(
+	// TODO(): analyze control flow graph
+	bool discard = code.IsDiscardBlock(label.GetDst());
+
+	static const char32_t* text_variant_a = UR"(
         %scc_u_<index> = OpLoad %uint %scc
         %scc_b_<index> = OpIEqual %bool %scc_u_<index> %uint_0
                OpSelectionMerge %<label> None
                OpBranchConditional %scc_b_<index> %<label> %t230_<index>
         %t230_<index> = OpLabel
 )";
+	static const char32_t* text_variant_b = UR"(
+        %scc_u_<index> = OpLoad %uint %scc
+        %scc_b_<index> = OpIEqual %bool %scc_u_<index> %uint_0
+               OpSelectionMerge %t230_<index> None
+               OpBranchConditional %scc_b_<index> %<label> %t230_<index>
+        %t230_<index> = OpLabel
+)";
 
-	*dst_source += String(text).ReplaceStr(U"<index>", String::FromPrintf("%u", index)).ReplaceStr(U"<label>", label);
+	*dst_source += String(discard ? text_variant_b : text_variant_a)
+	                   .ReplaceStr(U"<index>", String::FromPrintf("%u", index))
+	                   .ReplaceStr(U"<label>", label_str);
 
 	return true;
 }
@@ -6158,7 +6178,7 @@ void Spirv::WriteInstructions()
 		for (uint32_t i = labels.Size(); i > 0; i--)
 		{
 			auto label = labels.At(i - 1);
-			if (index > 0 && label.dst == inst.pc)
+			if (index > 0 && label.GetDst() == inst.pc)
 			{
 				static const char32_t* text = UR"(
                    <branch>
@@ -6170,7 +6190,7 @@ void Spirv::WriteInstructions()
 
 				m_source += String(text)
 				                .ReplaceStr(U"<branch>", (skip_branch ? U"" : U"OpBranch %<label>"))
-				                .ReplaceStr(U"<label>", String::FromPrintf("label_%04" PRIx32 "_%04" PRIx32, label.dst, label.src));
+				                .ReplaceStr(U"<label>", label.ToString());
 			}
 		}
 

@@ -16,18 +16,19 @@
 #include <thread>
 
 //#define KYTY_DEBUG_LOCKS
+//#define KYTY_DEBUG_LOCKS_TIMED
 
 namespace Kyty::Core {
 
 using thread_id_t = std::thread::id;
 
-#ifdef KYTY_DEBUG_LOCKS
+#if defined(KYTY_DEBUG_LOCKS) || defined(KYTY_DEBUG_LOCKS_TIMED)
 constexpr auto DBG_TRY_SECONDS = std::chrono::seconds(15);
 #endif
 
 struct MutexPrivate
 {
-#ifdef KYTY_DEBUG_LOCKS
+#if defined(KYTY_DEBUG_LOCKS) || defined(KYTY_DEBUG_LOCKS_TIMED)
 	std::recursive_timed_mutex m_mutex;
 #else
 	std::recursive_mutex m_mutex;
@@ -480,7 +481,20 @@ void Mutex::Lock()
 		m_mutex->m_mutex.lock();
 	}
 #else
+#ifdef KYTY_DEBUG_LOCKS_TIMED
+	bool                 locked = false;
+	do
+	{
+		locked = m_mutex->m_mutex.try_lock_for(DBG_TRY_SECONDS);
+
+		if (!locked)
+		{
+			EXIT("lock timeout!");
+		}
+	} while (!locked);
+#else
 	m_mutex->m_mutex.lock();
+#endif
 #endif
 }
 
@@ -523,7 +537,7 @@ CondVar::~CondVar()
 
 void CondVar::Wait(Mutex* mutex)
 {
-#ifdef KYTY_DEBUG_LOCKS
+#if defined(KYTY_DEBUG_LOCKS) || defined(KYTY_DEBUG_LOCKS_TIMED)
 	std::unique_lock<std::recursive_timed_mutex> cpp_lock(mutex->m_mutex->m_mutex, std::adopt_lock_t());
 #else
 	std::unique_lock<std::recursive_mutex> cpp_lock(mutex->m_mutex->m_mutex, std::adopt_lock_t());
@@ -548,7 +562,7 @@ void CondVar::Wait(Mutex* mutex)
 
 void CondVar::WaitFor(Mutex* mutex, uint32_t micros)
 {
-#ifdef KYTY_DEBUG_LOCKS
+#if defined(KYTY_DEBUG_LOCKS) || defined(KYTY_DEBUG_LOCKS_TIMED)
 	std::unique_lock<std::recursive_timed_mutex> cpp_lock(mutex->m_mutex->m_mutex, std::adopt_lock_t());
 #else
 	std::unique_lock<std::recursive_mutex> cpp_lock(mutex->m_mutex->m_mutex, std::adopt_lock_t());

@@ -69,10 +69,15 @@ public:
 	bool     AudioOutSetVolume(Id handle, uint32_t bitflag, const int* volume);
 	uint32_t AudioOutOutputs(OutputParam* params, uint32_t num);
 
-	static constexpr int PORTS_MAX = 32;
+	Id       AudioInOpen(uint32_t type, uint32_t samples_num, uint32_t freq, Format format);
+	bool     AudioInValid(Id handle);
+	uint32_t AudioInInput(Id handle, void* dest);
+
+	static constexpr int OUT_PORTS_MAX = 32;
+	static constexpr int IN_PORTS_MAX  = 8;
 
 private:
-	struct Port
+	struct PortOut
 	{
 		bool     used             = false;
 		int      type             = 0;
@@ -84,8 +89,19 @@ private:
 		int      volume[8]        = {};
 	};
 
+	struct PortIn
+	{
+		bool     used            = false;
+		uint32_t type            = 0;
+		uint32_t samples_num     = 0;
+		uint32_t freq            = 0;
+		Format   format          = Format::Unknown;
+		uint64_t last_input_time = 0;
+	};
+
 	Core::Mutex m_mutex;
-	Port        m_ports[PORTS_MAX];
+	PortOut     m_out_ports[OUT_PORTS_MAX];
+	PortIn      m_in_ports[IN_PORTS_MAX];
 };
 
 static Audio* g_audio = nullptr;
@@ -105,11 +121,11 @@ Audio::Id Audio::AudioOutOpen(int type, uint32_t samples_num, uint32_t freq, For
 {
 	Core::LockGuard lock(m_mutex);
 
-	for (int id = 0; id < PORTS_MAX; id++)
+	for (int id = 0; id < OUT_PORTS_MAX; id++)
 	{
-		if (!m_ports[id].used)
+		if (!m_out_ports[id].used)
 		{
-			auto& port = m_ports[id];
+			auto& port = m_out_ports[id];
 
 			port.used             = true;
 			port.type             = type;
@@ -147,7 +163,7 @@ bool Audio::AudioOutValid(Id handle)
 {
 	Core::LockGuard lock(m_mutex);
 
-	return (handle.GetId() >= 0 && handle.GetId() < PORTS_MAX && m_ports[handle.GetId()].used);
+	return (handle.GetId() >= 0 && handle.GetId() < OUT_PORTS_MAX && m_out_ports[handle.GetId()].used);
 }
 
 bool Audio::AudioOutSetVolume(Id handle, uint32_t bitflag, const int* volume)
@@ -156,7 +172,7 @@ bool Audio::AudioOutSetVolume(Id handle, uint32_t bitflag, const int* volume)
 
 	if (AudioOutValid(handle))
 	{
-		auto& port = m_ports[handle.GetId()];
+		auto& port = m_out_ports[handle.GetId()];
 
 		for (int i = 0; i < port.channels_num; i++, bitflag >>= 1u)
 		{
@@ -193,7 +209,7 @@ uint32_t Audio::AudioOutOutputs(OutputParam* params, uint32_t num)
 	EXIT_NOT_IMPLEMENTED(num == 0);
 	EXIT_NOT_IMPLEMENTED(!AudioOutValid(params[0].handle));
 
-	const auto& first_port = m_ports[params[0].handle.GetId()];
+	const auto& first_port = m_out_ports[params[0].handle.GetId()];
 
 	uint64_t block_time   = (1000000 * first_port.samples_num) / first_port.freq;
 	uint64_t current_time = LibKernel::KernelGetProcessTime();
@@ -202,20 +218,78 @@ uint32_t Audio::AudioOutOutputs(OutputParam* params, uint32_t num)
 
 	for (uint32_t i = 0; i < num; i++)
 	{
-		uint64_t next_time = m_ports[params[i].handle.GetId()].last_output_time + block_time;
+		uint64_t next_time = m_out_ports[params[i].handle.GetId()].last_output_time + block_time;
 		uint64_t wait_time = (next_time > current_time ? next_time - current_time : 0);
 		max_wait_time      = (wait_time > max_wait_time ? wait_time : max_wait_time);
 	}
 
-	// Audio output is not yet implemented, so simulate audio delay
+	// TODO(): Audio output is not yet implemented, so simulate audio delay
 	Core::Thread::SleepMicro(max_wait_time);
 
 	for (uint32_t i = 0; i < num; i++)
 	{
-		m_ports[params[i].handle.GetId()].last_output_time = LibKernel::KernelGetProcessTime();
+		m_out_ports[params[i].handle.GetId()].last_output_time = LibKernel::KernelGetProcessTime();
 	}
 
 	return first_port.samples_num;
+}
+
+Audio::Id Audio::AudioInOpen(uint32_t type, uint32_t samples_num, uint32_t freq, Format format)
+{
+	Core::LockGuard lock(m_mutex);
+
+	for (int id = 0; id < IN_PORTS_MAX; id++)
+	{
+		if (!m_in_ports[id].used)
+		{
+			auto& port = m_in_ports[id];
+
+			port.used        = true;
+			port.type        = type;
+			port.samples_num = samples_num;
+			port.freq        = freq;
+			port.format      = format;
+
+			switch (format)
+			{
+				case Format::Signed16bitMono:
+				case Format::Signed16bitStereo: break;
+				default: EXIT("unknown format");
+			}
+
+			return Id::Create(id);
+		}
+	}
+
+	return Id::Invalid();
+}
+
+bool Audio::AudioInValid(Id handle)
+{
+	Core::LockGuard lock(m_mutex);
+
+	return (handle.GetId() >= 0 && handle.GetId() < IN_PORTS_MAX && m_in_ports[handle.GetId()].used);
+}
+
+uint32_t Audio::AudioInInput(Id handle, void* dest)
+{
+	EXIT_NOT_IMPLEMENTED(!AudioInValid(handle));
+	EXIT_NOT_IMPLEMENTED(dest == nullptr);
+
+	const auto& port = m_in_ports[handle.GetId()];
+
+	uint64_t block_time   = (1000000 * port.samples_num) / port.freq;
+	uint64_t current_time = LibKernel::KernelGetProcessTime();
+
+	uint64_t next_time = m_in_ports[handle.GetId()].last_input_time + block_time;
+	uint64_t wait_time = (next_time > current_time ? next_time - current_time : 0);
+
+	// TODO(): Audio input is not yet implemented, so simulate audio delay
+	Core::Thread::SleepMicro(wait_time);
+
+	m_in_ports[handle.GetId()].last_input_time = LibKernel::KernelGetProcessTime();
+
+	return port.samples_num;
 }
 
 namespace AudioOut {
@@ -245,8 +319,8 @@ int KYTY_SYSV_ABI AudioOutOpen(int user_id, int type, int index, uint32_t len, u
 	printf("\t len     = %u\n", len);
 	printf("\t freq    = %u\n", freq);
 
-	EXIT_NOT_IMPLEMENTED(user_id != 255);
-	EXIT_NOT_IMPLEMENTED(type != 0);
+	EXIT_NOT_IMPLEMENTED(user_id != 255 && user_id != 1);
+	EXIT_NOT_IMPLEMENTED(type != 0 && type != 3 && type != 4);
 	EXIT_NOT_IMPLEMENTED(index != 0);
 
 	Audio::Format format = Audio::Format::Unknown;
@@ -302,10 +376,14 @@ int KYTY_SYSV_ABI AudioOutOutputs(AudioOutOutputParam* param, uint32_t num)
 {
 	PRINT_NAME();
 
-	EXIT_NOT_IMPLEMENTED(param == nullptr);
-	EXIT_NOT_IMPLEMENTED(num != 1);
+	for (uint32_t i = 0; i < num; i++)
+	{
+		printf("\t handle[%u] = %d\n", i, param[i].handle);
+	}
 
-	Audio::OutputParam params[Audio::PORTS_MAX];
+	EXIT_NOT_IMPLEMENTED(param == nullptr);
+
+	Audio::OutputParam params[Audio::OUT_PORTS_MAX];
 
 	EXIT_IF(g_audio == nullptr);
 
@@ -325,6 +403,67 @@ int KYTY_SYSV_ABI AudioOutOutputs(AudioOutOutputParam* param, uint32_t num)
 
 } // namespace AudioOut
 
+namespace AudioIn {
+
+LIB_NAME("AudioIn", "AudioIn");
+
+int KYTY_SYSV_ABI AudioInOpen(int user_id, uint32_t type, uint32_t index, uint32_t len, uint32_t freq, uint32_t param)
+{
+	PRINT_NAME();
+
+	printf("\t user_id = %d\n", user_id);
+	printf("\t type    = %u\n", type);
+	printf("\t index   = %d\n", index);
+	printf("\t len     = %u\n", len);
+	printf("\t freq    = %u\n", freq);
+
+	EXIT_NOT_IMPLEMENTED(user_id != 255 && user_id != 1);
+	EXIT_NOT_IMPLEMENTED(type != 1);
+	EXIT_NOT_IMPLEMENTED(index != 0);
+
+	Audio::Format format = Audio::Format::Unknown;
+
+	switch (param)
+	{
+		case 0: format = Audio::Format::Signed16bitMono; break;
+		case 2: format = Audio::Format::Signed16bitStereo; break;
+		default:;
+	}
+
+	printf("\t param   = %u (%s)\n", param, Core::EnumName(format).C_Str());
+
+	EXIT_NOT_IMPLEMENTED(format == Audio::Format::Unknown);
+
+	EXIT_IF(g_audio == nullptr);
+
+	auto id = g_audio->AudioInOpen(type, len, freq, format);
+
+	if (!id.IsValid())
+	{
+		return AUDIO_IN_ERROR_PORT_FULL;
+	}
+
+	return id.ToInt();
+}
+
+int KYTY_SYSV_ABI AudioInInput(int handle, void* dest)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(dest == nullptr);
+
+	EXIT_IF(g_audio == nullptr);
+
+	if (!g_audio->AudioInValid(Audio::Id(handle)))
+	{
+		return AUDIO_IN_ERROR_INVALID_HANDLE;
+	}
+
+	return static_cast<int>(g_audio->AudioInInput(Audio::Id(handle), dest));
+}
+
+} // namespace AudioIn
+
 namespace VoiceQoS {
 
 LIB_NAME("VoiceQoS", "VoiceQoS");
@@ -341,6 +480,24 @@ int KYTY_SYSV_ABI VoiceQoSInit(void* mem_block, uint32_t mem_size, int32_t app_t
 }
 
 } // namespace VoiceQoS
+
+namespace Ajm {
+
+LIB_NAME("Ajm", "Ajm");
+
+int KYTY_SYSV_ABI AjmInitialize(int64_t reserved, uint32_t* context)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(context == nullptr);
+	EXIT_NOT_IMPLEMENTED(reserved != 0);
+
+	*context = 1;
+
+	return OK;
+}
+
+} // namespace Ajm
 
 } // namespace Kyty::Libs::Audio
 

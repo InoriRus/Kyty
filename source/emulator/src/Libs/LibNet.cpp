@@ -97,6 +97,19 @@ LIB_DEFINE(InitNet_1_Http)
 {
 	LIB_FUNC("A9cVMUtEp4Y", Http::HttpInit);
 	LIB_FUNC("0gYjPTR-6cY", Http::HttpCreateTemplate);
+	LIB_FUNC("4I8vEpuEhZ8", Http::HttpDeleteTemplate);
+	LIB_FUNC("s2-NPIvz+iA", Http::HttpSetNonblock);
+	LIB_FUNC("htyBOoWeS58", Http::HttpsSetSslCallback);
+	LIB_FUNC("6381dWF+xsQ", Http::HttpCreateEpoll);
+	LIB_FUNC("wYhXVfS2Et4", Http::HttpDestroyEpoll);
+	LIB_FUNC("-xm7kZQNpHI", Http::HttpSetEpoll);
+	LIB_FUNC("59tL1AQBb8U", Http::HttpUnsetEpoll);
+	LIB_FUNC("qgxDBjorUxs", Http::HttpCreateConnectionWithURL);
+	LIB_FUNC("P6A3ytpsiYc", Http::HttpDeleteConnection);
+	LIB_FUNC("Cnp77podkCU", Http::HttpCreateRequestWithURL2);
+	LIB_FUNC("qe7oZ+v4PWA", Http::HttpDeleteRequest);
+	LIB_FUNC("EY28T2bkN7k", Http::HttpAddRequestHeader);
+	LIB_FUNC("1e2BNwI-XzE", Http::HttpSendRequest);
 }
 
 } // namespace LibHttp
@@ -133,6 +146,13 @@ LIB_DEFINE(InitNet_1_NpManager)
 	LIB_FUNC("VfRSmPmj8Q8", NpManager::NpRegisterStateCallback);
 	LIB_FUNC("uFJpaKNBAj4", NpManager::NpRegisterGamePresenceCallback);
 	LIB_FUNC("GImICnh+boA", NpManager::NpRegisterPlusEventCallback);
+	LIB_FUNC("p-o74CnoNzY", NpManager::NpGetNpId);
+	LIB_FUNC("XDncXQIJUSk", NpManager::NpGetOnlineId);
+	LIB_FUNC("eiqMCt9UshI", NpManager::NpCreateAsyncRequest);
+	LIB_FUNC("S7QTn72PrDw", NpManager::NpDeleteRequest);
+	LIB_FUNC("2rsFmlGWleQ", NpManager::NpCheckNpAvailability);
+	LIB_FUNC("uqcPJLWL08M", NpManager::NpPollAsync);
+	LIB_FUNC("eQH7nWPcAgc", NpManager::NpGetState);
 }
 
 } // namespace LibNpManager
@@ -146,6 +166,7 @@ namespace NpManagerForToolkit = Network::NpManagerForToolkit;
 LIB_DEFINE(InitNet_1_NpManagerForToolkit)
 {
 	LIB_FUNC("0c7HbXRKUt4", NpManagerForToolkit::NpRegisterStateCallbackForToolkit);
+	LIB_FUNC("JELHf4xPufo", NpManagerForToolkit::NpCheckCallbackForLib);
 }
 
 } // namespace LibNpManagerForToolkit
@@ -159,6 +180,9 @@ namespace NpTrophy = Network::NpTrophy;
 LIB_DEFINE(InitNet_1_NpTrophy)
 {
 	LIB_FUNC("q7U6tEAQf7c", NpTrophy::NpTrophyCreateHandle);
+	LIB_FUNC("XbkjbobZlCY", NpTrophy::NpTrophyCreateContext);
+	LIB_FUNC("TJCAxto9SEU", NpTrophy::NpTrophyRegisterContext);
+	LIB_FUNC("GNcF4oidY0Y", NpTrophy::NpTrophyDestroyHandle);
 }
 
 } // namespace LibNpTrophy

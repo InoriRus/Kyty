@@ -90,6 +90,12 @@ struct SystemServiceStatus
 	bool    is_out_of_vr_play_area        = false;
 };
 
+struct SystemServiceDisplaySafeAreaInfo
+{
+	float   ratio;
+	uint8_t reserved[128];
+};
+
 static int KYTY_SYSV_ABI SystemServiceHideSplashScreen()
 {
 	PRINT_NAME();
@@ -141,6 +147,20 @@ static int KYTY_SYSV_ABI SystemServiceGetStatus(SystemServiceStatus* status)
 	return OK;
 }
 
+static int KYTY_SYSV_ABI SystemServiceGetDisplaySafeAreaInfo(SystemServiceDisplaySafeAreaInfo* info)
+{
+	PRINT_NAME();
+
+	if (info == nullptr)
+	{
+		return SYSTEM_SERVICE_ERROR_PARAMETER;
+	}
+
+	info->ratio = 1.0f;
+
+	return OK;
+}
+
 } // namespace SystemService
 
 LIB_DEFINE(InitSystemService_1)
@@ -148,6 +168,7 @@ LIB_DEFINE(InitSystemService_1)
 	LIB_FUNC("Vo5V8KAwCmk", SystemService::SystemServiceHideSplashScreen);
 	LIB_FUNC("fZo48un7LK4", SystemService::SystemServiceParamGetInt);
 	LIB_FUNC("rPo6tV8D9bM", SystemService::SystemServiceGetStatus);
+	LIB_FUNC("1n37q1Bvc5Y", SystemService::SystemServiceGetDisplaySafeAreaInfo);
 }
 
 } // namespace Kyty::Libs

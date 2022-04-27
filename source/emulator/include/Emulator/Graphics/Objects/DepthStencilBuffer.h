@@ -31,6 +31,7 @@ public:
 	}
 
 	bool Equal(const uint64_t* other) const override;
+	//	bool Reuse(const uint64_t* other) const override;
 
 	[[nodiscard]] create_func_t              GetCreateFunc() const override;
 	[[nodiscard]] create_from_objects_func_t GetCreateFromObjectsFunc() const override { return nullptr; };

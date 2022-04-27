@@ -352,10 +352,21 @@ struct ShaderInstruction
 	ShaderOperand                   dst2;
 };
 
-struct ShaderLabel
+class ShaderLabel
 {
-	uint32_t dst;
-	uint32_t src;
+public:
+	explicit ShaderLabel(const ShaderInstruction& inst): m_dst(inst.pc + 4 + inst.src[0].constant.i), m_src(inst.pc) {}
+	~ShaderLabel() = default;
+	KYTY_CLASS_DEFAULT_COPY(ShaderLabel);
+
+	[[nodiscard]] uint32_t GetDst() const { return m_dst; }
+	[[nodiscard]] uint32_t GetSrc() const { return m_src; }
+
+	[[nodiscard]] String ToString() const { return String::FromPrintf("label_%04" PRIx32 "_%04" PRIx32, m_dst, m_src); }
+
+private:
+	uint32_t m_dst;
+	uint32_t m_src;
 };
 
 struct ShaderDebugPrintf
@@ -408,6 +419,9 @@ public:
 	void                   SetPsEmbedded(bool embedded) { this->m_ps_embedded = embedded; }
 	[[nodiscard]] uint32_t GetPsEmbeddedId() const { return m_ps_embedded_id; }
 	void                   SetPsEmbeddedId(uint32_t embedded_id) { m_ps_embedded_id = embedded_id; }
+
+	[[nodiscard]] bool IsDiscardBlock(uint32_t pc) const;
+	[[nodiscard]] bool IsDiscardInstruction(uint32_t index) const;
 
 private:
 	Vector<ShaderInstruction> m_instructions;

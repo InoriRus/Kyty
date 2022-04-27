@@ -5,7 +5,6 @@
 #include "Kyty/Core/String.h"
 #include "Kyty/Core/Threads.h"
 
-#include "Emulator/Config.h"
 #include "Emulator/Graphics/AsyncJob.h"
 #include "Emulator/Graphics/GraphicContext.h"
 #include "Emulator/Graphics/Graphics.h"
@@ -16,6 +15,8 @@
 #include "Emulator/Graphics/VideoOut.h"
 #include "Emulator/Graphics/Window.h"
 #include "Emulator/Profiler.h"
+
+#include <atomic>
 
 #ifdef KYTY_EMU_ENABLED
 
@@ -67,6 +68,7 @@ public:
 	void WriteAtEndOfPipe64(uint32_t cache_policy, uint32_t event_write_dest, uint32_t eop_event_type, uint32_t cache_action,
 	                        uint32_t event_index, uint32_t event_write_source, void* dst_gpu_addr, uint64_t value,
 	                        uint32_t interrupt_selector);
+	void Flip();
 	void Flip(void* dst_gpu_addr, uint32_t value);
 	void FlipWithInterrupt(uint32_t eop_event_type, uint32_t cache_action, void* dst_gpu_addr, uint32_t value);
 	void WriteBack();
@@ -106,6 +108,9 @@ public:
 	[[nodiscard]] const FlipInfo& GetFlip() const { return m_flip; }
 	void                          SetFlip(const FlipInfo& flip) { m_flip = flip; }
 
+	[[nodiscard]] uint64_t GetSumbitId() const { return m_sumbit_id; }
+	void                   SetSumbitId(uint64_t sumbit_id) { m_sumbit_id = sumbit_id; }
+
 private:
 	static constexpr int VK_BUFFERS_NUM = 4;
 
@@ -133,6 +138,7 @@ private:
 	uint32_t m_const_ram[0x3000] = {0};
 
 	FlipInfo m_flip;
+	uint64_t m_sumbit_id = 0;
 };
 
 class GraphicsRing
@@ -660,6 +666,7 @@ void GraphicsRing::Submit(uint32_t* cmd_draw_buffer, uint32_t num_draw_dw, uint3
 			m_idle_cond_var.Wait(&m_mutex);
 		}
 		m_done = false;
+
 		m_cp->Reset();
 	}
 
@@ -714,6 +721,7 @@ GraphicsRing::CmdBatch GraphicsRing::GetCmdBatch()
 	{
 		m_idle = true;
 		m_idle_cond_var.Signal();
+
 		m_cond_var.Wait(&m_mutex);
 	}
 
@@ -732,6 +740,8 @@ void GraphicsRing::ThreadBatchRun(void* data)
 {
 	EXIT_IF(data == nullptr);
 
+	static std::atomic_uint64_t seq = 0;
+
 	auto* ring = static_cast<GraphicsRing*>(data);
 	auto* cp   = ring->m_cp;
 
@@ -745,6 +755,7 @@ void GraphicsRing::ThreadBatchRun(void* data)
 		cp->BufferInit();
 		cp->ResetDeCe();
 		cp->SetFlip(buf.flip);
+		cp->SetSumbitId(++seq);
 
 		ring->m_job1.Execute([cp, buf](void* /*unused*/) { cp->Run(buf.draw_buffer.data, buf.draw_buffer.num_dw); });
 		ring->m_job2.Execute([cp, buf](void* /*unused*/) { cp->Run(buf.const_buffer.data, buf.const_buffer.num_dw); });
@@ -968,7 +979,8 @@ void CommandProcessor::DrawIndex(uint32_t index_count, const void* index_addr, u
 
 	EXIT_IF(m_current_buffer < 0 || m_current_buffer >= VK_BUFFERS_NUM);
 
-	GraphicsRenderDrawIndex(m_buffer[m_current_buffer], &m_ctx, &m_ucfg, m_index_type_and_size, index_count, index_addr, flags, type);
+	GraphicsRenderDrawIndex(m_sumbit_id, m_buffer[m_current_buffer], &m_ctx, &m_ucfg, m_index_type_and_size, index_count, index_addr, flags,
+	                        type);
 }
 
 void CommandProcessor::DispatchDirect(uint32_t thread_group_x, uint32_t thread_group_y, uint32_t thread_group_z, uint32_t mode)
@@ -977,7 +989,7 @@ void CommandProcessor::DispatchDirect(uint32_t thread_group_x, uint32_t thread_g
 
 	EXIT_IF(m_current_buffer < 0 || m_current_buffer >= VK_BUFFERS_NUM);
 
-	GraphicsRenderDispatchDirect(m_buffer[m_current_buffer], &m_ctx, thread_group_x, thread_group_y, thread_group_z, mode);
+	GraphicsRenderDispatchDirect(m_sumbit_id, m_buffer[m_current_buffer], &m_ctx, thread_group_x, thread_group_y, thread_group_z, mode);
 }
 
 void CommandProcessor::DrawIndexAuto(uint32_t index_count, uint32_t flags)
@@ -986,7 +998,7 @@ void CommandProcessor::DrawIndexAuto(uint32_t index_count, uint32_t flags)
 
 	EXIT_IF(m_current_buffer < 0 || m_current_buffer >= VK_BUFFERS_NUM);
 
-	GraphicsRenderDrawIndexAuto(m_buffer[m_current_buffer], &m_ctx, &m_ucfg, index_count, flags);
+	GraphicsRenderDrawIndexAuto(m_sumbit_id, m_buffer[m_current_buffer], &m_ctx, &m_ucfg, index_count, flags);
 }
 
 void CommandProcessor::ClearGds(uint64_t dw_offset, uint32_t dw_num, uint32_t clear_value)
@@ -1035,10 +1047,11 @@ void CommandProcessor::WriteAtEndOfPipe32(uint32_t cache_policy, uint32_t event_
 
 	if (event_write_source == 0x00000002 && eop_event_type == 0x0000002f && cache_action == 0x00000000 && event_index == 0x00000006)
 	{
-		GraphicsRenderWriteAtEndOfPipe(m_buffer[m_current_buffer], static_cast<uint32_t*>(dst_gpu_addr), value);
+		GraphicsRenderWriteAtEndOfPipe32(m_sumbit_id, m_buffer[m_current_buffer], static_cast<uint32_t*>(dst_gpu_addr), value);
 	} else if (event_write_source == 0x00000001 && eop_event_type == 0x0000002f && cache_action == 0x00000000 && event_index == 0x00000006)
 	{
-		GraphicsRenderWriteAtEndOfPipeGds(m_buffer[m_current_buffer], static_cast<uint32_t*>(dst_gpu_addr), value & 0xffffu, value >> 16u);
+		GraphicsRenderWriteAtEndOfPipeGds32(m_sumbit_id, m_buffer[m_current_buffer], static_cast<uint32_t*>(dst_gpu_addr), value & 0xffffu,
+		                                    value >> 16u);
 	} else
 	{
 		EXIT("unknown event type\n");
@@ -1067,31 +1080,43 @@ void CommandProcessor::WriteAtEndOfPipe64(uint32_t cache_policy, uint32_t event_
 	EXIT_NOT_IMPLEMENTED(cache_policy != 0x00000000);
 	EXIT_NOT_IMPLEMENTED(event_write_dest != 0x00000000);
 
-	if (eop_event_type == 0x04 && cache_action == 0x00 && event_index == 0x05 && event_write_source == 0x02 &&
-	    (interrupt_selector == 0x00 || interrupt_selector == 0x03))
+	bool with_interrupt = false;
+	bool source64       = (event_write_source == 0x02);
+	bool source32       = (event_write_source == 0x01);
+	bool source_counter = (event_write_source == 0x04);
+
+	switch (interrupt_selector)
 	{
-		GraphicsRenderWriteAtEndOfPipe(m_buffer[m_current_buffer], static_cast<uint64_t*>(dst_gpu_addr), value);
-	} else if (eop_event_type == 0x04 && cache_action == 0x00 && event_index == 0x05 && event_write_source == 0x01 &&
-	           (interrupt_selector == 0x00 || interrupt_selector == 0x03))
+		case 0x00:
+		case 0x03: with_interrupt = false; break;
+		case 0x02: with_interrupt = true; break;
+		default: EXIT("unknown interrupt_selector\n");
+	}
+
+	if (eop_event_type == 0x04 && cache_action == 0x00 && event_index == 0x05 && source64 && !with_interrupt)
 	{
-		GraphicsRenderWriteAtEndOfPipe(m_buffer[m_current_buffer], static_cast<uint32_t*>(dst_gpu_addr), value);
+		GraphicsRenderWriteAtEndOfPipe64(m_sumbit_id, m_buffer[m_current_buffer], static_cast<uint64_t*>(dst_gpu_addr), value);
+	} else if (eop_event_type == 0x04 && cache_action == 0x00 && event_index == 0x05 && source32 && !with_interrupt)
+	{
+		GraphicsRenderWriteAtEndOfPipe32(m_sumbit_id, m_buffer[m_current_buffer], static_cast<uint32_t*>(dst_gpu_addr), value);
 	} else if (((eop_event_type == 0x04 && event_index == 0x05) || (eop_event_type == 0x28 && event_index == 0x05) ||
 	            (eop_event_type == 0x2f && event_index == 0x06)) &&
-	           cache_action == 0x38 && event_write_source == 0x02 && (interrupt_selector == 0x00 || interrupt_selector == 0x03))
+	           cache_action == 0x38 && source64 && !with_interrupt)
 	{
-		GraphicsRenderWriteAtEndOfPipeWithWriteBack(m_buffer[m_current_buffer], static_cast<uint64_t*>(dst_gpu_addr), value);
-	} else if (eop_event_type == 0x04 && cache_action == 0x00 && event_index == 0x05 && event_write_source == 0x04 &&
-	           (interrupt_selector == 0x00 || interrupt_selector == 0x03))
+		GraphicsRenderWriteAtEndOfPipeWithWriteBack64(m_sumbit_id, m_buffer[m_current_buffer], static_cast<uint64_t*>(dst_gpu_addr), value);
+	} else if (eop_event_type == 0x04 && cache_action == 0x00 && event_index == 0x05 && source_counter && !with_interrupt)
 	{
-		GraphicsRenderWriteAtEndOfPipeClockCounter(m_buffer[m_current_buffer], static_cast<uint64_t*>(dst_gpu_addr));
-	} else if ((eop_event_type == 0x04 && event_index == 0x05) && cache_action == 0x00 && event_write_source == 0x02 &&
-	           interrupt_selector == 0x02)
+		GraphicsRenderWriteAtEndOfPipeClockCounter(m_sumbit_id, m_buffer[m_current_buffer], static_cast<uint64_t*>(dst_gpu_addr));
+	} else if ((eop_event_type == 0x04 && event_index == 0x05) && cache_action == 0x00 && source64 && with_interrupt)
 	{
-		GraphicsRenderWriteAtEndOfPipeWithInterrupt(m_buffer[m_current_buffer], static_cast<uint64_t*>(dst_gpu_addr), value);
-	} else if ((eop_event_type == 0x04 && event_index == 0x05) && cache_action == 0x3b && event_write_source == 0x02 &&
-	           interrupt_selector == 0x02)
+		GraphicsRenderWriteAtEndOfPipeWithInterrupt64(m_sumbit_id, m_buffer[m_current_buffer], static_cast<uint64_t*>(dst_gpu_addr), value);
+	} else if ((eop_event_type == 0x04 && event_index == 0x05) && cache_action == 0x00 && source32 && with_interrupt)
 	{
-		GraphicsRenderWriteAtEndOfPipeWithInterruptWriteBack(m_buffer[m_current_buffer], static_cast<uint64_t*>(dst_gpu_addr), value);
+		GraphicsRenderWriteAtEndOfPipeWithInterrupt32(m_sumbit_id, m_buffer[m_current_buffer], static_cast<uint32_t*>(dst_gpu_addr), value);
+	} else if ((eop_event_type == 0x04 && event_index == 0x05) && cache_action == 0x3b && source64 && with_interrupt)
+	{
+		GraphicsRenderWriteAtEndOfPipeWithInterruptWriteBack64(m_sumbit_id, m_buffer[m_current_buffer],
+		                                                       static_cast<uint64_t*>(dst_gpu_addr), value);
 	} else
 	{
 		EXIT("unknown event type\n");
@@ -1147,6 +1172,18 @@ void CommandProcessor::TriggerEvent(uint32_t event_type, uint32_t event_index)
 	}
 }
 
+void CommandProcessor::Flip()
+{
+	Core::LockGuard lock(m_mutex);
+
+	EXIT_IF(m_current_buffer < 0 || m_current_buffer >= VK_BUFFERS_NUM);
+
+	printf("CommandProcessor::Flip()\n");
+
+	GraphicsRenderWriteAtEndOfPipeOnlyFlip(m_sumbit_id, m_buffer[m_current_buffer], m_flip.handle, m_flip.index, m_flip.flip_mode,
+	                                       m_flip.flip_arg);
+}
+
 void CommandProcessor::Flip(void* dst_gpu_addr, uint32_t value)
 {
 	Core::LockGuard lock(m_mutex);
@@ -1157,8 +1194,8 @@ void CommandProcessor::Flip(void* dst_gpu_addr, uint32_t value)
 	printf("\t dst_gpu_addr = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(dst_gpu_addr));
 	printf("\t value        = 0x%08" PRIx32 "\n", value);
 
-	GraphicsRenderWriteAtEndOfPipeWithFlip(m_buffer[m_current_buffer], static_cast<uint32_t*>(dst_gpu_addr), value, m_flip.handle,
-	                                       m_flip.index, m_flip.flip_mode, m_flip.flip_arg);
+	GraphicsRenderWriteAtEndOfPipeWithFlip32(m_sumbit_id, m_buffer[m_current_buffer], static_cast<uint32_t*>(dst_gpu_addr), value,
+	                                         m_flip.handle, m_flip.index, m_flip.flip_mode, m_flip.flip_arg);
 }
 
 void CommandProcessor::FlipWithInterrupt(uint32_t eop_event_type, uint32_t cache_action, void* dst_gpu_addr, uint32_t value)
@@ -1175,8 +1212,9 @@ void CommandProcessor::FlipWithInterrupt(uint32_t eop_event_type, uint32_t cache
 
 	if (eop_event_type == 0x00000004 && cache_action == 0x00000038)
 	{
-		GraphicsRenderWriteAtEndOfPipeWithInterruptWriteBackFlip(m_buffer[m_current_buffer], static_cast<uint32_t*>(dst_gpu_addr), value,
-		                                                         m_flip.handle, m_flip.index, m_flip.flip_mode, m_flip.flip_arg);
+		GraphicsRenderWriteAtEndOfPipeWithInterruptWriteBackFlip32(m_sumbit_id, m_buffer[m_current_buffer],
+		                                                           static_cast<uint32_t*>(dst_gpu_addr), value, m_flip.handle, m_flip.index,
+		                                                           m_flip.flip_mode, m_flip.flip_arg);
 	} else
 	{
 		EXIT("unknown event type\n");
@@ -1308,13 +1346,13 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_depth_render_target)
 			z.stencil_info.tile_mode_index      = KYTY_PM4_GET(buffer[1], DB_STENCIL_INFO, TILE_MODE_INDEX);
 			z.stencil_info.tile_stencil_disable = KYTY_PM4_GET(buffer[1], DB_STENCIL_INFO, TILE_STENCIL_DISABLE);
 
-			if (Config::IsNeo())
-			{
-				EXIT_NOT_IMPLEMENTED((buffer[2] & 0xffu) != 0);
-				EXIT_NOT_IMPLEMENTED((buffer[3] & 0xffu) != 0);
-				EXIT_NOT_IMPLEMENTED((buffer[4] & 0xffu) != 0);
-				EXIT_NOT_IMPLEMENTED((buffer[5] & 0xffu) != 0);
-			}
+			//			if (Config::IsNeo())
+			//			{
+			//				EXIT_NOT_IMPLEMENTED((buffer[2] & 0xffu) != 0);
+			//				EXIT_NOT_IMPLEMENTED((buffer[3] & 0xffu) != 0);
+			//				EXIT_NOT_IMPLEMENTED((buffer[4] & 0xffu) != 0);
+			//				EXIT_NOT_IMPLEMENTED((buffer[5] & 0xffu) != 0);
+			//			}
 
 			z.z_read_base_addr        = static_cast<uint64_t>(buffer[2]) << 8u;
 			z.stencil_read_base_addr  = static_cast<uint64_t>(buffer[3]) << 8u;
@@ -1477,6 +1515,65 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_line_control)
 	}
 
 	return 1;
+}
+
+KYTY_HW_CTX_PARSER(hw_ctx_set_scan_mode_control)
+{
+	EXIT_NOT_IMPLEMENTED(cmd_id != 0xc0016900);
+	EXIT_NOT_IMPLEMENTED(cmd_offset != Pm4::PA_SC_MODE_CNTL_0);
+
+	HW::ScanModeControl r;
+
+	r.msaa_enable          = KYTY_PM4_GET(buffer[0], PA_SC_MODE_CNTL_0, MSAA_ENABLE) != 0;
+	r.vport_scissor_enable = KYTY_PM4_GET(buffer[0], PA_SC_MODE_CNTL_0, VPORT_SCISSOR_ENABLE) != 0;
+	r.line_stipple_enable  = KYTY_PM4_GET(buffer[0], PA_SC_MODE_CNTL_0, LINE_STIPPLE_ENABLE) != 0;
+
+	cp->GetCtx()->SetScanModeControl(r);
+
+	return 1;
+}
+
+KYTY_HW_CTX_PARSER(hw_ctx_set_aa_config)
+{
+	EXIT_NOT_IMPLEMENTED(cmd_id != 0xc0016900);
+	EXIT_NOT_IMPLEMENTED(cmd_offset != Pm4::PA_SC_AA_CONFIG);
+
+	HW::AaConfig r;
+
+	r.msaa_num_samples      = KYTY_PM4_GET(buffer[0], PA_SC_AA_CONFIG, MSAA_NUM_SAMPLES);
+	r.aa_mask_centroid_dtmn = KYTY_PM4_GET(buffer[0], PA_SC_AA_CONFIG, AA_MASK_CENTROID_DTMN) != 0;
+	r.max_sample_dist       = KYTY_PM4_GET(buffer[0], PA_SC_AA_CONFIG, MAX_SAMPLE_DIST);
+	r.msaa_exposed_samples  = KYTY_PM4_GET(buffer[0], PA_SC_AA_CONFIG, MSAA_EXPOSED_SAMPLES);
+
+	cp->GetCtx()->SetAaConfig(r);
+
+	return 1;
+}
+
+KYTY_HW_CTX_PARSER(hw_ctx_set_aa_sample_control)
+{
+	EXIT_NOT_IMPLEMENTED(cmd_id != 0xc0106900);
+	EXIT_NOT_IMPLEMENTED(cmd_offset != Pm4::PA_SC_AA_SAMPLE_LOCS_PIXEL_X0Y0_0);
+
+	uint32_t count = 1;
+
+	if (dw >= 20 && buffer[16] == 0xc0026900 && buffer[17] == Pm4::PA_SC_CENTROID_PRIORITY_0)
+	{
+		count = 20;
+
+		HW::AaSampleControl r;
+
+		memcpy(r.locations, buffer, 16 * 4);
+
+		r.centroid_priority = static_cast<uint64_t>(buffer[18]) | (static_cast<uint64_t>(buffer[19]) << 32u);
+
+		cp->GetCtx()->SetAaSampleControl(r);
+	} else
+	{
+		KYTY_NOT_IMPLEMENTED;
+	}
+
+	return count;
 }
 
 KYTY_HW_CTX_PARSER(hw_ctx_set_depth_control)
@@ -2478,11 +2575,12 @@ KYTY_CP_OP_PARSER(cp_op_acquire_mem)
 	{
 		case 0x02c40040:
 		case 0x02c43fc0:
+		case 0x02c47fc0:
 		{
-			// target_mask:     0x00000040 (rt0), 0x00003fc0 (all rt)
+			// target_mask:     0x00000040 (rt0), 0x00003fc0 (all rt), 0x00007fc0 (all rt and depth)
 			// extended_action: 0x02000000 (FlushAndInvalidateCbCache)
 			// action:          0x38 (WriteBackAndInvalidateL1andL2)
-			EXIT_IF(target_mask != 0x00000040 && target_mask != 0x00003FC0);
+			EXIT_IF(target_mask != 0x00000040 && target_mask != 0x00003FC0 && target_mask != 0x00007FC0);
 			EXIT_IF(extended_action != 0x02000000);
 			EXIT_IF(action != 0x38);
 			EXIT_NOT_IMPLEMENTED(size_lo == 0);
@@ -2624,6 +2722,11 @@ KYTY_CP_OP_PARSER(cp_op_marker)
 		case 0x0: cp->SetEmbeddedDataMarker(buffer + 1, len_dw, align); break;
 		case 0x4: cp->SetUserDataMarker(HW::UserSgprType::Vsharp); break;
 		case 0xd: cp->SetUserDataMarker(HW::UserSgprType::Region); break;
+		case 0x777:
+		{
+			cp->Flip();
+			break;
+		}
 		case 0x778:
 		{
 			auto*    addr  = reinterpret_cast<void*>(buffer[1] | (static_cast<uint64_t>(buffer[2]) << 32u));
@@ -2730,28 +2833,31 @@ static void graphics_init_jmp_tables()
 		func = nullptr;
 	}
 
-	g_hw_ctx_func[Pm4::DB_RENDER_CONTROL]        = hw_ctx_set_render_control;
-	g_hw_ctx_func[Pm4::DB_STENCIL_CLEAR]         = hw_ctx_set_stencil_clear;
-	g_hw_ctx_func[Pm4::DB_DEPTH_CLEAR]           = hw_ctx_set_depth_clear;
-	g_hw_ctx_func[Pm4::PA_SC_SCREEN_SCISSOR_TL]  = hw_ctx_set_screen_scissor;
-	g_hw_ctx_func[Pm4::DB_Z_INFO]                = hw_ctx_set_depth_render_target;
-	g_hw_ctx_func[Pm4::DB_STENCIL_INFO]          = hw_ctx_set_stencil_info;
-	g_hw_ctx_func[0x08d]                         = hw_ctx_hardware_screen_offset;
-	g_hw_ctx_func[0x08e]                         = hw_ctx_set_render_target_mask;
-	g_hw_ctx_func[Pm4::PA_SC_GENERIC_SCISSOR_TL] = hw_ctx_set_generic_scissor;
-	g_hw_ctx_func[Pm4::CB_BLEND_RED]             = hw_ctx_set_blend_color;
-	g_hw_ctx_func[Pm4::DB_STENCIL_CONTROL]       = hw_ctx_set_stencil_control;
-	g_hw_ctx_func[Pm4::DB_STENCILREFMASK]        = hw_ctx_set_stencil_mask;
-	g_hw_ctx_func[Pm4::SPI_PS_INPUT_CNTL_0]      = hw_ctx_set_ps_input;
-	g_hw_ctx_func[Pm4::DB_DEPTH_CONTROL]         = hw_ctx_set_depth_control;
-	g_hw_ctx_func[Pm4::DB_EQAA]                  = hw_ctx_set_eqaa_control;
-	g_hw_ctx_func[Pm4::CB_COLOR_CONTROL]         = hw_ctx_set_color_control;
-	g_hw_ctx_func[0x204]                         = hw_ctx_set_clip_control;
-	g_hw_ctx_func[Pm4::PA_SU_SC_MODE_CNTL]       = hw_ctx_set_mode_control;
-	g_hw_ctx_func[0x206]                         = hw_ctx_set_viewport_transform_control;
-	g_hw_ctx_func[Pm4::PA_SU_LINE_CNTL]          = hw_ctx_set_line_control;
-	g_hw_ctx_func[Pm4::VGT_SHADER_STAGES_EN]     = hw_ctx_set_shader_stages;
-	g_hw_ctx_func[0x2fa]                         = hw_ctx_set_guard_bands;
+	g_hw_ctx_func[Pm4::DB_RENDER_CONTROL]                 = hw_ctx_set_render_control;
+	g_hw_ctx_func[Pm4::DB_STENCIL_CLEAR]                  = hw_ctx_set_stencil_clear;
+	g_hw_ctx_func[Pm4::DB_DEPTH_CLEAR]                    = hw_ctx_set_depth_clear;
+	g_hw_ctx_func[Pm4::PA_SC_SCREEN_SCISSOR_TL]           = hw_ctx_set_screen_scissor;
+	g_hw_ctx_func[Pm4::DB_Z_INFO]                         = hw_ctx_set_depth_render_target;
+	g_hw_ctx_func[Pm4::DB_STENCIL_INFO]                   = hw_ctx_set_stencil_info;
+	g_hw_ctx_func[0x08d]                                  = hw_ctx_hardware_screen_offset;
+	g_hw_ctx_func[0x08e]                                  = hw_ctx_set_render_target_mask;
+	g_hw_ctx_func[Pm4::PA_SC_GENERIC_SCISSOR_TL]          = hw_ctx_set_generic_scissor;
+	g_hw_ctx_func[Pm4::CB_BLEND_RED]                      = hw_ctx_set_blend_color;
+	g_hw_ctx_func[Pm4::DB_STENCIL_CONTROL]                = hw_ctx_set_stencil_control;
+	g_hw_ctx_func[Pm4::DB_STENCILREFMASK]                 = hw_ctx_set_stencil_mask;
+	g_hw_ctx_func[Pm4::SPI_PS_INPUT_CNTL_0]               = hw_ctx_set_ps_input;
+	g_hw_ctx_func[Pm4::DB_DEPTH_CONTROL]                  = hw_ctx_set_depth_control;
+	g_hw_ctx_func[Pm4::DB_EQAA]                           = hw_ctx_set_eqaa_control;
+	g_hw_ctx_func[Pm4::CB_COLOR_CONTROL]                  = hw_ctx_set_color_control;
+	g_hw_ctx_func[0x204]                                  = hw_ctx_set_clip_control;
+	g_hw_ctx_func[Pm4::PA_SU_SC_MODE_CNTL]                = hw_ctx_set_mode_control;
+	g_hw_ctx_func[0x206]                                  = hw_ctx_set_viewport_transform_control;
+	g_hw_ctx_func[Pm4::PA_SU_LINE_CNTL]                   = hw_ctx_set_line_control;
+	g_hw_ctx_func[Pm4::PA_SC_MODE_CNTL_0]                 = hw_ctx_set_scan_mode_control;
+	g_hw_ctx_func[Pm4::PA_SC_AA_CONFIG]                   = hw_ctx_set_aa_config;
+	g_hw_ctx_func[Pm4::PA_SC_AA_SAMPLE_LOCS_PIXEL_X0Y0_0] = hw_ctx_set_aa_sample_control;
+	g_hw_ctx_func[Pm4::VGT_SHADER_STAGES_EN]              = hw_ctx_set_shader_stages;
+	g_hw_ctx_func[0x2fa]                                  = hw_ctx_set_guard_bands;
 
 	for (uint32_t slot = 0; slot < 8; slot++)
 	{

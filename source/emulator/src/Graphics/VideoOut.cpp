@@ -189,27 +189,28 @@ private:
 
 static VideoOutContext* g_video_out_context = nullptr;
 
-static void calc_buffer_size(const VideoOutBufferAttribute* attribute, uint64_t* size, uint64_t* pitch)
+static void calc_buffer_size(const VideoOutBufferAttribute* attribute, uint64_t* out_size, uint64_t* out_align, uint64_t* out_pitch)
 {
-	EXIT_IF(size == nullptr);
-	EXIT_IF(pitch == nullptr);
+	EXIT_IF(out_size == nullptr);
+	EXIT_IF(out_pitch == nullptr);
 
 	bool     tile   = attribute->tilingMode == 0;
 	bool     neo    = Config::IsNeo();
 	uint32_t width  = attribute->width;
 	uint32_t height = attribute->height;
+	uint32_t pitch  = attribute->pitchInPixel;
 
-	EXIT_NOT_IMPLEMENTED(attribute->width != attribute->pitchInPixel);
+	// EXIT_NOT_IMPLEMENTED(attribute->width != attribute->pitchInPixel);
 	EXIT_NOT_IMPLEMENTED(attribute->option != 0);
 	EXIT_NOT_IMPLEMENTED(attribute->aspectRatio != 0);
 	EXIT_NOT_IMPLEMENTED(attribute->pixelFormat != 0x80000000);
 
-	uint32_t size32  = 0;
-	uint32_t pitch32 = 0;
-	Graphics::TileGetVideoOutSize(width, height, tile, neo, &size32, &pitch32);
+	Graphics::TileSizeAlign size32 {};
+	Graphics::TileGetVideoOutSize(width, height, pitch, tile, neo, &size32);
 
-	*size  = size32;
-	*pitch = pitch32;
+	*out_size  = size32.size;
+	*out_align = size32.align;
+	*out_pitch = pitch;
 }
 
 void VideoOutInit(uint32_t width, uint32_t height)
@@ -535,7 +536,7 @@ void VideoOutEndVblank()
 {
 	EXIT_IF(g_video_out_context == nullptr);
 
-	// g_video_out_context->VblankEnd();
+	g_video_out_context->VblankEnd();
 }
 
 KYTY_SYSV_ABI int VideoOutOpen(int user_id, int bus_type, int index, const void* param)
@@ -821,8 +822,9 @@ KYTY_SYSV_ABI int VideoOutRegisterBuffers(int handle, int start_index, void* con
 	EXIT_NOT_IMPLEMENTED(attribute->option != 0);
 
 	uint64_t buffer_size  = 0;
+	uint64_t buffer_align = 0;
 	uint64_t buffer_pitch = 0;
-	calc_buffer_size(attribute, &buffer_size, &buffer_pitch);
+	calc_buffer_size(attribute, &buffer_size, &buffer_align, &buffer_pitch);
 
 	EXIT_NOT_IMPLEMENTED(buffer_size == 0);
 	EXIT_NOT_IMPLEMENTED(buffer_pitch == 0);
@@ -841,12 +843,14 @@ KYTY_SYSV_ABI int VideoOutRegisterBuffers(int handle, int start_index, void* con
 			return VIDEO_OUT_ERROR_SLOT_OCCUPIED;
 		}
 
+		EXIT_NOT_IMPLEMENTED((reinterpret_cast<uint64_t>(addresses[i]) & (buffer_align - 1u)) != 0);
+
 		ctx->buffers[i + start_index].set_id        = set_index;
 		ctx->buffers[i + start_index].buffer        = addresses[i];
 		ctx->buffers[i + start_index].buffer_size   = buffer_size;
 		ctx->buffers[i + start_index].buffer_pitch  = buffer_pitch;
 		ctx->buffers[i + start_index].buffer_vulkan = static_cast<Graphics::VideoOutVulkanImage*>(Graphics::GpuMemoryCreateObject(
-		    g_video_out_context->GetGraphicCtx(), nullptr, reinterpret_cast<uint64_t>(addresses[i]), buffer_size, vulkan_buffer_info));
+		    0, g_video_out_context->GetGraphicCtx(), nullptr, reinterpret_cast<uint64_t>(addresses[i]), buffer_size, vulkan_buffer_info));
 
 		EXIT_NOT_IMPLEMENTED(ctx->buffers[i + start_index].buffer_vulkan == nullptr);
 

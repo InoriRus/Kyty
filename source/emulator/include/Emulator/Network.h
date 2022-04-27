@@ -35,10 +35,28 @@ int KYTY_SYSV_ABI SslTerm(int ssl_ctx_id);
 
 namespace Http {
 
+struct HttpEpoll;
+
+using HttpEpollHandle = HttpEpoll*;
+
+using HttpsCallback = int (*)(int, unsigned int, void* const*, int, void*);
+
 int KYTY_SYSV_ABI HttpInit(int memid, int ssl_ctx_id, uint64_t pool_size);
 int KYTY_SYSV_ABI HttpTerm(int http_ctx_id);
 int KYTY_SYSV_ABI HttpCreateTemplate(int http_ctx_id, const char* user_agent, int http_ver, int is_auto_proxy_conf);
 int KYTY_SYSV_ABI HttpDeleteTemplate(int tmpl_id);
+int KYTY_SYSV_ABI HttpSetNonblock(int id, int enable);
+int KYTY_SYSV_ABI HttpCreateEpoll(int http_ctx_id, HttpEpollHandle* eh);
+int KYTY_SYSV_ABI HttpDestroyEpoll(int http_ctx_id, HttpEpollHandle eh);
+int KYTY_SYSV_ABI HttpCreateConnectionWithURL(int tmpl_id, const char* url, int enable_keep_alive);
+int KYTY_SYSV_ABI HttpDeleteConnection(int conn_id);
+int KYTY_SYSV_ABI HttpCreateRequestWithURL2(int conn_id, const char* method, const char* url, uint64_t content_length);
+int KYTY_SYSV_ABI HttpDeleteRequest(int req_id);
+int KYTY_SYSV_ABI HttpAddRequestHeader(int id, const char* name, const char* value, uint32_t mode);
+int KYTY_SYSV_ABI HttpSetEpoll(int id, HttpEpollHandle eh, void* user_arg);
+int KYTY_SYSV_ABI HttpUnsetEpoll(int id);
+int KYTY_SYSV_ABI HttpSendRequest(int request_id, const void* post_data, size_t size);
+int KYTY_SYSV_ABI HttpsSetSslCallback(int id, HttpsCallback cbfunc, void* user_arg);
 
 } // namespace Http
 
@@ -64,6 +82,9 @@ namespace NpManager {
 struct NpTitleId;
 struct NpTitleSecret;
 struct NpContentRestriction;
+struct NpId;
+struct NpOnlineId;
+struct NpCreateAsyncRequestParameter;
 
 int KYTY_SYSV_ABI  NpCheckCallback();
 int KYTY_SYSV_ABI  NpSetNpTitleId(const NpTitleId* title_id, const NpTitleSecret* title_secret);
@@ -71,18 +92,29 @@ int KYTY_SYSV_ABI  NpSetContentRestriction(const NpContentRestriction* restricti
 int KYTY_SYSV_ABI  NpRegisterStateCallback(void* callback, void* userdata);
 void KYTY_SYSV_ABI NpRegisterGamePresenceCallback(void* callback, void* userdata);
 int KYTY_SYSV_ABI  NpRegisterPlusEventCallback(void* callback, void* userdata);
+int KYTY_SYSV_ABI  NpGetNpId(int user_id, NpId* np_id);
+int KYTY_SYSV_ABI  NpGetOnlineId(int user_id, NpOnlineId* online_id);
+int KYTY_SYSV_ABI  NpCreateAsyncRequest(const NpCreateAsyncRequestParameter* param);
+int KYTY_SYSV_ABI  NpDeleteRequest(int req_id);
+int KYTY_SYSV_ABI  NpCheckNpAvailability(int req_id, const char* user, void* result);
+int KYTY_SYSV_ABI  NpPollAsync(int req_id, int* result);
+int KYTY_SYSV_ABI  NpGetState(int user_id, uint32_t* state);
 
 } // namespace NpManager
 
 namespace NpManagerForToolkit {
 
 int KYTY_SYSV_ABI NpRegisterStateCallbackForToolkit(void* callback, void* userdata);
+int KYTY_SYSV_ABI NpCheckCallbackForLib();
 
 } // namespace NpManagerForToolkit
 
 namespace NpTrophy {
 
 int KYTY_SYSV_ABI NpTrophyCreateHandle(int* handle);
+int KYTY_SYSV_ABI NpTrophyCreateContext(int* context, int user_id, uint32_t service_label, uint64_t options);
+int KYTY_SYSV_ABI NpTrophyRegisterContext(int context, int handle, uint64_t options);
+int KYTY_SYSV_ABI NpTrophyDestroyHandle(int handle);
 
 } // namespace NpTrophy
 

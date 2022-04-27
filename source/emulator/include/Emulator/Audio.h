@@ -23,11 +23,24 @@ int KYTY_SYSV_ABI AudioOutOutputs(AudioOutOutputParam* param, uint32_t num);
 
 } // namespace AudioOut
 
+namespace AudioIn {
+
+int KYTY_SYSV_ABI AudioInOpen(int user_id, uint32_t type, uint32_t index, uint32_t len, uint32_t freq, uint32_t param);
+int KYTY_SYSV_ABI AudioInInput(int handle, void* dest);
+
+} // namespace AudioIn
+
 namespace VoiceQoS {
 
 int KYTY_SYSV_ABI VoiceQoSInit(void* mem_block, uint32_t mem_size, int32_t app_type);
 
 } // namespace VoiceQoS
+
+namespace Ajm {
+
+int KYTY_SYSV_ABI AjmInitialize(int64_t reserved, uint32_t* context);
+
+} // namespace Ajm
 
 } // namespace Kyty::Libs::Audio
 

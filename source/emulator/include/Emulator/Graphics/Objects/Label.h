@@ -12,6 +12,7 @@ namespace Kyty::Libs::Graphics {
 
 struct Label;
 class CommandBuffer;
+struct GraphicContext;
 
 void LabelInit();
 
@@ -53,7 +54,12 @@ public:
 	[[nodiscard]] update_func_t              GetUpdateFunc() const override;
 };
 
-void LabelSet(CommandBuffer* buffer, Label* label);
+Label* LabelCreate64(GraphicContext* ctx, uint64_t* dst_gpu_addr, uint64_t value, LabelGpuObject::callback_t callback_1,
+                     LabelGpuObject::callback_t callback_2, const uint64_t* args);
+Label* LabelCreate32(GraphicContext* ctx, uint32_t* dst_gpu_addr, uint32_t value, LabelGpuObject::callback_t callback_1,
+                     LabelGpuObject::callback_t callback_2, const uint64_t* args);
+void   LabelDelete(Label* label);
+void   LabelSet(CommandBuffer* buffer, Label* label);
 
 } // namespace Kyty::Libs::Graphics
 

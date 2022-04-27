@@ -248,6 +248,8 @@ void UtilBlitImage(CommandBuffer* buffer, VulkanImage* src_image, VulkanSwapchai
 
 void VulkanCreateBuffer(GraphicContext* gctx, uint64_t size, VulkanBuffer* buffer)
 {
+	KYTY_PROFILER_FUNCTION();
+
 	EXIT_IF(gctx == nullptr);
 	EXIT_IF(buffer == nullptr);
 	EXIT_IF(buffer->buffer != nullptr);
@@ -272,6 +274,8 @@ void VulkanCreateBuffer(GraphicContext* gctx, uint64_t size, VulkanBuffer* buffe
 
 void VulkanDeleteBuffer(GraphicContext* gctx, VulkanBuffer* buffer)
 {
+	KYTY_PROFILER_FUNCTION();
+
 	EXIT_IF(buffer == nullptr);
 	EXIT_IF(gctx == nullptr);
 

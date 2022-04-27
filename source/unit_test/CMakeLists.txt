@@ -19,13 +19,8 @@ list(APPEND inc_headers
 	${PROJECT_BINARY_DIR}
 	${PROJECT_SOURCE_DIR}
 	${CMAKE_SOURCE_DIR}/include
-#	${CMAKE_SOURCE_DIR}/3rdparty/sdl2/include
-#	${CMAKE_SOURCE_DIR}/3rdparty/lua/include
 	${CMAKE_SOURCE_DIR}/3rdparty/gtest/include
 	${CMAKE_SOURCE_DIR}/3rdparty/gtest
-#	${CMAKE_SOURCE_DIR}/3rdparty/rijndael/source
-#	${CMAKE_SOURCE_DIR}/3rdparty/miniz
-#	${CMAKE_SOURCE_DIR}/3rdparty/magic_enum/include	
 )
 
 list(APPEND check_headers

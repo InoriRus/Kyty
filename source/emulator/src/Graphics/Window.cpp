@@ -50,6 +50,7 @@
 namespace Kyty::Libs::Graphics {
 
 constexpr float FPS_AVERAGE_FRAMES = 5.0f;
+constexpr float FPS_UPDATE_TIME    = 0.25f;
 
 struct EventKeyboard
 {
@@ -183,6 +184,8 @@ struct GameApi
 	double   m_current_fps           = {0.0};
 	int      m_max_updates_per_frame = {4};
 	double   m_update_fixed_time     = 1.0 / 60.0;
+	int      m_fps_frames_num        = {0};
+	double   m_fps_start_time        = {0};
 };
 
 struct GameApiPrivateStruct
@@ -274,8 +277,22 @@ static void CalcFrameTime(GameApi* game, double game_time_s)
 
 	game->m_frame_num++;
 
-	game->m_current_fps = (1.0f / (game->m_current_time_seconds - game->m_previous_time_seconds)) * (1.0f / FPS_AVERAGE_FRAMES) +
-	                      game->m_current_fps * (1.0f - (1.0f / FPS_AVERAGE_FRAMES));
+	int fps_model = 1;
+
+	if (fps_model == 1)
+	{
+		game->m_fps_frames_num++;
+		if (game->m_current_time_seconds - game->m_fps_start_time > FPS_UPDATE_TIME)
+		{
+			game->m_current_fps    = static_cast<double>(game->m_fps_frames_num) / (game->m_current_time_seconds - game->m_fps_start_time);
+			game->m_fps_frames_num = 0;
+			game->m_fps_start_time = game->m_current_time_seconds;
+		}
+	} else
+	{
+		game->m_current_fps = (1.0f / (game->m_current_time_seconds - game->m_previous_time_seconds)) * (1.0f / FPS_AVERAGE_FRAMES) +
+		                      game->m_current_fps * (1.0f - (1.0f / FPS_AVERAGE_FRAMES));
+	}
 }
 
 static bool Init(GameApi* /*game*/)
