@@ -183,6 +183,7 @@ LIB_DEFINE(InitNet_1_NpTrophy)
 	LIB_FUNC("XbkjbobZlCY", NpTrophy::NpTrophyCreateContext);
 	LIB_FUNC("TJCAxto9SEU", NpTrophy::NpTrophyRegisterContext);
 	LIB_FUNC("GNcF4oidY0Y", NpTrophy::NpTrophyDestroyHandle);
+	LIB_FUNC("LHuSmO3SLd8", NpTrophy::NpTrophyGetTrophyUnlockState);
 }
 
 } // namespace LibNpTrophy

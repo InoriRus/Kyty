@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -41,9 +41,6 @@ typedef struct
     const char *libname;
 } x11dynlib;
 
-#ifndef SDL_VIDEO_DRIVER_X11_DYNAMIC
-#define SDL_VIDEO_DRIVER_X11_DYNAMIC NULL
-#endif
 #ifndef SDL_VIDEO_DRIVER_X11_DYNAMIC_XEXT
 #define SDL_VIDEO_DRIVER_X11_DYNAMIC_XEXT NULL
 #endif
@@ -55,6 +52,9 @@ typedef struct
 #endif
 #ifndef SDL_VIDEO_DRIVER_X11_DYNAMIC_XINPUT2
 #define SDL_VIDEO_DRIVER_X11_DYNAMIC_XINPUT2 NULL
+#endif
+#ifndef SDL_VIDEO_DRIVER_X11_DYNAMIC_XFIXES
+#define SDL_VIDEO_DRIVER_X11_DYNAMIC_XFIXES NULL
 #endif
 #ifndef SDL_VIDEO_DRIVER_X11_DYNAMIC_XRANDR
 #define SDL_VIDEO_DRIVER_X11_DYNAMIC_XRANDR NULL
@@ -72,6 +72,7 @@ static x11dynlib x11libs[] = {
     {NULL, SDL_VIDEO_DRIVER_X11_DYNAMIC_XCURSOR},
     {NULL, SDL_VIDEO_DRIVER_X11_DYNAMIC_XINERAMA},
     {NULL, SDL_VIDEO_DRIVER_X11_DYNAMIC_XINPUT2},
+    {NULL, SDL_VIDEO_DRIVER_X11_DYNAMIC_XFIXES},
     {NULL, SDL_VIDEO_DRIVER_X11_DYNAMIC_XRANDR},
     {NULL, SDL_VIDEO_DRIVER_X11_DYNAMIC_XSS},
     {NULL, SDL_VIDEO_DRIVER_X11_DYNAMIC_XVIDMODE}

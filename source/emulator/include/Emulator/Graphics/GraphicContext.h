@@ -6,13 +6,13 @@
 
 #include "Emulator/Common.h"
 
-#include <vulkan/vulkan_core.h>
+#include <vulkan/vulkan_core.h> // IWYU pragma: export
 
 #ifdef KYTY_EMU_ENABLED
 
 namespace Kyty::Libs::Graphics {
 
-class CommandBuffer;
+class CommandProcessor;
 
 struct VulkanSwapchain
 {
@@ -67,36 +67,58 @@ struct VulkanMemory
 	uint64_t              unique_id    = 0;
 };
 
+enum class VulkanImageType
+{
+	Unknown,
+	VideoOut,
+	DepthStencil,
+	Texture,
+	StorageTexture,
+	RenderTexture
+};
+
 struct VulkanImage
 {
-	VkFormat               format     = VK_FORMAT_UNDEFINED;
-	VkExtent2D             extent     = {};
-	VkImage                image      = nullptr;
-	VkImageView            image_view = nullptr;
-	VkImageLayout          layout     = VK_IMAGE_LAYOUT_UNDEFINED;
+	static constexpr int VIEW_MAX           = 4;
+	static constexpr int VIEW_DEFAULT       = 0;
+	static constexpr int VIEW_BGRA          = 1;
+	static constexpr int VIEW_DEPTH_TEXTURE = 2;
+
+	explicit VulkanImage(VulkanImageType type): type(type) {}
+
+	VulkanImageType        type                 = VulkanImageType::Unknown;
+	VkFormat               format               = VK_FORMAT_UNDEFINED;
+	VkExtent2D             extent               = {};
+	VkImage                image                = nullptr;
+	VkImageView            image_view[VIEW_MAX] = {};
+	VkImageLayout          layout               = VK_IMAGE_LAYOUT_UNDEFINED;
 	Graphics::VulkanMemory memory;
 };
 
 struct VideoOutVulkanImage: public VulkanImage
 {
+	VideoOutVulkanImage(): VulkanImage(VulkanImageType::VideoOut) {}
 };
 
 struct DepthStencilVulkanImage: public VulkanImage
 {
-	bool        compressed   = false;
-	VkImageView texture_view = nullptr;
+	DepthStencilVulkanImage(): VulkanImage(VulkanImageType::DepthStencil) {}
+	bool compressed = false;
 };
 
 struct TextureVulkanImage: public VulkanImage
 {
+	TextureVulkanImage(): VulkanImage(VulkanImageType::Texture) {}
 };
 
 struct StorageTextureVulkanImage: public VulkanImage
 {
+	StorageTextureVulkanImage(): VulkanImage(VulkanImageType::StorageTexture) {}
 };
 
 struct RenderTextureVulkanImage: public VulkanImage
 {
+	RenderTextureVulkanImage(): VulkanImage(VulkanImageType::RenderTexture) {}
 };
 
 struct VulkanBuffer
@@ -108,7 +130,7 @@ struct VulkanBuffer
 
 struct StorageVulkanBuffer: public VulkanBuffer
 {
-	CommandBuffer* cmd_buffer = nullptr;
+	CommandProcessor* cp = nullptr;
 };
 
 } // namespace Kyty::Libs::Graphics

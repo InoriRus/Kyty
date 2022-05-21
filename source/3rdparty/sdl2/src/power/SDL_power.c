@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -67,6 +67,9 @@ static SDL_GetPowerInfo_Impl implementations[] = {
 #endif
 #ifdef SDL_POWER_PSP        /* handles PSP. */
     SDL_GetPowerInfo_PSP,
+#endif
+#ifdef SDL_POWER_VITA        /* handles PSVita. */
+    SDL_GetPowerInfo_VITA,
 #endif
 #ifdef SDL_POWER_WINRT          /* handles WinRT */
     SDL_GetPowerInfo_WinRT,

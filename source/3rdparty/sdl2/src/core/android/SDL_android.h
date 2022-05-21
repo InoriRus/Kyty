@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -33,11 +33,14 @@ extern "C" {
 
 #include "SDL_audio.h"
 #include "SDL_rect.h"
+#include "SDL_video.h"
 
 /* Interface from the SDL library into the Android Java activity */
 extern void Android_JNI_SetActivityTitle(const char *title);
 extern void Android_JNI_SetWindowStyle(SDL_bool fullscreen);
 extern void Android_JNI_SetOrientation(int w, int h, int resizable, const char *hint);
+extern void Android_JNI_MinizeWindow(void);
+extern SDL_bool Android_JNI_ShouldMinimizeOnFocusLoss(void);
 
 extern SDL_bool Android_JNI_GetAccelerometerValues(float values[3]);
 extern void Android_JNI_ShowTextInput(SDL_Rect *inputRect);
@@ -45,6 +48,7 @@ extern void Android_JNI_HideTextInput(void);
 extern SDL_bool Android_JNI_IsScreenKeyboardShown(void);
 extern ANativeWindow* Android_JNI_GetNativeWindow(void);
 
+extern SDL_DisplayOrientation Android_JNI_GetDisplayOrientation(void);
 extern int Android_JNI_GetDisplayDPI(float *ddpi, float *xdpi, float *ydpi);
 
 /* Audio support */
@@ -54,10 +58,11 @@ extern void Android_JNI_WriteAudioBuffer(void);
 extern int Android_JNI_CaptureAudioBuffer(void *buffer, int buflen);
 extern void Android_JNI_FlushCapturedAudio(void);
 extern void Android_JNI_CloseAudioDevice(const int iscapture);
+extern void Android_JNI_AudioSetThreadPriority(int iscapture, int device_id);
 
 /* Detecting device type */
-extern SDL_bool Android_IsDeXMode();
-extern SDL_bool Android_IsChromebook();
+extern SDL_bool Android_IsDeXMode(void);
+extern SDL_bool Android_IsChromebook(void);
 
 #include "SDL_rwops.h"
 
@@ -91,14 +96,15 @@ void Android_JNI_HapticStop(int device_id);
 void Android_JNI_SuspendScreenSaver(SDL_bool suspend);
 
 /* Touch support */
-int Android_JNI_InitTouch(void);
-void Android_JNI_SetSeparateMouseAndTouch(SDL_bool new_value);
-int Android_JNI_GetTouchDeviceIds(int **ids);
+void Android_JNI_InitTouch(void);
 
 /* Threads */
 #include <jni.h>
 JNIEnv *Android_JNI_GetEnv(void);
 int Android_JNI_SetupThread(void);
+
+/* Locale */
+int Android_JNI_GetLocale(char *buf, size_t buflen);
 
 /* Generic messages */
 int Android_JNI_SendMessage(int command, int param);
@@ -112,6 +118,7 @@ int Android_JNI_ShowMessageBox(const SDL_MessageBoxData *messageboxdata, int *bu
 
 /* Cursor support */
 int Android_JNI_CreateCustomCursor(SDL_Surface *surface, int hot_x, int hot_y);
+void Android_JNI_DestroyCustomCursor(int cursorID);
 SDL_bool Android_JNI_SetCustomCursor(int cursorID);
 SDL_bool Android_JNI_SetSystemCursor(int cursorID);
 
@@ -119,11 +126,24 @@ SDL_bool Android_JNI_SetSystemCursor(int cursorID);
 SDL_bool Android_JNI_SupportsRelativeMouse(void);
 SDL_bool Android_JNI_SetRelativeMouseEnabled(SDL_bool enabled);
 
+/* Request permission */
+SDL_bool Android_JNI_RequestPermission(const char *permission);
+
+/* Show toast notification */
+int Android_JNI_ShowToast(const char* message, int duration, int gravity, int xOffset, int yOffset);
+
+int Android_JNI_OpenURL(const char *url);
+
+int SDL_GetAndroidSDKVersion(void);
 
 SDL_bool SDL_IsAndroidTablet(void);
 SDL_bool SDL_IsAndroidTV(void);
 SDL_bool SDL_IsChromebook(void);
 SDL_bool SDL_IsDeXMode(void);
+
+void Android_ActivityMutex_Lock(void);
+void Android_ActivityMutex_Unlock(void);
+void Android_ActivityMutex_Lock_Running(void);
 
 /* Ends C function definitions when using C++ */
 #ifdef __cplusplus

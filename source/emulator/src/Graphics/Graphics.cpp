@@ -9,6 +9,7 @@
 #include "Emulator/Graphics/GraphicsRun.h"
 #include "Emulator/Graphics/HardwareContext.h"
 #include "Emulator/Graphics/Objects/GpuMemory.h"
+#include "Emulator/Graphics/Objects/IndexBuffer.h"
 #include "Emulator/Graphics/Objects/Label.h"
 #include "Emulator/Graphics/Pm4.h"
 #include "Emulator/Graphics/Tile.h"
@@ -38,6 +39,7 @@ KYTY_SUBSYSTEM_INIT(Graphics)
 	GpuMemoryInit();
 	LabelInit();
 	TileInit();
+	IndexBufferInit();
 }
 
 KYTY_SUBSYSTEM_UNEXPECTED_SHUTDOWN(Graphics) {}
@@ -519,7 +521,7 @@ void KYTY_SYSV_ABI GraphicsFlushMemory()
 {
 	PRINT_NAME();
 
-	GpuMemoryFlush(WindowGetGraphicContext());
+	GpuMemoryFlushAll(WindowGetGraphicContext());
 }
 
 int KYTY_SYSV_ABI GraphicsAddEqEvent(LibKernel::EventQueue::KernelEqueue eq, int id, void* udata)

@@ -161,21 +161,22 @@ uint64_t KYTY_SYSV_ABI KernelGetProcessTimeCounterFrequency();
 
 namespace Posix {
 
-int KYTY_SYSV_ABI pthread_create(LibKernel::Pthread* thread, const LibKernel::PthreadAttr* attr, LibKernel::pthread_entry_func_t entry,
-                                 void* arg);
-int KYTY_SYSV_ABI pthread_join(LibKernel::Pthread thread, void** value);
-int KYTY_SYSV_ABI pthread_cond_broadcast(LibKernel::PthreadCond* cond);
-int KYTY_SYSV_ABI pthread_cond_wait(LibKernel::PthreadCond* cond, LibKernel::PthreadMutex* mutex);
-int KYTY_SYSV_ABI pthread_mutex_lock(LibKernel::PthreadMutex* mutex);
-int KYTY_SYSV_ABI pthread_mutex_unlock(LibKernel::PthreadMutex* mutex);
-int KYTY_SYSV_ABI pthread_rwlock_rdlock(LibKernel::PthreadRwlock* rwlock);
-int KYTY_SYSV_ABI pthread_rwlock_unlock(LibKernel::PthreadRwlock* rwlock);
-int KYTY_SYSV_ABI pthread_rwlock_wrlock(LibKernel::PthreadRwlock* rwlock);
-int KYTY_SYSV_ABI pthread_key_create(LibKernel::PthreadKey* key, LibKernel::pthread_key_destructor_func_t destructor);
-int KYTY_SYSV_ABI pthread_key_delete(LibKernel::PthreadKey key);
-int KYTY_SYSV_ABI pthread_setspecific(LibKernel::PthreadKey key, void* value);
-int KYTY_SYSV_ABI pthread_mutex_destroy(LibKernel::PthreadMutex* mutex);
-int KYTY_SYSV_ABI pthread_mutex_init(LibKernel::PthreadMutex* mutex, const LibKernel::PthreadMutexattr* attr);
+int KYTY_SYSV_ABI   pthread_create(LibKernel::Pthread* thread, const LibKernel::PthreadAttr* attr, LibKernel::pthread_entry_func_t entry,
+                                   void* arg);
+int KYTY_SYSV_ABI   pthread_join(LibKernel::Pthread thread, void** value);
+int KYTY_SYSV_ABI   pthread_cond_broadcast(LibKernel::PthreadCond* cond);
+int KYTY_SYSV_ABI   pthread_cond_wait(LibKernel::PthreadCond* cond, LibKernel::PthreadMutex* mutex);
+int KYTY_SYSV_ABI   pthread_mutex_lock(LibKernel::PthreadMutex* mutex);
+int KYTY_SYSV_ABI   pthread_mutex_unlock(LibKernel::PthreadMutex* mutex);
+int KYTY_SYSV_ABI   pthread_rwlock_rdlock(LibKernel::PthreadRwlock* rwlock);
+int KYTY_SYSV_ABI   pthread_rwlock_unlock(LibKernel::PthreadRwlock* rwlock);
+int KYTY_SYSV_ABI   pthread_rwlock_wrlock(LibKernel::PthreadRwlock* rwlock);
+int KYTY_SYSV_ABI   pthread_key_create(LibKernel::PthreadKey* key, LibKernel::pthread_key_destructor_func_t destructor);
+int KYTY_SYSV_ABI   pthread_key_delete(LibKernel::PthreadKey key);
+int KYTY_SYSV_ABI   pthread_setspecific(LibKernel::PthreadKey key, void* value);
+void* KYTY_SYSV_ABI pthread_getspecific(LibKernel::PthreadKey key);
+int KYTY_SYSV_ABI   pthread_mutex_destroy(LibKernel::PthreadMutex* mutex);
+int KYTY_SYSV_ABI   pthread_mutex_init(LibKernel::PthreadMutex* mutex, const LibKernel::PthreadMutexattr* attr);
 
 } // namespace Posix
 

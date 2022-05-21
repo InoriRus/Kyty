@@ -28,7 +28,7 @@ struct TileSizeAlign
 void TileInit();
 void TileConvertTiledToLinear(void* dst, const void* src, TileMode mode, uint32_t width, uint32_t height, bool neo);
 void TileConvertTiledToLinear(void* dst, const void* src, TileMode mode, uint32_t dfmt, uint32_t nfmt, uint32_t width, uint32_t height,
-                              uint32_t levels, bool neo);
+                              uint32_t pitch, uint32_t levels, bool neo);
 
 bool TileGetDepthSize(uint32_t width, uint32_t height, uint32_t pitch, uint32_t z_format, uint32_t stencil_format, bool htile, bool neo,
                       TileSizeAlign* stencil_size, TileSizeAlign* htile_size, TileSizeAlign* depth_size);

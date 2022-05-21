@@ -7,7 +7,7 @@
 #include "Emulator/Graphics/Utils.h"
 #include "Emulator/Profiler.h"
 
-#include <vulkan/vulkan_core.h>
+// IWYU pragma: no_forward_declare VkImageView_T
 
 #ifdef KYTY_EMU_ENABLED
 
@@ -43,8 +43,12 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 	vk_obj->extent.height = height;
 	vk_obj->format        = pixel_format;
 	vk_obj->image         = nullptr;
-	vk_obj->image_view    = nullptr;
 	vk_obj->layout        = VK_IMAGE_LAYOUT_UNDEFINED;
+
+	for (auto& view: vk_obj->image_view)
+	{
+		view = nullptr;
+	}
 
 	vk_obj->compressed = htile;
 
@@ -103,7 +107,7 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 	create_info.subresourceRange.layerCount     = 1;
 	create_info.subresourceRange.levelCount     = 1;
 
-	vkCreateImageView(ctx->device, &create_info, nullptr, &vk_obj->image_view);
+	vkCreateImageView(ctx->device, &create_info, nullptr, &vk_obj->image_view[VulkanImage::VIEW_DEFAULT]);
 
 	VkImageViewCreateInfo create_info2 {};
 	create_info2.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -122,10 +126,10 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 	create_info2.subresourceRange.layerCount     = 1;
 	create_info2.subresourceRange.levelCount     = 1;
 
-	vkCreateImageView(ctx->device, &create_info2, nullptr, &vk_obj->texture_view);
+	vkCreateImageView(ctx->device, &create_info2, nullptr, &vk_obj->image_view[VulkanImage::VIEW_DEPTH_TEXTURE]);
 
-	EXIT_NOT_IMPLEMENTED(vk_obj->image_view == nullptr);
-	EXIT_NOT_IMPLEMENTED(vk_obj->texture_view == nullptr);
+	EXIT_NOT_IMPLEMENTED(vk_obj->image_view[VulkanImage::VIEW_DEFAULT] == nullptr);
+	EXIT_NOT_IMPLEMENTED(vk_obj->image_view[VulkanImage::VIEW_DEPTH_TEXTURE] == nullptr);
 
 	UtilSetDepthLayoutOptimal(vk_obj);
 
@@ -143,8 +147,8 @@ static void delete_func(GraphicContext* ctx, void* obj, VulkanMemory* mem)
 
 	DeleteFramebuffer(vk_obj);
 
-	vkDestroyImageView(ctx->device, vk_obj->texture_view, nullptr);
-	vkDestroyImageView(ctx->device, vk_obj->image_view, nullptr);
+	vkDestroyImageView(ctx->device, vk_obj->image_view[VulkanImage::VIEW_DEPTH_TEXTURE], nullptr);
+	vkDestroyImageView(ctx->device, vk_obj->image_view[VulkanImage::VIEW_DEFAULT], nullptr);
 
 	vkDestroyImage(ctx->device, vk_obj->image, nullptr);
 

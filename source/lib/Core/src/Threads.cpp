@@ -9,14 +9,66 @@
 
 #include <atomic>
 #include <chrono>
-#include <condition_variable>
+#include <condition_variable> // IWYU pragma: keep
 #include <mutex>
 #include <sstream>
 #include <string>
 #include <thread>
 
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+#define KYTY_WIN_CS
+#endif
+
 //#define KYTY_DEBUG_LOCKS
 //#define KYTY_DEBUG_LOCKS_TIMED
+
+#if !(defined(KYTY_DEBUG_LOCKS) || defined(KYTY_DEBUG_LOCKS_TIMED)) && defined(KYTY_WIN_CS)
+#include <windows.h>
+constexpr DWORD KYTY_CS_SPIN_COUNT = 4000;
+
+// IWYU pragma: no_include <minwindef.h>
+// IWYU pragma: no_include <synchapi.h>
+// IWYU pragma: no_include <minwinbase.h>
+
+using InitializeConditionVariable_func_t = /*WINBASEAPI*/ VOID WINAPI (*)(PCONDITION_VARIABLE);
+using WakeConditionVariable_func_t       = /*WINBASEAPI*/ VOID       WINAPI (*)(PCONDITION_VARIABLE);
+using WakeAllConditionVariable_func_t    = /*WINBASEAPI*/ VOID    WINAPI (*)(PCONDITION_VARIABLE);
+using SleepConditionVariableCS_func_t    = /*WINBASEAPI*/ BOOL    WINAPI (*)(PCONDITION_VARIABLE, PCRITICAL_SECTION, DWORD);
+
+static InitializeConditionVariable_func_t ResolveInitializeConditionVariable()
+{
+	if (HMODULE h = GetModuleHandle("KernelBase"); h != nullptr)
+	{
+		return reinterpret_cast<InitializeConditionVariable_func_t>(GetProcAddress(h, "InitializeConditionVariable"));
+	}
+	return nullptr;
+}
+static WakeConditionVariable_func_t ResolveWakeConditionVariable()
+{
+	if (HMODULE h = GetModuleHandle("KernelBase"); h != nullptr)
+	{
+		return reinterpret_cast<WakeConditionVariable_func_t>(GetProcAddress(h, "WakeConditionVariable"));
+	}
+	return nullptr;
+}
+static WakeAllConditionVariable_func_t ResolveWakeAllConditionVariable()
+{
+	if (HMODULE h = GetModuleHandle("KernelBase"); h != nullptr)
+	{
+		return reinterpret_cast<WakeAllConditionVariable_func_t>(GetProcAddress(h, "WakeAllConditionVariable"));
+	}
+	return nullptr;
+}
+static SleepConditionVariableCS_func_t ResolveSleepConditionVariableCS()
+{
+	if (HMODULE h = GetModuleHandle("KernelBase"); h != nullptr)
+	{
+		return reinterpret_cast<SleepConditionVariableCS_func_t>(GetProcAddress(h, "SleepConditionVariableCS"));
+	}
+	return nullptr;
+}
+
+#endif
 
 namespace Kyty::Core {
 
@@ -31,13 +83,32 @@ struct MutexPrivate
 #if defined(KYTY_DEBUG_LOCKS) || defined(KYTY_DEBUG_LOCKS_TIMED)
 	std::recursive_timed_mutex m_mutex;
 #else
+#ifdef KYTY_WIN_CS
+	MutexPrivate() { InitializeCriticalSectionAndSpinCount(&m_cs, KYTY_CS_SPIN_COUNT); }
+	~MutexPrivate() { DeleteCriticalSection(&m_cs); }
+	KYTY_CLASS_NO_COPY(MutexPrivate);
+	CRITICAL_SECTION            m_cs {};
+#else
 	std::recursive_mutex m_mutex;
+#endif
 #endif
 };
 
 struct CondVarPrivate
 {
+#if !(defined(KYTY_DEBUG_LOCKS) || defined(KYTY_DEBUG_LOCKS_TIMED)) && defined(KYTY_WIN_CS)
+	CondVarPrivate()
+	{
+		static auto func = ResolveInitializeConditionVariable();
+		EXIT_NOT_IMPLEMENTED(func == nullptr);
+		func(&m_cv);
+	}
+	~CondVarPrivate() = default;
+	KYTY_CLASS_NO_COPY(CondVarPrivate);
+	CONDITION_VARIABLE m_cv {};
+#else
 	std::condition_variable_any m_cv;
+#endif
 };
 
 class WaitForGraph
@@ -482,7 +553,7 @@ void Mutex::Lock()
 	}
 #else
 #ifdef KYTY_DEBUG_LOCKS_TIMED
-	bool                 locked = false;
+	bool                        locked = false;
 	do
 	{
 		locked = m_mutex->m_mutex.try_lock_for(DBG_TRY_SECONDS);
@@ -493,7 +564,11 @@ void Mutex::Lock()
 		}
 	} while (!locked);
 #else
+#ifdef KYTY_WIN_CS
+	EnterCriticalSection(&m_mutex->m_cs);
+#else
 	m_mutex->m_mutex.lock();
+#endif
 #endif
 #endif
 }
@@ -507,7 +582,11 @@ void Mutex::Unlock()
 	}
 	m_mutex->m_mutex.unlock();
 #else
+#if !defined(KYTY_DEBUG_LOCKS_TIMED) && defined(KYTY_WIN_CS)
+	LeaveCriticalSection(&m_mutex->m_cs);
+#else
 	m_mutex->m_mutex.unlock();
+#endif
 #endif
 }
 
@@ -524,7 +603,11 @@ bool Mutex::TryLock()
 	}
 	return false;
 #else
+#if !defined(KYTY_DEBUG_LOCKS_TIMED) && defined(KYTY_WIN_CS)
+	return (TryEnterCriticalSection(&m_mutex->m_cs) != 0);
+#else
 	return m_mutex->m_mutex.try_lock();
+#endif
 #endif
 }
 
@@ -540,7 +623,10 @@ void CondVar::Wait(Mutex* mutex)
 #if defined(KYTY_DEBUG_LOCKS) || defined(KYTY_DEBUG_LOCKS_TIMED)
 	std::unique_lock<std::recursive_timed_mutex> cpp_lock(mutex->m_mutex->m_mutex, std::adopt_lock_t());
 #else
+#ifdef KYTY_WIN_CS
+#else
 	std::unique_lock<std::recursive_mutex> cpp_lock(mutex->m_mutex->m_mutex, std::adopt_lock_t());
+#endif
 #endif
 #ifdef KYTY_DEBUG_LOCKS
 	if (g_wait_for_graph != nullptr)
@@ -555,9 +641,18 @@ void CondVar::Wait(Mutex* mutex)
 		m_cond_var->m_cv.wait(cpp_lock);
 	}
 #else
+#if !defined(KYTY_DEBUG_LOCKS_TIMED) && defined(KYTY_WIN_CS)
+	static auto func = ResolveSleepConditionVariableCS();
+	EXIT_NOT_IMPLEMENTED(func == nullptr);
+	func(&m_cond_var->m_cv, &mutex->m_mutex->m_cs, INFINITE);
+#else
 	m_cond_var->m_cv.wait(cpp_lock);
 #endif
+#endif
+#if !(defined(KYTY_DEBUG_LOCKS) || defined(KYTY_DEBUG_LOCKS_TIMED)) && defined(KYTY_WIN_CS)
+#else
 	cpp_lock.release();
+#endif
 }
 
 void CondVar::WaitFor(Mutex* mutex, uint32_t micros)
@@ -565,20 +660,41 @@ void CondVar::WaitFor(Mutex* mutex, uint32_t micros)
 #if defined(KYTY_DEBUG_LOCKS) || defined(KYTY_DEBUG_LOCKS_TIMED)
 	std::unique_lock<std::recursive_timed_mutex> cpp_lock(mutex->m_mutex->m_mutex, std::adopt_lock_t());
 #else
+#ifdef KYTY_WIN_CS
+#else
 	std::unique_lock<std::recursive_mutex> cpp_lock(mutex->m_mutex->m_mutex, std::adopt_lock_t());
 #endif
+#endif
+#if !(defined(KYTY_DEBUG_LOCKS) || defined(KYTY_DEBUG_LOCKS_TIMED)) && defined(KYTY_WIN_CS)
+	static auto func = ResolveSleepConditionVariableCS();
+	EXIT_NOT_IMPLEMENTED(func == nullptr);
+	func(&m_cond_var->m_cv, &mutex->m_mutex->m_cs, (micros < 1000 ? 1 : micros / 1000));
+#else
 	m_cond_var->m_cv.wait_for(cpp_lock, std::chrono::microseconds(micros));
 	cpp_lock.release();
+#endif
 }
 
 void CondVar::Signal()
 {
+#if !(defined(KYTY_DEBUG_LOCKS) || defined(KYTY_DEBUG_LOCKS_TIMED)) && defined(KYTY_WIN_CS)
+	static auto func = ResolveWakeConditionVariable();
+	EXIT_NOT_IMPLEMENTED(func == nullptr);
+	func(&m_cond_var->m_cv);
+#else
 	m_cond_var->m_cv.notify_one();
+#endif
 }
 
 void CondVar::SignalAll()
 {
+#if !(defined(KYTY_DEBUG_LOCKS) || defined(KYTY_DEBUG_LOCKS_TIMED)) && defined(KYTY_WIN_CS)
+	static auto func = ResolveWakeAllConditionVariable();
+	EXIT_NOT_IMPLEMENTED(func == nullptr);
+	func(&m_cond_var->m_cv);
+#else
 	m_cond_var->m_cv.notify_all();
+#endif
 }
 
 int Thread::GetThreadIdUnique()

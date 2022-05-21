@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -24,15 +24,13 @@
 
 #ifdef HAVE_LIMITS_H
 #include <limits.h>
-#else
+#endif
 #ifndef SIZE_MAX
 #define SIZE_MAX ((size_t)-1)
-#endif
 #endif
 
 #include "../../core/windows/SDL_windows.h"
 
-#include "SDL_assert.h"
 #include "SDL_windowsvideo.h"
 #include "SDL_windowstaskdialog.h"
 
@@ -119,7 +117,7 @@ static SDL_bool GetButtonIndex(const SDL_MessageBoxData *messageboxdata, Uint32 
     return SDL_FALSE;
 }
 
-static INT_PTR MessageBoxDialogProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM lParam)
+static INT_PTR CALLBACK MessageBoxDialogProc(HWND hDlg, UINT iMessage, WPARAM wParam, LPARAM lParam)
 {
     const SDL_MessageBoxData *messageboxdata;
     size_t buttonindex;
@@ -262,7 +260,7 @@ static SDL_bool AddDialogString(WIN_DialogData *dialog, const char *string)
         string = "";
     }
 
-    wstring = WIN_UTF8ToString(string);
+    wstring = WIN_UTF8ToStringW(string);
     if (!wstring) {
         return SDL_FALSE;
     }
@@ -367,7 +365,7 @@ static SDL_bool AddDialogButton(WIN_DialogData *dialog, int x, int y, int w, int
     if (dialog->numbuttons == 0) {
         style |= WS_GROUP;
     }
-    return AddDialogControl(dialog, DLGITEMTYPEBUTTON, style, 0, x, y, w, h, IDBUTTONINDEX0 + dialog->numbuttons, text, 0);
+    return AddDialogControl(dialog, DLGITEMTYPEBUTTON, style, 0, x, y, w, h, id, text, 0);
 }
 
 static void FreeDialogData(WIN_DialogData *dialog)
@@ -547,7 +545,6 @@ WIN_ShowOldMessageBox(const SDL_MessageBoxData *messageboxdata, int *buttonid)
 {
     WIN_DialogData *dialog;
     int i, x, y, retval;
-    const SDL_MessageBoxButtonData *buttons = messageboxdata->buttons;
     HFONT DialogFont;
     SIZE Size;
     RECT TextSize;
@@ -588,7 +585,6 @@ WIN_ShowOldMessageBox(const SDL_MessageBoxData *messageboxdata, int *buttonid)
 
     /* Jan 25th, 2013 - dant@fleetsa.com
      *
-     *
      * I've tried to make this more reasonable, but I've run in to a lot
      * of nonsense.
      *
@@ -612,8 +608,6 @@ WIN_ShowOldMessageBox(const SDL_MessageBoxData *messageboxdata, int *buttonid)
      * somewhat correct.
      *
      * Honestly, a long term solution is to use CreateWindow, not CreateDialog.
-     *
-
      *
      * In order to get text dimensions we need to have a DC with the desired font.
      * I'm assuming a dialog box in SDL is rare enough we can to the create.
@@ -651,9 +645,9 @@ WIN_ShowOldMessageBox(const SDL_MessageBoxData *messageboxdata, int *buttonid)
     }
 
     /* Measure the *pixel* size of the string. */
-    wmessage = WIN_UTF8ToString(messageboxdata->message);
+    wmessage = WIN_UTF8ToStringW(messageboxdata->message);
     SDL_zero(TextSize);
-    DrawText(FontDC, wmessage, -1, &TextSize, DT_CALCRECT | DT_LEFT | DT_NOPREFIX | DT_EDITCONTROL);
+    DrawTextW(FontDC, wmessage, -1, &TextSize, DT_CALCRECT | DT_LEFT | DT_NOPREFIX | DT_EDITCONTROL);
 
     /* Add margins and some padding for hangs, etc. */
     TextSize.left += TextMargin;
@@ -708,23 +702,36 @@ WIN_ShowOldMessageBox(const SDL_MessageBoxData *messageboxdata, int *buttonid)
     /* Align the buttons to the right/bottom. */
     x = Size.cx - (ButtonWidth + ButtonMargin) * messageboxdata->numbuttons;
     y = Size.cy - ButtonHeight - ButtonMargin;
-    for (i = messageboxdata->numbuttons - 1; i >= 0; --i) {
+    for (i = 0; i < messageboxdata->numbuttons; i++) {
         SDL_bool isdefault = SDL_FALSE;
         const char *buttontext;
+        const SDL_MessageBoxButtonData *sdlButton;
 
-        if (buttons[i].flags & SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT) {
+        /* We always have to create the dialog buttons from left to right
+         * so that the tab order is correct.  Select the info to use
+         * depending on which order was requested. */
+        if (messageboxdata->flags & SDL_MESSAGEBOX_BUTTONS_LEFT_TO_RIGHT) {
+            sdlButton = &messageboxdata->buttons[i];
+        } else {
+            sdlButton = &messageboxdata->buttons[messageboxdata->numbuttons - 1 - i];
+        }
+
+        if (sdlButton->flags & SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT) {
             defbuttoncount++;
             if (defbuttoncount == 1) {
                 isdefault = SDL_TRUE;
             }
         }
 
-        buttontext = EscapeAmpersands(&ampescape, &ampescapesize, buttons[i].text);
-        if (buttontext == NULL || !AddDialogButton(dialog, x, y, ButtonWidth, ButtonHeight, buttontext, buttons[i].buttonid, isdefault)) {
+        buttontext = EscapeAmpersands(&ampescape, &ampescapesize, sdlButton->text);
+        /* Make sure to provide the correct ID to keep buttons indexed in the
+         * same order as how they are in messageboxdata. */
+        if (buttontext == NULL || !AddDialogButton(dialog, x, y, ButtonWidth, ButtonHeight, buttontext, IDBUTTONINDEX0 + (int)(sdlButton - messageboxdata->buttons), isdefault)) {
             FreeDialogData(dialog);
             SDL_free(ampescape);
             return -1;
         }
+
         x += ButtonWidth + ButtonMargin;
     }
     SDL_free(ampescape);
@@ -735,9 +742,9 @@ WIN_ShowOldMessageBox(const SDL_MessageBoxData *messageboxdata, int *buttonid)
         ParentWindow = ((SDL_WindowData*)messageboxdata->window->driverdata)->hwnd;
     }
 
-    result = DialogBoxIndirectParam(NULL, (DLGTEMPLATE*)dialog->lpDialog, ParentWindow, (DLGPROC)MessageBoxDialogProc, (LPARAM)messageboxdata);
+    result = DialogBoxIndirectParam(NULL, (DLGTEMPLATE*)dialog->lpDialog, ParentWindow, MessageBoxDialogProc, (LPARAM)messageboxdata);
     if (result >= IDBUTTONINDEX0 && result - IDBUTTONINDEX0 < messageboxdata->numbuttons) {
-        *buttonid = messageboxdata->buttons[(messageboxdata->numbuttons - 1) - (result - IDBUTTONINDEX0)].buttonid;
+        *buttonid = messageboxdata->buttons[result - IDBUTTONINDEX0].buttonid;
         retval = 0;
     } else if (result == IDCLOSED) {
         /* Dialog window closed by user or system. */
@@ -791,7 +798,7 @@ WIN_ShowMessageBox(const SDL_MessageBoxData *messageboxdata, int *buttonid)
     }
 
     /* If we cannot load comctl32.dll use the old messagebox! */
-    hComctl32 = LoadLibrary(TEXT("Comctl32.dll"));
+    hComctl32 = LoadLibrary(TEXT("comctl32.dll"));
     if (hComctl32 == NULL) {
         return WIN_ShowOldMessageBox(messageboxdata, buttonid);
     }
@@ -815,8 +822,8 @@ WIN_ShowMessageBox(const SDL_MessageBoxData *messageboxdata, int *buttonid)
         ParentWindow = ((SDL_WindowData *) messageboxdata->window->driverdata)->hwnd;
     }
 
-    wmessage = WIN_UTF8ToString(messageboxdata->message);
-    wtitle = WIN_UTF8ToString(messageboxdata->title);
+    wmessage = WIN_UTF8ToStringW(messageboxdata->message);
+    wtitle = WIN_UTF8ToStringW(messageboxdata->title);
 
     SDL_zero(TaskConfig);
     TaskConfig.cbSize = sizeof (TASKDIALOGCONFIG);
@@ -841,15 +848,16 @@ WIN_ShowMessageBox(const SDL_MessageBoxData *messageboxdata, int *buttonid)
     for (i = 0; i < messageboxdata->numbuttons; i++)
     {
         const char *buttontext;
-        pButton = &pButtons[messageboxdata->numbuttons-1-i];
+        if (messageboxdata->flags & SDL_MESSAGEBOX_BUTTONS_LEFT_TO_RIGHT) {
+            pButton = &pButtons[i];
+        } else {
+            pButton = &pButtons[messageboxdata->numbuttons - 1 - i];
+        }
         if (messageboxdata->buttons[i].flags & SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT) {
             nCancelButton = messageboxdata->buttons[i].buttonid;
-            pButton->nButtonID = 2;
+            pButton->nButtonID = IDCANCEL;
         } else {
-            pButton->nButtonID = messageboxdata->buttons[i].buttonid + 1;
-            if (pButton->nButtonID >= 2) {
-                pButton->nButtonID++;
-            }
+            pButton->nButtonID = IDBUTTONINDEX0 + i;
         }
         buttontext = EscapeAmpersands(&ampescape, &ampescapesize, messageboxdata->buttons[i].text);
         if (buttontext == NULL) {
@@ -864,7 +872,7 @@ WIN_ShowMessageBox(const SDL_MessageBoxData *messageboxdata, int *buttonid)
             SDL_free(pButtons);
             return -1;
         }
-        pButton->pszButtonText = WIN_UTF8ToString(buttontext);
+        pButton->pszButtonText = WIN_UTF8ToStringW(buttontext);
         if (messageboxdata->buttons[i].flags & SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT) {
             TaskConfig.nDefaultButton = pButton->nButtonID;
         }
@@ -886,12 +894,12 @@ WIN_ShowMessageBox(const SDL_MessageBoxData *messageboxdata, int *buttonid)
 
     /* Check the Task Dialog was successful and give the result */
     if (SUCCEEDED(hr)) {
-        if (nButton == 2) {
+        if (nButton == IDCANCEL) {
             *buttonid = nCancelButton;
-        } else if (nButton > 2) {
-            *buttonid = nButton-1-1;
+        } else if (nButton >= IDBUTTONINDEX0 && nButton < IDBUTTONINDEX0 + messageboxdata->numbuttons) {
+            *buttonid = messageboxdata->buttons[nButton - IDBUTTONINDEX0].buttonid;
         } else {
-            *buttonid = nButton-1;
+            *buttonid = -1;
         }
         return 0;
     }

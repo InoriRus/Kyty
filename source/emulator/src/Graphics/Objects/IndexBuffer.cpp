@@ -1,16 +1,72 @@
 #include "Emulator/Graphics/Objects/IndexBuffer.h"
 
 #include "Kyty/Core/DbgAssert.h"
+#include "Kyty/Core/Threads.h"
+#include "Kyty/Core/Vector.h"
 
 #include "Emulator/Graphics/GraphicContext.h"
 #include "Emulator/Graphics/Utils.h"
 #include "Emulator/Profiler.h"
 
-#include <vulkan/vulkan_core.h>
-
 #ifdef KYTY_EMU_ENABLED
 
 namespace Kyty::Libs::Graphics {
+
+class IndexBufferManager
+{
+public:
+	IndexBufferManager() { EXIT_NOT_IMPLEMENTED(!Core::Thread::IsMainThread()); }
+	virtual ~IndexBufferManager() { KYTY_NOT_IMPLEMENTED; }
+	KYTY_CLASS_NO_COPY(IndexBufferManager);
+
+	void RegisterForDelete(VulkanBuffer* buf)
+	{
+		Core::Mutex m_mutex;
+
+		m_buffers.Add(buf);
+	}
+
+	void DeleteAll(GraphicContext* ctx)
+	{
+		KYTY_PROFILER_BLOCK("IndexBufferManager::DeleteAll");
+
+		Core::Mutex m_mutex;
+
+		for (auto* vk_obj: m_buffers)
+		{
+			EXIT_IF(vk_obj == nullptr);
+			EXIT_IF(vk_obj->buffer == nullptr);
+			EXIT_IF(ctx == nullptr);
+
+			VulkanDeleteBuffer(ctx, vk_obj);
+
+			delete vk_obj;
+		}
+
+		m_buffers.Clear();
+	}
+
+private:
+	Core::Mutex m_mutex;
+
+	Vector<VulkanBuffer*> m_buffers;
+};
+
+static IndexBufferManager* g_index_buffer_manager = nullptr;
+
+void IndexBufferInit()
+{
+	EXIT_IF(g_index_buffer_manager != nullptr);
+
+	g_index_buffer_manager = new IndexBufferManager;
+}
+
+void IndexBufferDeleteAll(GraphicContext* ctx)
+{
+	EXIT_IF(g_index_buffer_manager == nullptr);
+
+	g_index_buffer_manager->DeleteAll(ctx);
+}
 
 static void* create_func(GraphicContext* ctx, const uint64_t* /*params*/, const uint64_t* vaddr, const uint64_t* size, int vaddr_num,
                          VulkanMemory* mem)
@@ -60,19 +116,15 @@ static void update_func(GraphicContext* /*ctx*/, const uint64_t* /*params*/, voi
 	KYTY_NOT_IMPLEMENTED;
 }
 
-static void delete_func(GraphicContext* ctx, void* obj, VulkanMemory* /*mem*/)
+static void delete_func(GraphicContext* /*ctx*/, void* obj, VulkanMemory* /*mem*/)
 {
 	KYTY_PROFILER_BLOCK("IndexBufferGpuObject::delete_func");
 
+	EXIT_IF(g_index_buffer_manager == nullptr);
+
 	auto* vk_obj = reinterpret_cast<VulkanBuffer*>(obj);
 
-	EXIT_IF(vk_obj == nullptr);
-	EXIT_IF(vk_obj->buffer == nullptr);
-	EXIT_IF(ctx == nullptr);
-
-	VulkanDeleteBuffer(ctx, vk_obj);
-
-	delete vk_obj;
+	g_index_buffer_manager->RegisterForDelete(vk_obj);
 }
 
 bool IndexBufferGpuObject::Equal(const uint64_t* /*other*/) const

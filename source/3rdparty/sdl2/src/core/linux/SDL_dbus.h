@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -54,6 +54,10 @@ typedef struct SDL_DBusContext {
     DBusMessage *(*message_new_method_call)(const char *, const char *, const char *, const char *);
     dbus_bool_t (*message_append_args)(DBusMessage *, int, ...);
     dbus_bool_t (*message_append_args_valist)(DBusMessage *, int, va_list);
+    void (*message_iter_init_append)(DBusMessage *, DBusMessageIter *);
+    dbus_bool_t (*message_iter_open_container)(DBusMessageIter *, int, const char *, DBusMessageIter *);
+    dbus_bool_t (*message_iter_append_basic)(DBusMessageIter *, int, const void *);
+    dbus_bool_t (*message_iter_close_container)(DBusMessageIter *, DBusMessageIter *);
     dbus_bool_t (*message_get_args)(DBusMessage *, DBusError *, int, ...);
     dbus_bool_t (*message_get_args_valist)(DBusMessage *, DBusError *, int, va_list);
     dbus_bool_t (*message_iter_init)(DBusMessage *, DBusMessageIter *);
@@ -62,6 +66,7 @@ typedef struct SDL_DBusContext {
     int (*message_iter_get_arg_type)(DBusMessageIter *);
     void (*message_iter_recurse)(DBusMessageIter *, DBusMessageIter *); 
     void (*message_unref)(DBusMessage *);
+    dbus_bool_t (*threads_init_default)(void);
     void (*error_init)(DBusError *);
     dbus_bool_t (*error_is_set)(const DBusError *);
     void (*error_free)(DBusError *);

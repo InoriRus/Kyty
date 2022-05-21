@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -24,15 +24,16 @@
 
 #include "../../core/windows/SDL_windows.h"
 
-#include "SDL_assert.h"
 #include "../SDL_sysvideo.h"
 #include "../SDL_pixels_c.h"
 #include "../../events/SDL_keyboard_c.h"
 #include "../../events/SDL_mouse_c.h"
+#include "../../SDL_hints_c.h"
 
 #include "SDL_windowsvideo.h"
 #include "SDL_windowswindow.h"
 #include "SDL_hints.h"
+#include "SDL_timer.h"
 
 /* Dropfile support */
 #include <shellapi.h>
@@ -47,20 +48,21 @@
 
 /* Fake window to help with DirectInput events. */
 HWND SDL_HelperWindow = NULL;
-static WCHAR *SDL_HelperWindowClassName = TEXT("SDLHelperWindowInputCatcher");
-static WCHAR *SDL_HelperWindowName = TEXT("SDLHelperWindowInputMsgWindow");
+static const TCHAR *SDL_HelperWindowClassName = TEXT("SDLHelperWindowInputCatcher");
+static const TCHAR *SDL_HelperWindowName = TEXT("SDLHelperWindowInputMsgWindow");
 static ATOM SDL_HelperWindowClass = 0;
 
-/* For borderless Windows, still want the following flags:
+/* For borderless Windows, still want the following flag:
+   - WS_MINIMIZEBOX: window will respond to Windows minimize commands sent to all windows, such as windows key + m, shaking title bar, etc.
+   Additionally, non-fullscreen windows can add:
    - WS_CAPTION: this seems to enable the Windows minimize animation
    - WS_SYSMENU: enables system context menu on task bar
-   - WS_MINIMIZEBOX: window will respond to Windows minimize commands sent to all windows, such as windows key + m, shaking title bar, etc.
    This will also cause the task bar to overlap the window and other windowed behaviors, so only use this for windows that shouldn't appear to be fullscreen
  */
 
 #define STYLE_BASIC         (WS_CLIPSIBLINGS | WS_CLIPCHILDREN)
-#define STYLE_FULLSCREEN    (WS_POPUP)
-#define STYLE_BORDERLESS    (WS_POPUP)
+#define STYLE_FULLSCREEN    (WS_POPUP | WS_MINIMIZEBOX)
+#define STYLE_BORDERLESS    (WS_POPUP | WS_MINIMIZEBOX)
 #define STYLE_BORDERLESS_WINDOWED (WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX)
 #define STYLE_NORMAL        (WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX)
 #define STYLE_RESIZABLE     (WS_THICKFRAME | WS_MAXIMIZEBOX)
@@ -93,9 +95,14 @@ GetWindowStyle(SDL_Window * window)
             style |= STYLE_NORMAL;
         }
 
-        /* You can have a borderless resizable window */
         if (window->flags & SDL_WINDOW_RESIZABLE) {
-            style |= STYLE_RESIZABLE;
+            /* You can have a borderless resizable window, but Windows doesn't always draw it correctly,
+               see https://bugzilla.libsdl.org/show_bug.cgi?id=4466
+             */
+            if (!(window->flags & SDL_WINDOW_BORDERLESS) ||
+                SDL_GetHintBoolean("SDL_BORDERLESS_RESIZABLE_STYLE", SDL_FALSE)) {
+                style |= STYLE_RESIZABLE;
+            }
         }
 
         /* Need to set initialize minimize style, or when we call ShowWindow with WS_MINIMIZE it will activate a random window */
@@ -151,17 +158,24 @@ WIN_SetWindowPositionInternal(_THIS, SDL_Window * window, UINT flags)
     int w, h;
 
     /* Figure out what the window area will be */
-    if (SDL_ShouldAllowTopmost() && ((window->flags & (SDL_WINDOW_FULLSCREEN|SDL_WINDOW_INPUT_FOCUS)) == (SDL_WINDOW_FULLSCREEN|SDL_WINDOW_INPUT_FOCUS) || (window->flags & SDL_WINDOW_ALWAYS_ON_TOP))) {
+    if (SDL_ShouldAllowTopmost() && (window->flags & SDL_WINDOW_ALWAYS_ON_TOP)) {
         top = HWND_TOPMOST;
     } else {
         top = HWND_NOTOPMOST;
     }
 
-    WIN_AdjustWindowRect(window, &x, &y, &w, &h, SDL_TRUE);    
+    WIN_AdjustWindowRect(window, &x, &y, &w, &h, SDL_TRUE);
 
     data->expected_resize = SDL_TRUE;
     SetWindowPos(hwnd, top, x, y, w, h, flags);
     data->expected_resize = SDL_FALSE;
+}
+
+static void SDLCALL
+WIN_MouseRelativeModeCenterChanged(void *userdata, const char *name, const char *oldValue, const char *hint)
+{
+    SDL_WindowData *data = (SDL_WindowData *)userdata;
+    data->mouse_relative_mode_center = SDL_GetStringBoolean(hint, SDL_TRUE);
 }
 
 static int
@@ -181,9 +195,13 @@ SetupWindowData(_THIS, SDL_Window * window, HWND hwnd, HWND parent, SDL_bool cre
     data->hdc = GetDC(hwnd);
     data->hinstance = (HINSTANCE) GetWindowLongPtr(hwnd, GWLP_HINSTANCE);
     data->created = created;
-    data->mouse_button_flags = 0;
+    data->high_surrogate = 0;
+    data->mouse_button_flags = (WPARAM)-1;
+    data->last_pointer_update = (LPARAM)-1;
     data->videodata = videodata;
     data->initializing = SDL_TRUE;
+
+    SDL_AddHintCallback(SDL_HINT_MOUSE_RELATIVE_MODE_CENTER, WIN_MouseRelativeModeCenterChanged, data);
 
     window->driverdata = data;
 
@@ -274,15 +292,8 @@ SetupWindowData(_THIS, SDL_Window * window, HWND hwnd, HWND parent, SDL_bool cre
     }
     if (GetFocus() == hwnd) {
         window->flags |= SDL_WINDOW_INPUT_FOCUS;
-        SDL_SetKeyboardFocus(data->window);
-
-        if (window->flags & SDL_WINDOW_INPUT_GRABBED) {
-            RECT rect;
-            GetClientRect(hwnd, &rect);
-            ClientToScreen(hwnd, (LPPOINT) & rect);
-            ClientToScreen(hwnd, (LPPOINT) & rect + 1);
-            ClipCursor(&rect);
-        }
+        SDL_SetKeyboardFocus(window);
+        WIN_UpdateClipCursor(window);
     }
 
     /* Enable multi-touch */
@@ -296,7 +307,39 @@ SetupWindowData(_THIS, SDL_Window * window, HWND hwnd, HWND parent, SDL_bool cre
     return 0;
 }
 
+static void CleanupWindowData(_THIS, SDL_Window * window)
+{
+    SDL_WindowData *data = (SDL_WindowData *) window->driverdata;
 
+    if (data) {
+        SDL_DelHintCallback(SDL_HINT_MOUSE_RELATIVE_MODE_CENTER, WIN_MouseRelativeModeCenterChanged, data);
+
+        if (data->keyboard_hook) {
+            UnhookWindowsHookEx(data->keyboard_hook);
+        }
+        ReleaseDC(data->hwnd, data->hdc);
+        RemoveProp(data->hwnd, TEXT("SDL_WindowData"));
+        if (data->created) {
+            DestroyWindow(data->hwnd);
+            if (data->parent) {
+                DestroyWindow(data->parent);
+            }
+        } else {
+            /* Restore any original event handler... */
+            if (data->wndproc != NULL) {
+#ifdef GWLP_WNDPROC
+                SetWindowLongPtr(data->hwnd, GWLP_WNDPROC,
+                                 (LONG_PTR) data->wndproc);
+#else
+                SetWindowLong(data->hwnd, GWL_WNDPROC,
+                              (LONG_PTR) data->wndproc);
+#endif
+            }
+        }
+        SDL_free(data);
+    }
+    window->driverdata = NULL;
+}
 
 int
 WIN_CreateWindow(_THIS, SDL_Window * window)
@@ -358,7 +401,7 @@ WIN_CreateWindow(_THIS, SDL_Window * window)
         return 0;
 #else
         return SDL_SetError("Could not create GLES window surface (EGL support not configured)");
-#endif /* SDL_VIDEO_OPENGL_EGL */ 
+#endif /* SDL_VIDEO_OPENGL_EGL */
     }
 #endif /* SDL_VIDEO_OPENGL_ES2 */
 
@@ -380,12 +423,13 @@ WIN_CreateWindowFrom(_THIS, SDL_Window * window, const void *data)
     HWND hwnd = (HWND) data;
     LPTSTR title;
     int titleLen;
+    SDL_bool isstack;
 
     /* Query the title from the existing window */
     titleLen = GetWindowTextLength(hwnd);
-    title = SDL_stack_alloc(TCHAR, titleLen + 1);
+    title = SDL_small_alloc(TCHAR, titleLen + 1, &isstack);
     if (title) {
-        titleLen = GetWindowText(hwnd, title, titleLen);
+        titleLen = GetWindowText(hwnd, title, titleLen + 1);
     } else {
         titleLen = 0;
     }
@@ -393,7 +437,7 @@ WIN_CreateWindowFrom(_THIS, SDL_Window * window, const void *data)
         window->title = WIN_StringToUTF8(title);
     }
     if (title) {
-        SDL_stack_free(title);
+        SDL_small_free(title, isstack);
     }
 
     if (SetupWindowData(_this, window, hwnd, GetParent(hwnd), SDL_FALSE) < 0) {
@@ -420,6 +464,9 @@ WIN_CreateWindowFrom(_THIS, SDL_Window * window, const void *data)
                     }
                 }
             }
+        } else if (window->flags & SDL_WINDOW_OPENGL) {
+            /* Try to set up the pixel format, if it hasn't been set by the application */
+            WIN_GL_SetupWindow(_this, window);
         }
     }
 #endif
@@ -441,38 +488,40 @@ WIN_SetWindowIcon(_THIS, SDL_Window * window, SDL_Surface * icon)
     HWND hwnd = ((SDL_WindowData *) window->driverdata)->hwnd;
     HICON hicon = NULL;
     BYTE *icon_bmp;
-    int icon_len, mask_len, y;
-    SDL_RWops *dst;
+    int icon_len, mask_len, row_len, y;
+    BITMAPINFOHEADER *bmi;
+    Uint8 *dst;
+    SDL_bool isstack;
 
     /* Create temporary buffer for ICONIMAGE structure */
+    SDL_COMPILE_TIME_ASSERT(WIN_SetWindowIcon_uses_BITMAPINFOHEADER_to_prepare_an_ICONIMAGE, sizeof(BITMAPINFOHEADER) == 40);
     mask_len = (icon->h * (icon->w + 7)/8);
-    icon_len = 40 + icon->h * icon->w * sizeof(Uint32) + mask_len;
-    icon_bmp = SDL_stack_alloc(BYTE, icon_len);
-    dst = SDL_RWFromMem(icon_bmp, icon_len);
-    if (!dst) {
-        SDL_stack_free(icon_bmp);
-        return;
-    }
+    icon_len = sizeof(BITMAPINFOHEADER) + icon->h * icon->w * sizeof(Uint32) + mask_len;
+    icon_bmp = SDL_small_alloc(BYTE, icon_len, &isstack);
 
     /* Write the BITMAPINFO header */
-    SDL_WriteLE32(dst, 40);
-    SDL_WriteLE32(dst, icon->w);
-    SDL_WriteLE32(dst, icon->h * 2);
-    SDL_WriteLE16(dst, 1);
-    SDL_WriteLE16(dst, 32);
-    SDL_WriteLE32(dst, BI_RGB);
-    SDL_WriteLE32(dst, icon->h * icon->w * sizeof(Uint32));
-    SDL_WriteLE32(dst, 0);
-    SDL_WriteLE32(dst, 0);
-    SDL_WriteLE32(dst, 0);
-    SDL_WriteLE32(dst, 0);
+    bmi = (BITMAPINFOHEADER *)icon_bmp;
+    bmi->biSize = SDL_SwapLE32(sizeof(BITMAPINFOHEADER));
+    bmi->biWidth = SDL_SwapLE32(icon->w);
+    bmi->biHeight = SDL_SwapLE32(icon->h * 2);
+    bmi->biPlanes = SDL_SwapLE16(1);
+    bmi->biBitCount = SDL_SwapLE16(32);
+    bmi->biCompression = SDL_SwapLE32(BI_RGB);
+    bmi->biSizeImage = SDL_SwapLE32(icon->h * icon->w * sizeof(Uint32));
+    bmi->biXPelsPerMeter = SDL_SwapLE32(0);
+    bmi->biYPelsPerMeter = SDL_SwapLE32(0);
+    bmi->biClrUsed = SDL_SwapLE32(0);
+    bmi->biClrImportant = SDL_SwapLE32(0);
 
     /* Write the pixels upside down into the bitmap buffer */
     SDL_assert(icon->format->format == SDL_PIXELFORMAT_ARGB8888);
+    dst = &icon_bmp[sizeof(BITMAPINFOHEADER)];
+    row_len = icon->w * sizeof(Uint32);
     y = icon->h;
     while (y--) {
         Uint8 *src = (Uint8 *) icon->pixels + y * icon->pitch;
-        SDL_RWwrite(dst, src, icon->w * sizeof(Uint32), 1);
+        SDL_memcpy(dst, src, row_len);
+        dst += row_len;
     }
 
     /* Write the mask */
@@ -480,8 +529,7 @@ WIN_SetWindowIcon(_THIS, SDL_Window * window, SDL_Surface * icon)
 
     hicon = CreateIconFromResource(icon_bmp, icon_len, TRUE, 0x00030000);
 
-    SDL_RWclose(dst);
-    SDL_stack_free(icon_bmp);
+    SDL_small_free(icon_bmp, isstack);
 
     /* Set the icon for the window */
     SendMessage(hwnd, WM_SETICON, ICON_SMALL, (LPARAM) hicon);
@@ -551,9 +599,9 @@ WIN_ShowWindow(_THIS, SDL_Window * window)
     DWORD style;
     HWND hwnd;
     int nCmdShow;
-    
+
     hwnd = ((SDL_WindowData *)window->driverdata)->hwnd;
-    nCmdShow = SW_SHOW;
+    nCmdShow = SDL_GetHintBoolean(SDL_HINT_WINDOW_NO_ACTIVATION_WHEN_SHOWN, SDL_FALSE) ? SW_SHOWNA : SW_SHOW;
     style = GetWindowLong(hwnd, GWL_EXSTYLE);
     if (style & WS_EX_NOACTIVATE) {
         nCmdShow = SW_SHOWNOACTIVATE;
@@ -571,8 +619,38 @@ WIN_HideWindow(_THIS, SDL_Window * window)
 void
 WIN_RaiseWindow(_THIS, SDL_Window * window)
 {
+    /* If desired, raise the window more forcefully.
+     * Technique taken from http://stackoverflow.com/questions/916259/ .
+     * Specifically, http://stackoverflow.com/a/34414846 .
+     *
+     * The issue is that Microsoft has gone through a lot of trouble to make it
+     * nearly impossible to programmatically move a window to the foreground,
+     * for "security" reasons. Apparently, the following song-and-dance gets
+     * around their objections. */
+    SDL_bool bForce = SDL_GetHintBoolean(SDL_HINT_FORCE_RAISEWINDOW, SDL_FALSE);
+
+    HWND hCurWnd = NULL;
+    DWORD dwMyID = 0u;
+    DWORD dwCurID = 0u;
+
     HWND hwnd = ((SDL_WindowData *) window->driverdata)->hwnd;
+    if(bForce)
+    {
+        hCurWnd = GetForegroundWindow();
+        dwMyID = GetCurrentThreadId();
+        dwCurID = GetWindowThreadProcessId(hCurWnd, NULL);
+        ShowWindow(hwnd, SW_RESTORE);
+        AttachThreadInput(dwCurID, dwMyID, TRUE);
+        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE);
+        SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE);
+    }
     SetForegroundWindow(hwnd);
+    if (bForce)
+    {
+        AttachThreadInput(dwCurID, dwMyID, FALSE);
+        SetFocus(hwnd);
+        SetActiveWindow(hwnd);
+    }
 }
 
 void
@@ -624,6 +702,18 @@ WIN_SetWindowResizable(_THIS, SDL_Window * window, SDL_bool resizable)
 }
 
 void
+WIN_SetWindowAlwaysOnTop(_THIS, SDL_Window * window, SDL_bool on_top)
+{
+    SDL_WindowData *data = (SDL_WindowData *)window->driverdata;
+    HWND hwnd = data->hwnd;
+    if (on_top) {
+        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+    } else {
+        SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+    }
+}
+
+void
 WIN_RestoreWindow(_THIS, SDL_Window * window)
 {
     SDL_WindowData *data = (SDL_WindowData *)window->driverdata;
@@ -644,7 +734,14 @@ WIN_SetWindowFullscreen(_THIS, SDL_Window * window, SDL_VideoDisplay * display, 
     int x, y;
     int w, h;
 
-    if (SDL_ShouldAllowTopmost() && ((window->flags & (SDL_WINDOW_FULLSCREEN|SDL_WINDOW_INPUT_FOCUS)) == (SDL_WINDOW_FULLSCREEN|SDL_WINDOW_INPUT_FOCUS) || window->flags & SDL_WINDOW_ALWAYS_ON_TOP)) {
+    if (!fullscreen && (window->flags & (SDL_WINDOW_FULLSCREEN|SDL_WINDOW_FULLSCREEN_DESKTOP)) != 0) {
+        /* Resizing the window on hide causes problems restoring it in Wine, and it's unnecessary.
+         * Also, Windows would preview the minimized window with the wrong size.
+         */
+        return;
+    }
+
+    if (SDL_ShouldAllowTopmost() && (window->flags & SDL_WINDOW_ALWAYS_ON_TOP)) {
         top = HWND_TOPMOST;
     } else {
         top = HWND_NOTOPMOST;
@@ -700,7 +797,7 @@ WIN_SetWindowGammaRamp(_THIS, SDL_Window * window, const Uint16 * ramp)
     HDC hdc;
     BOOL succeeded = FALSE;
 
-    hdc = CreateDC(data->DeviceName, NULL, NULL, NULL);
+    hdc = CreateDCW(data->DeviceName, NULL, NULL, NULL);
     if (hdc) {
         succeeded = SetDeviceGammaRamp(hdc, (LPVOID)ramp);
         if (!succeeded) {
@@ -711,6 +808,32 @@ WIN_SetWindowGammaRamp(_THIS, SDL_Window * window, const Uint16 * ramp)
     return succeeded ? 0 : -1;
 }
 
+void*
+WIN_GetWindowICCProfile(_THIS, SDL_Window * window, size_t * size)
+{
+    SDL_VideoDisplay* display = SDL_GetDisplayForWindow(window);
+    SDL_DisplayData* data = (SDL_DisplayData*)display->driverdata;
+    HDC hdc;
+    BOOL succeeded = FALSE;
+    WCHAR filename[MAX_PATH];
+    DWORD fileNameSize = MAX_PATH;
+    void* iccProfileData = NULL;
+
+    hdc = CreateDCW(data->DeviceName, NULL, NULL, NULL);
+    if (hdc) {
+        succeeded = GetICMProfileW(hdc, &fileNameSize, filename);
+        DeleteDC(hdc);
+    }
+
+    if (succeeded) {
+        iccProfileData = SDL_LoadFile(WIN_StringToUTF8(filename), size);
+        if (!iccProfileData)
+            SDL_SetError("Could not open ICC profile");
+    }
+
+    return iccProfileData;
+}
+
 int
 WIN_GetWindowGammaRamp(_THIS, SDL_Window * window, Uint16 * ramp)
 {
@@ -719,7 +842,7 @@ WIN_GetWindowGammaRamp(_THIS, SDL_Window * window, Uint16 * ramp)
     HDC hdc;
     BOOL succeeded = FALSE;
 
-    hdc = CreateDC(data->DeviceName, NULL, NULL, NULL);
+    hdc = CreateDCW(data->DeviceName, NULL, NULL, NULL);
     if (hdc) {
         succeeded = GetDeviceGammaRamp(hdc, (LPVOID)ramp);
         if (!succeeded) {
@@ -730,49 +853,76 @@ WIN_GetWindowGammaRamp(_THIS, SDL_Window * window, Uint16 * ramp)
     return succeeded ? 0 : -1;
 }
 
+static void WIN_GrabKeyboard(SDL_Window *window)
+{
+    SDL_WindowData *data = (SDL_WindowData *)window->driverdata;
+    HMODULE module;
+
+    if (data->keyboard_hook) {
+        return;
+    }
+
+    /* SetWindowsHookEx() needs to know which module contains the hook we
+       want to install. This is complicated by the fact that SDL can be
+       linked statically or dynamically. Fortunately XP and later provide
+       this nice API that will go through the loaded modules and find the
+       one containing our code.
+    */
+    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT | GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                           (LPTSTR)WIN_KeyboardHookProc,
+                           &module)) {
+        return;
+    }
+
+    /* Capture a snapshot of the current keyboard state before the hook */
+    if (!GetKeyboardState(data->videodata->pre_hook_key_state)) {
+        return;
+    }
+
+    /* To grab the keyboard, we have to install a low-level keyboard hook to
+       intercept keys that would normally be captured by the OS. Intercepting
+       all key events on the system is rather invasive, but it's what Microsoft
+       actually documents that you do to capture these.
+    */
+    data->keyboard_hook = SetWindowsHookEx(WH_KEYBOARD_LL, WIN_KeyboardHookProc, module, 0);
+}
+
+void WIN_UngrabKeyboard(SDL_Window *window)
+{
+    SDL_WindowData *data = (SDL_WindowData *)window->driverdata;
+
+    if (data->keyboard_hook) {
+        UnhookWindowsHookEx(data->keyboard_hook);
+        data->keyboard_hook = NULL;
+    }
+}
+
 void
-WIN_SetWindowGrab(_THIS, SDL_Window * window, SDL_bool grabbed)
+WIN_SetWindowMouseRect(_THIS, SDL_Window * window)
 {
     WIN_UpdateClipCursor(window);
+}
 
-    if (window->flags & SDL_WINDOW_FULLSCREEN) {
-        UINT flags = SWP_NOCOPYBITS | SWP_NOMOVE | SWP_NOSIZE;
+void
+WIN_SetWindowMouseGrab(_THIS, SDL_Window * window, SDL_bool grabbed)
+{
+    WIN_UpdateClipCursor(window);
+}
 
-        if (!(window->flags & SDL_WINDOW_SHOWN)) {
-            flags |= SWP_NOACTIVATE;
-        }
-        WIN_SetWindowPositionInternal(_this, window, flags);
+void
+WIN_SetWindowKeyboardGrab(_THIS, SDL_Window * window, SDL_bool grabbed)
+{
+    if (grabbed) {
+        WIN_GrabKeyboard(window);
+    } else {
+        WIN_UngrabKeyboard(window);
     }
 }
 
 void
 WIN_DestroyWindow(_THIS, SDL_Window * window)
 {
-    SDL_WindowData *data = (SDL_WindowData *) window->driverdata;
-
-    if (data) {
-        ReleaseDC(data->hwnd, data->hdc);
-        RemoveProp(data->hwnd, TEXT("SDL_WindowData"));
-        if (data->created) {
-            DestroyWindow(data->hwnd);
-            if (data->parent) {
-                DestroyWindow(data->parent);
-            }
-        } else {
-            /* Restore any original event handler... */
-            if (data->wndproc != NULL) {
-#ifdef GWLP_WNDPROC
-                SetWindowLongPtr(data->hwnd, GWLP_WNDPROC,
-                                 (LONG_PTR) data->wndproc);
-#else
-                SetWindowLong(data->hwnd, GWL_WNDPROC,
-                              (LONG_PTR) data->wndproc);
-#endif
-            }
-        }
-        SDL_free(data);
-    }
-    window->driverdata = NULL;
+    CleanupWindowData(_this, window);
 }
 
 SDL_bool
@@ -801,9 +951,8 @@ WIN_GetWindowWMInfo(_THIS, SDL_Window * window, SDL_SysWMinfo * info)
     }
 }
 
-
 /*
- * Creates a HelperWindow used for DirectInput events.
+ * Creates a HelperWindow used for DirectInput.
  */
 int
 SDL_HelperWindowCreate(void)
@@ -819,7 +968,7 @@ SDL_HelperWindowCreate(void)
     /* Create the class. */
     SDL_zero(wce);
     wce.lpfnWndProc = DefWindowProc;
-    wce.lpszClassName = (LPCWSTR) SDL_HelperWindowClassName;
+    wce.lpszClassName = SDL_HelperWindowClassName;
     wce.hInstance = hInstance;
 
     /* Register the class. */
@@ -883,18 +1032,6 @@ void WIN_OnWindowEnter(_THIS, SDL_Window * window)
     if (window->flags & SDL_WINDOW_ALWAYS_ON_TOP) {
         WIN_SetWindowPositionInternal(_this, window, SWP_NOCOPYBITS | SWP_NOSIZE | SWP_NOACTIVATE);
     }
-
-#ifdef WM_MOUSELEAVE
-    {
-        TRACKMOUSEEVENT trackMouseEvent;
-
-        trackMouseEvent.cbSize = sizeof(TRACKMOUSEEVENT);
-        trackMouseEvent.dwFlags = TME_LEAVE;
-        trackMouseEvent.hwndTrack = data->hwnd;
-
-        TrackMouseEvent(&trackMouseEvent);
-    }
-#endif /* WM_MOUSELEAVE */
 }
 
 void
@@ -902,47 +1039,85 @@ WIN_UpdateClipCursor(SDL_Window *window)
 {
     SDL_WindowData *data = (SDL_WindowData *) window->driverdata;
     SDL_Mouse *mouse = SDL_GetMouse();
-    RECT rect;
+    RECT rect, clipped_rect;
 
     if (data->in_title_click || data->focus_click_pending) {
         return;
     }
     if (data->skip_update_clipcursor) {
-        data->skip_update_clipcursor = SDL_FALSE;
+        return;
+    }
+    if (!GetClipCursor(&clipped_rect)) {
         return;
     }
 
-    if ((mouse->relative_mode || (window->flags & SDL_WINDOW_INPUT_GRABBED)) &&
+    if ((mouse->relative_mode || (window->flags & SDL_WINDOW_MOUSE_GRABBED) ||
+         (window->mouse_rect.w > 0 && window->mouse_rect.h > 0)) &&
         (window->flags & SDL_WINDOW_INPUT_FOCUS)) {
-        if (mouse->relative_mode && !mouse->relative_mode_warp) {
-            LONG cx, cy;
-            GetWindowRect(data->hwnd, &rect);
+        if (mouse->relative_mode && !mouse->relative_mode_warp && data->mouse_relative_mode_center) {
+            if (GetWindowRect(data->hwnd, &rect)) {
+                LONG cx, cy;
 
-            cx = (rect.left + rect.right) / 2;
-            cy = (rect.top + rect.bottom) / 2;
+                cx = (rect.left + rect.right) / 2;
+                cy = (rect.top + rect.bottom) / 2;
 
-            /* Make an absurdly small clip rect */
-            rect.left = cx - 1;
-            rect.right = cx + 1;
-            rect.top = cy - 1;
-            rect.bottom = cy + 1;
+                /* Make an absurdly small clip rect */
+                rect.left = cx - 1;
+                rect.right = cx + 1;
+                rect.top = cy - 1;
+                rect.bottom = cy + 1;
 
-            if (ClipCursor(&rect)) {
-                data->cursor_clipped_rect = rect;
+                if (SDL_memcmp(&rect, &clipped_rect, sizeof(rect)) != 0) {
+                    if (ClipCursor(&rect)) {
+                        data->cursor_clipped_rect = rect;
+                    }
+                }
             }
         } else {
-            if (GetClientRect(data->hwnd, &rect) && !IsRectEmpty(&rect)) {
+            if (GetClientRect(data->hwnd, &rect)) {
                 ClientToScreen(data->hwnd, (LPPOINT) & rect);
                 ClientToScreen(data->hwnd, (LPPOINT) & rect + 1);
-                if (ClipCursor(&rect)) {
-                    data->cursor_clipped_rect = rect;
+                if (window->mouse_rect.w > 0 && window->mouse_rect.h > 0) {
+                    RECT mouse_rect, intersection;
+
+                    mouse_rect.left = rect.left + window->mouse_rect.x;
+                    mouse_rect.top = rect.top + window->mouse_rect.y;
+                    mouse_rect.right = mouse_rect.left + window->mouse_rect.w - 1;
+                    mouse_rect.bottom = mouse_rect.top + window->mouse_rect.h - 1;
+                    if (IntersectRect(&intersection, &rect, &mouse_rect)) {
+                        SDL_memcpy(&rect, &intersection, sizeof(rect));
+                    } else if ((window->flags & SDL_WINDOW_MOUSE_GRABBED) != 0) {
+                        /* Mouse rect was invalid, just do the normal grab */
+                    } else {
+                        SDL_zero(rect);
+                    }
+                }
+                if (SDL_memcmp(&rect, &clipped_rect, sizeof(rect)) != 0) {
+                    if (!IsRectEmpty(&rect)) {
+                        if (ClipCursor(&rect)) {
+                            data->cursor_clipped_rect = rect;
+                        }
+                    } else {
+                        ClipCursor(NULL);
+                        SDL_zero(data->cursor_clipped_rect);
+                    }
                 }
             }
         }
-    } else if (GetClipCursor(&rect) && SDL_memcmp(&rect, &data->cursor_clipped_rect, sizeof(rect)) == 0) {
-        ClipCursor(NULL);
-        SDL_zero(data->cursor_clipped_rect);
+    } else {
+        POINT first, second;
+
+        first.x = clipped_rect.left;
+        first.y = clipped_rect.top;
+        second.x = clipped_rect.right - 1;
+        second.y = clipped_rect.bottom - 1;
+        if (PtInRect(&data->cursor_clipped_rect, first) &&
+            PtInRect(&data->cursor_clipped_rect, second)) {
+            ClipCursor(NULL);
+            SDL_zero(data->cursor_clipped_rect);
+        }
     }
+    data->last_updated_clipcursor = SDL_GetTicks();
 }
 
 int
@@ -989,6 +1164,34 @@ WIN_AcceptDragAndDrop(SDL_Window * window, SDL_bool accept)
 {
     const SDL_WindowData *data = (SDL_WindowData *) window->driverdata;
     DragAcceptFiles(data->hwnd, accept ? TRUE : FALSE);
+}
+
+int
+WIN_FlashWindow(_THIS, SDL_Window * window, SDL_FlashOperation operation)
+{
+    FLASHWINFO desc;
+
+    SDL_zero(desc);
+    desc.cbSize = sizeof(desc);
+    desc.hwnd = ((SDL_WindowData *) window->driverdata)->hwnd;
+    switch (operation) {
+    case SDL_FLASH_CANCEL:
+        desc.dwFlags = FLASHW_STOP;
+        break;
+    case SDL_FLASH_BRIEFLY:
+        desc.dwFlags = FLASHW_TRAY;
+        desc.uCount = 1;
+        break;
+    case SDL_FLASH_UNTIL_FOCUSED:
+        desc.dwFlags = (FLASHW_TRAY | FLASHW_TIMERNOFG);
+        break;
+    default:
+        return SDL_Unsupported();
+    }
+
+    FlashWindowEx(&desc);
+
+    return 0;
 }
 
 #endif /* SDL_VIDEO_DRIVER_WINDOWS */

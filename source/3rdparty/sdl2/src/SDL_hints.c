@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -22,6 +22,7 @@
 
 #include "SDL_hints.h"
 #include "SDL_error.h"
+#include "SDL_hints_c.h"
 
 
 /* Assuming there aren't many hints set and they aren't being queried in
@@ -119,16 +120,22 @@ SDL_GetHint(const char *name)
 }
 
 SDL_bool
-SDL_GetHintBoolean(const char *name, SDL_bool default_value)
+SDL_GetStringBoolean(const char *value, SDL_bool default_value)
 {
-    const char *hint = SDL_GetHint(name);
-    if (!hint || !*hint) {
+    if (!value || !*value) {
         return default_value;
     }
-    if (*hint == '0' || SDL_strcasecmp(hint, "false") == 0) {
+    if (*value == '0' || SDL_strcasecmp(value, "false") == 0) {
         return SDL_FALSE;
     }
     return SDL_TRUE;
+}
+
+SDL_bool
+SDL_GetHintBoolean(const char *name, SDL_bool default_value)
+{
+    const char *hint = SDL_GetHint(name);
+    return SDL_GetStringBoolean(hint, default_value);
 }
 
 void
@@ -171,6 +178,11 @@ SDL_AddHintCallback(const char *name, SDL_HintCallback callback, void *userdata)
             return;
         }
         hint->name = SDL_strdup(name);
+        if (!hint->name) {
+            SDL_free(hint);
+            SDL_OutOfMemory();
+            return;
+        }
         hint->value = NULL;
         hint->priority = SDL_HINT_DEFAULT;
         hint->callbacks = NULL;

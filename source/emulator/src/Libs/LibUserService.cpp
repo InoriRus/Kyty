@@ -21,6 +21,18 @@ struct UserServiceLoginUserIdList
 	int user_id[4];
 };
 
+enum UserServiceEventType
+{
+	UserServiceEventTypeLogin,
+	UserServiceEventTypeLogout
+};
+
+struct SceUserServiceEvent
+{
+	UserServiceEventType event_type;
+	int                  user_id;
+};
+
 static KYTY_SYSV_ABI int UserServiceInitialize(const void* /*params*/)
 {
 	PRINT_NAME();
@@ -39,11 +51,21 @@ static KYTY_SYSV_ABI int UserServiceGetInitialUser(int* user_id)
 	return OK;
 }
 
-static KYTY_SYSV_ABI int UserServiceGetEvent(void* event)
+static KYTY_SYSV_ABI int UserServiceGetEvent(SceUserServiceEvent* event)
 {
 	PRINT_NAME();
 
 	EXIT_NOT_IMPLEMENTED(event == nullptr);
+
+	static bool logged_in = false;
+
+	if (!logged_in)
+	{
+		logged_in         = true;
+		event->event_type = UserServiceEventTypeLogin;
+		event->user_id    = 1;
+		return OK;
+	}
 
 	return USER_SERVICE_ERROR_NO_EVENT;
 }

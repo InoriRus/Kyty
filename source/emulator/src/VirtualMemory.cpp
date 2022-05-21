@@ -113,6 +113,8 @@ public:
 			info.access_violation_vaddr = exception_record->ExceptionInformation[1];
 		}
 
+		info.rbp = dispatcher_context->ContextRecord->Rbp;
+
 		auto* p = *static_cast<ExceptionHandlerPrivate**>(dispatcher_context->HandlerData);
 		p->func(&info);
 
@@ -318,8 +320,13 @@ static VirtualAlloc2_func_t ResolveVirtualAlloc2()
 	return nullptr;
 }
 
-uint64_t AllocAligned(uint64_t /*address*/, uint64_t size, Mode mode, uint64_t alignment)
+uint64_t AllocAligned(uint64_t address, uint64_t size, Mode mode, uint64_t alignment)
 {
+	if (alignment == 0)
+	{
+		return 0;
+	}
+
 	MEM_ADDRESS_REQUIREMENTS req2 {};
 	MEM_EXTENDED_PARAMETER   param {};
 	req2.LowestStartingAddress = nullptr;
@@ -337,7 +344,9 @@ uint64_t AllocAligned(uint64_t /*address*/, uint64_t size, Mode mode, uint64_t a
 	                                                      get_protection_flag(mode), &param, 1));
 	if (ptr == 0)
 	{
-		printf("VirtualAlloc2() failed: 0x%08" PRIx32 "\n", static_cast<uint32_t>(GetLastError()));
+		printf("VirtualAlloc2(alignment = 0x%016" PRIx64 ") failed: 0x%08" PRIx32 "\n", alignment, static_cast<uint32_t>(GetLastError()));
+
+		return AllocAligned(address, size, mode, alignment << 1u);
 	}
 	return ptr;
 }

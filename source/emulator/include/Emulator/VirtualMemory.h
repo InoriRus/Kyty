@@ -59,6 +59,7 @@ public:
 		AccessViolationType access_violation_type  = AccessViolationType::Unknown;
 		uint64_t            access_violation_vaddr = 0;
 		uint64_t            exception_address      = 0;
+		uint64_t            rbp                    = 0;
 	};
 
 	using handler_func_t = void (*)(const ExceptionInfo*);

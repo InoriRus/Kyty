@@ -6,8 +6,6 @@
 #include "Emulator/Graphics/Utils.h"
 #include "Emulator/Profiler.h"
 
-#include <vulkan/vulkan_core.h>
-
 #ifdef KYTY_EMU_ENABLED
 
 namespace Kyty::Libs::Graphics {

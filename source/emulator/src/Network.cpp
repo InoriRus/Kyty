@@ -69,7 +69,7 @@ public:
 		uint32_t m_type = static_cast<uint32_t>(Type::Invalid);
 	};
 
-	using HttpsCallback = int (*)(int, unsigned int, void* const*, int, void*);
+	using HttpsCallback = KYTY_SYSV_ABI int (*)(int, unsigned int, void* const*, int, void*);
 
 	Network()          = default;
 	virtual ~Network() = default;
@@ -1341,6 +1341,11 @@ namespace NpTrophy {
 
 LIB_NAME("NpTrophy", "NpTrophy");
 
+struct NpTrophyFlagArray
+{
+	uint32_t flag_bits[4];
+};
+
 int KYTY_SYSV_ABI NpTrophyCreateHandle(int* handle)
 {
 	PRINT_NAME();
@@ -1388,6 +1393,28 @@ int KYTY_SYSV_ABI NpTrophyDestroyHandle(int handle)
 	EXIT_NOT_IMPLEMENTED(handle != 1);
 
 	printf("\t handle  = %d\n", handle);
+
+	return OK;
+}
+
+int KYTY_SYSV_ABI NpTrophyGetTrophyUnlockState(int context, int handle, NpTrophyFlagArray* flags, uint32_t* count)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(flags == nullptr);
+	EXIT_NOT_IMPLEMENTED(count == nullptr);
+	EXIT_NOT_IMPLEMENTED(context != 1);
+	EXIT_NOT_IMPLEMENTED(handle != 1);
+
+	printf("\t context = %d\n", context);
+	printf("\t handle  = %d\n", handle);
+
+	flags->flag_bits[0] = 0;
+	flags->flag_bits[1] = 0;
+	flags->flag_bits[2] = 0;
+	flags->flag_bits[3] = 0;
+
+	*count = 0;
 
 	return OK;
 }

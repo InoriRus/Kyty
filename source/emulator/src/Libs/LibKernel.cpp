@@ -224,7 +224,7 @@ static void* KYTY_SYSV_ABI KernelGetProcParam()
 {
 	PRINT_NAME();
 
-	auto* rt = Core::Singleton<Loader::RuntimeLinker>::Instance();
+	auto* rt = Core::Singleton<Loader::RuntimeLinker>::Instance(); // NOLINT
 
 	return reinterpret_cast<void*>(rt->GetProcParam());
 }
@@ -461,6 +461,7 @@ LIB_DEFINE(InitLibKernel_1_Posix)
 	LIB_FUNC("mqULNdimTn0", Posix::pthread_key_create);
 	LIB_FUNC("6BpEZuDT7YI", Posix::pthread_key_delete);
 	LIB_FUNC("WrOLvHU0yQM", Posix::pthread_setspecific);
+	LIB_FUNC("0-KXaS70xy4", Posix::pthread_getspecific);
 }
 
 } // namespace Posix

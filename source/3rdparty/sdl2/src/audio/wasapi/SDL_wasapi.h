@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -63,7 +63,7 @@ extern SDL_atomic_t WASAPI_DefaultCaptureGeneration;
 int WASAPI_PrepDevice(_THIS, const SDL_bool updatestream);
 void WASAPI_RefDevice(_THIS);
 void WASAPI_UnrefDevice(_THIS);
-void WASAPI_AddDevice(const SDL_bool iscapture, const char *devname, LPCWSTR devid);
+void WASAPI_AddDevice(const SDL_bool iscapture, const char *devname, WAVEFORMATEXTENSIBLE *fmt, LPCWSTR devid);
 void WASAPI_RemoveDevice(const SDL_bool iscapture, LPCWSTR devid);
 
 /* These are functions that are implemented differently for Windows vs WinRT. */
@@ -74,7 +74,6 @@ int WASAPI_ActivateDevice(_THIS, const SDL_bool isrecovery);
 void WASAPI_PlatformThreadInit(_THIS);
 void WASAPI_PlatformThreadDeinit(_THIS);
 void WASAPI_PlatformDeleteActivationHandler(void *handler);
-void WASAPI_BeginLoopIteration(_THIS);
 
 #ifdef __cplusplus
 }

@@ -5,6 +5,7 @@
 #include "Kyty/Core/String.h"
 #include "Kyty/Core/Subsystems.h"
 #include "Kyty/Core/Threads.h"
+#include "Kyty/Core/Vector.h"
 
 #include "Emulator/Common.h"
 #include "Emulator/Config.h"
@@ -22,11 +23,13 @@ namespace Kyty {
 
 namespace Log {
 
-static bool         g_log_initialized = false;
-static Core::Mutex* g_mutex           = nullptr;
-static Direction    g_dir             = Direction::Console;
-static Core::File*  g_file            = nullptr;
-static bool         g_colored_printf  = false;
+static bool                     g_log_initialized    = false;
+static Core::Mutex*             g_mutex              = nullptr;
+static Direction                g_dir                = Direction::Console;
+static Core::File*              g_file               = nullptr;
+static bool                     g_colored_printf     = false;
+static thread_local Core::File* g_thread_local_file  = nullptr;
+static Vector<Core::File*>*     g_thread_local_files = nullptr;
 
 static bool EnableVTMode()
 {
@@ -92,6 +95,16 @@ static void Close()
 			delete g_file;
 			g_file = nullptr;
 		}
+		if (g_dir == Direction::Directory && !g_thread_local_files->IsEmpty())
+		{
+			for (auto* file: *g_thread_local_files)
+			{
+				file->Flush();
+				file->Close();
+				delete file;
+			}
+			g_thread_local_files->Clear();
+		}
 		g_mutex->Unlock();
 	}
 }
@@ -110,6 +123,8 @@ KYTY_SUBSYSTEM_INIT(Log)
 	{
 		SetOutputFile(Config::GetPrintfOutputFile());
 	}
+
+	g_thread_local_files = new Vector<Core::File*>;
 }
 
 KYTY_SUBSYSTEM_UNEXPECTED_SHUTDOWN(Log)
@@ -172,6 +187,40 @@ void SetOutputFile(const String& file_name, Core::File::Encoding enc)
 	}
 }
 
+void SetOutputThreadLocalFile(const String& file_name, Core::File::Encoding enc)
+{
+	EXIT_IF(!Log::g_log_initialized);
+	EXIT_IF(Log::g_dir != Log::Direction::Directory);
+	EXIT_IF(Log::g_thread_local_file != nullptr);
+	EXIT_IF(g_thread_local_files == nullptr);
+
+	Core::File::CreateDirectories(file_name.DirectoryWithoutFilename());
+
+	g_thread_local_file = new Core::File;
+	g_thread_local_file->Create(file_name);
+
+	if (g_thread_local_file->IsInvalid())
+	{
+		::printf("Can't create log file: %s\n", file_name.C_Str());
+		delete g_thread_local_file;
+		g_thread_local_file = nullptr;
+	} else
+	{
+		g_thread_local_file->SetEncoding(enc);
+		g_thread_local_file->WriteBOM();
+	}
+
+	g_mutex->Lock();
+	g_thread_local_files->Add(g_thread_local_file);
+	g_mutex->Unlock();
+}
+
+void CreateThreadLocalFile()
+{
+	auto file_name = String::FromPrintf("%s/%d.txt", Config::GetPrintfOutputFolder().C_Str(), Core::Thread::GetThreadIdUnique());
+	SetOutputThreadLocalFile(file_name, Core::File::Encoding::Utf8);
+}
+
 } // namespace Log
 
 void emu_printf(const char* format, ...)
@@ -214,28 +263,38 @@ void printf(const char* format, ...)
 
 	EXIT_IF(Log::g_mutex == nullptr);
 
-	Log::g_mutex->Lock();
+	va_list args {};
+	va_start(args, format);
+	String s;
+	s.Printf(format, args);
+	va_end(args);
+
+	if (!Log::g_colored_printf)
 	{
-		va_list args {};
-		va_start(args, format);
-		String s;
-		s.Printf(format, args);
-		va_end(args);
+		s = Log::RemoveColors(s);
+	}
 
-		if (!Log::g_colored_printf)
+	if (Log::g_dir == Log::Direction::Console)
+	{
+		Log::g_mutex->Lock();
+		::printf("%s", s.C_Str());
+		Log::g_mutex->Unlock();
+	} else if (Log::g_dir == Log::Direction::File && Log::g_file != nullptr)
+	{
+		Log::g_mutex->Lock();
+		Log::g_file->Write(s);
+		Log::g_mutex->Unlock();
+	} else if (Log::g_dir == Log::Direction::Directory)
+	{
+		if (Log::g_thread_local_file == nullptr)
 		{
-			s = Log::RemoveColors(s);
+			Log::CreateThreadLocalFile();
 		}
-
-		if (Log::g_dir == Log::Direction::Console)
+		if (Log::g_thread_local_file != nullptr)
 		{
-			::printf("%s", s.C_Str());
-		} else if (Log::g_dir == Log::Direction::File && Log::g_file != nullptr)
-		{
-			Log::g_file->Write(s);
+			Log::g_thread_local_file->Write(s);
 		}
 	}
-	Log::g_mutex->Unlock();
 }
 
 } // namespace Kyty

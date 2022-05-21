@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -31,7 +31,7 @@ extern SDL_bool SDL_IME_Init(void);
 extern void SDL_IME_Quit(void);
 extern void SDL_IME_SetFocus(SDL_bool focused);
 extern void SDL_IME_Reset(void);
-extern SDL_bool SDL_IME_ProcessKeyEvent(Uint32 keysym, Uint32 keycode);
+extern SDL_bool SDL_IME_ProcessKeyEvent(Uint32 keysym, Uint32 keycode, Uint8 state);
 extern void SDL_IME_UpdateTextRect(SDL_Rect *rect);
 extern void SDL_IME_PumpEvents(void);
 

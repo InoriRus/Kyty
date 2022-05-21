@@ -9,6 +9,8 @@
 
 namespace Kyty::Libs::Graphics {
 
+class CommandProcessor;
+
 void GraphicsRunInit();
 
 void     GraphicsRunSubmit(uint32_t* cmd_draw_buffer, uint32_t num_draw_dw, uint32_t* cmd_const_buffer, uint32_t num_const_dw);
@@ -22,6 +24,11 @@ void     GraphicsRunDone();
 void     GraphicsRunDingDong(uint32_t ring_id, uint32_t offset_dw);
 int      GraphicsRunGetFrameNum();
 bool     GraphicsRunAreSubmitsAllowed();
+
+void GraphicsRunCommandProcessorLock(CommandProcessor* cp);
+void GraphicsRunCommandProcessorUnlock(CommandProcessor* cp);
+void GraphicsRunCommandProcessorFlush(CommandProcessor* cp);
+void GraphicsRunCommandProcessorWait(CommandProcessor* cp);
 
 } // namespace Kyty::Libs::Graphics
 

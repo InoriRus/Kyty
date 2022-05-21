@@ -32,8 +32,6 @@
 
 namespace Kyty::Libs::Graphics {
 
-class CommandProcessor;
-
 class CommandProcessor
 {
 public:
@@ -56,10 +54,14 @@ public:
 	void BufferFlush();
 	void BufferWait();
 
+	void Lock() { m_mutex.Lock(); }
+	void Unlock() { m_mutex.Unlock(); }
+
 	HW::HardwareContext* GetCtx() { return &m_ctx; }
 	HW::UserConfig*      GetUcfg() { return &m_ucfg; }
 
 	void SetIndexType(uint32_t index_type_and_size);
+	void SetNumInstances(uint32_t num_instances);
 	void DrawIndex(uint32_t index_count, const void* index_addr, uint32_t flags, uint32_t type);
 	void DrawIndexAuto(uint32_t index_count, uint32_t flags);
 	void WriteAtEndOfPipe32(uint32_t cache_policy, uint32_t event_write_dest, uint32_t eop_event_type, uint32_t cache_action,
@@ -123,8 +125,9 @@ private:
 
 	HW::HardwareContext m_ctx;
 	HW::UserConfig      m_ucfg;
-	uint32_t            m_index_type_and_size = 0;
 	HW::UserSgprType    m_user_data_marker    = HW::UserSgprType::Unknown;
+	uint32_t            m_index_type_and_size = 0;
+	uint32_t            m_num_instances       = 1;
 
 	Core::Mutex m_mutex;
 
@@ -488,6 +491,8 @@ void CommandProcessor::Reset()
 
 	BufferWait();
 
+	GraphicsRenderDeleteIndexBuffers();
+
 	m_ucfg.Reset();
 	m_ctx.Reset();
 	m_index_type_and_size = 0;
@@ -621,6 +626,8 @@ void CommandProcessor::DumpConstRam(uint32_t* dst, uint32_t offset, uint32_t dw_
 	GpuMemoryCheckAccessViolation(reinterpret_cast<uint64_t>(dst), dw_num * 4);
 
 	memcpy(dst, m_const_ram + offset / 4, dw_num * 4);
+
+	GraphicsRenderMemoryFlush(reinterpret_cast<uint64_t>(dst), dw_num * 4);
 }
 
 void CommandProcessor::WaitRegMem(uint32_t func, bool me, bool mem, const uint32_t* addr, uint32_t ref, uint32_t mask, uint32_t poll)
@@ -647,6 +654,8 @@ void CommandProcessor::WriteData(uint32_t* dst, const uint32_t* src, uint32_t dw
 	GpuMemoryCheckAccessViolation(reinterpret_cast<uint64_t>(dst), dw_num * 4);
 
 	memcpy(dst, src, dw_num * 4);
+
+	GraphicsRenderMemoryFlush(reinterpret_cast<uint64_t>(dst), dw_num * 4);
 }
 
 void GraphicsRing::Submit(uint32_t* cmd_draw_buffer, uint32_t num_draw_dw, uint32_t* cmd_const_buffer, uint32_t num_const_dw, int handle,
@@ -973,6 +982,20 @@ void CommandProcessor::SetIndexType(uint32_t index_type_and_size)
 	m_index_type_and_size = index_type_and_size;
 }
 
+void CommandProcessor::SetNumInstances(uint32_t num_instances)
+{
+	Core::LockGuard lock(m_mutex);
+
+	if (num_instances == 0)
+	{
+		num_instances = 1;
+	}
+
+	m_num_instances = num_instances;
+
+	EXIT_NOT_IMPLEMENTED(m_num_instances != 1);
+}
+
 void CommandProcessor::DrawIndex(uint32_t index_count, const void* index_addr, uint32_t flags, uint32_t type)
 {
 	Core::LockGuard lock(m_mutex);
@@ -1225,15 +1248,15 @@ void CommandProcessor::WriteBack()
 {
 	Core::LockGuard lock(m_mutex);
 
-	GraphicsRenderWriteBack();
+	GraphicsRenderWriteBack(this);
 }
 
-void CommandBuffer::CommandProcessorWait()
-{
-	EXIT_IF(m_parent == nullptr);
-
-	m_parent->BufferWait();
-}
+// void CommandBuffer::CommandProcessorWait()
+//{
+//	EXIT_IF(m_parent == nullptr);
+//
+//	m_parent->BufferWait();
+//}
 
 void GraphicsRunSubmit(uint32_t* cmd_draw_buffer, uint32_t num_draw_dw, uint32_t* cmd_const_buffer, uint32_t num_const_dw)
 {
@@ -1302,6 +1325,34 @@ int GraphicsRunGetFrameNum()
 	EXIT_IF(g_gpu == nullptr);
 
 	return g_gpu->GetFrameNum();
+}
+
+void GraphicsRunCommandProcessorFlush(CommandProcessor* cp)
+{
+	EXIT_IF(cp == nullptr);
+
+	cp->BufferFlush();
+}
+
+void GraphicsRunCommandProcessorWait(CommandProcessor* cp)
+{
+	EXIT_IF(cp == nullptr);
+
+	cp->BufferWait();
+}
+
+void GraphicsRunCommandProcessorLock(CommandProcessor* cp)
+{
+	EXIT_IF(cp == nullptr);
+
+	cp->Lock();
+}
+
+void GraphicsRunCommandProcessorUnlock(CommandProcessor* cp)
+{
+	EXIT_IF(cp == nullptr);
+
+	cp->Unlock();
 }
 
 KYTY_HW_CTX_PARSER(hw_ctx_set_depth_render_target)
@@ -1404,33 +1455,15 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_ps_input)
 {
 	EXIT_NOT_IMPLEMENTED(cmd_offset != Pm4::SPI_PS_INPUT_CNTL_0);
 
-	uint32_t count = 0;
-
-	if (cmd_id == 0xC0016900)
-	{
-		cp->GetCtx()->SetPsInputSettings(0, buffer[0]);
-		count = 1;
-	} else if (cmd_id == 0xC0026900)
-	{
-		cp->GetCtx()->SetPsInputSettings(0, buffer[0]);
-		cp->GetCtx()->SetPsInputSettings(1, buffer[1]);
-		count = 2;
-	} else if (cmd_id == 0xC0036900)
-	{
-		cp->GetCtx()->SetPsInputSettings(0, buffer[0]);
-		cp->GetCtx()->SetPsInputSettings(1, buffer[1]);
-		cp->GetCtx()->SetPsInputSettings(2, buffer[2]);
-		count = 3;
-	} else if (cmd_id == 0xc0046900)
-	{
-		cp->GetCtx()->SetPsInputSettings(0, buffer[0]);
-		cp->GetCtx()->SetPsInputSettings(1, buffer[1]);
-		cp->GetCtx()->SetPsInputSettings(2, buffer[2]);
-		cp->GetCtx()->SetPsInputSettings(3, buffer[3]);
-		count = 4;
-	}
+	uint32_t count = (cmd_id >> 16u) & 0x3fffu;
 
 	EXIT_NOT_IMPLEMENTED(count == 0);
+	EXIT_NOT_IMPLEMENTED(count > 32);
+
+	for (uint32_t i = 0; i < count; i++)
+	{
+		cp->GetCtx()->SetPsInputSettings(i, buffer[i]);
+	}
 
 	return count;
 }
@@ -2179,6 +2212,17 @@ KYTY_CP_OP_PARSER(cp_op_index_type)
 	return 1;
 }
 
+KYTY_CP_OP_PARSER(cp_op_num_instances)
+{
+	KYTY_PROFILER_FUNCTION();
+
+	EXIT_NOT_IMPLEMENTED(cmd_id != 0xc0002f00);
+
+	cp->SetNumInstances(buffer[0]);
+
+	return 1;
+}
+
 KYTY_CP_OP_PARSER(cp_op_push_marker)
 {
 	KYTY_PROFILER_FUNCTION();
@@ -2211,16 +2255,50 @@ KYTY_CP_OP_PARSER(cp_op_draw_index)
 {
 	KYTY_PROFILER_FUNCTION();
 
-	EXIT_NOT_IMPLEMENTED(cmd_id != 0xC008100C);
+	EXIT_NOT_IMPLEMENTED(cmd_id != 0xC008100C && cmd_id != 0xc0042700);
 
-	uint32_t index_count = buffer[0];
-	auto*    index_addr  = reinterpret_cast<void*>(buffer[1] | (static_cast<uint64_t>(buffer[2]) << 32u));
-	uint32_t flags       = buffer[3];
-	uint32_t type        = buffer[4];
+	if (cmd_id == 0xC008100C)
+	{
+		uint32_t index_count = buffer[0];
+		auto*    index_addr  = reinterpret_cast<void*>(buffer[1] | (static_cast<uint64_t>(buffer[2]) << 32u));
+		uint32_t flags       = buffer[3];
+		uint32_t type        = buffer[4];
 
-	cp->DrawIndex(index_count, index_addr, flags, type);
+		cp->DrawIndex(index_count, index_addr, flags, type);
 
-	return 9;
+		return 9;
+	}
+
+	if (cmd_id == 0xc0042700)
+	{
+		uint32_t index_count = buffer[0];
+		auto*    index_addr  = reinterpret_cast<void*>(buffer[1] | (static_cast<uint64_t>(buffer[2]) << 32u));
+
+		EXIT_NOT_IMPLEMENTED(buffer[3] != index_count);
+		EXIT_NOT_IMPLEMENTED(buffer[4] != 0);
+
+		cp->DrawIndex(index_count, index_addr, 0, 1);
+
+		EXIT_NOT_IMPLEMENTED(!(dw >= 7));
+
+		if (buffer[5] == 0xc0001000)
+		{
+			EXIT_NOT_IMPLEMENTED(buffer[6] != 0);
+
+			return 7;
+		}
+
+		if (buffer[5] == 0xc0021000)
+		{
+			EXIT_NOT_IMPLEMENTED(buffer[6] != 0);
+
+			return 9;
+		}
+
+		EXIT("invalid draw_index\n");
+	}
+
+	return 1;
 }
 
 KYTY_CP_OP_PARSER(cp_op_indirect_buffer)
@@ -2879,7 +2957,9 @@ static void graphics_init_jmp_tables()
 	}
 
 	g_cp_op_func[Pm4::IT_NOP]                     = cp_op_nop;
+	g_cp_op_func[Pm4::IT_DRAW_INDEX_2]            = cp_op_draw_index;
 	g_cp_op_func[Pm4::IT_INDEX_TYPE]              = cp_op_index_type;
+	g_cp_op_func[Pm4::IT_NUM_INSTANCES]           = cp_op_num_instances;
 	g_cp_op_func[Pm4::IT_DRAW_INDEX_AUTO]         = cp_op_draw_index_auto;
 	g_cp_op_func[Pm4::IT_WAIT_REG_MEM]            = cp_op_wait_reg_mem;
 	g_cp_op_func[Pm4::IT_WRITE_DATA]              = cp_op_write_data;

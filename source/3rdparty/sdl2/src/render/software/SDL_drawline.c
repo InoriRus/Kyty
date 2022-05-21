@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -20,7 +20,7 @@
 */
 #include "../../SDL_internal.h"
 
-#if !SDL_RENDER_DISABLED
+#if SDL_VIDEO_RENDER_SW && !SDL_RENDER_DISABLED
 
 #include "SDL_draw.h"
 #include "SDL_drawline.h"
@@ -144,7 +144,7 @@ SDL_DrawLine(SDL_Surface * dst, int x1, int y1, int x2, int y2, Uint32 color)
     DrawLineFunc func;
 
     if (!dst) {
-        return SDL_SetError("SDL_DrawLine(): Passed NULL destination surface");
+        return SDL_InvalidParamError("SDL_DrawLine(): dst");
     }
 
     func = SDL_CalculateDrawLineFunc(dst->format);
@@ -173,7 +173,7 @@ SDL_DrawLines(SDL_Surface * dst, const SDL_Point * points, int count,
     DrawLineFunc func;
 
     if (!dst) {
-        return SDL_SetError("SDL_DrawLines(): Passed NULL destination surface");
+        return SDL_InvalidParamError("SDL_DrawLines(): dst");
     }
 
     func = SDL_CalculateDrawLineFunc(dst->format);
@@ -193,8 +193,8 @@ SDL_DrawLines(SDL_Surface * dst, const SDL_Point * points, int count,
             continue;
         }
 
-        /* Draw the end if it was clipped */
-        draw_end = (x2 != points[i].x || y2 != points[i].y);
+        /* Draw the end if the whole line is a single point or it was clipped */
+        draw_end = ((x1 == x2) && (y1 == y2)) || (x2 != points[i].x || y2 != points[i].y);
 
         func(dst, x1, y1, x2, y2, color, draw_end);
     }
@@ -204,6 +204,6 @@ SDL_DrawLines(SDL_Surface * dst, const SDL_Point * points, int count,
     return 0;
 }
 
-#endif /* !SDL_RENDER_DISABLED */
+#endif /* SDL_VIDEO_RENDER_SW && !SDL_RENDER_DISABLED */
 
 /* vi: set ts=4 sw=4 expandtab: */

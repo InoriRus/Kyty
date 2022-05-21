@@ -39,7 +39,7 @@ struct HttpEpoll;
 
 using HttpEpollHandle = HttpEpoll*;
 
-using HttpsCallback = int (*)(int, unsigned int, void* const*, int, void*);
+using HttpsCallback = KYTY_SYSV_ABI int (*)(int, unsigned int, void* const*, int, void*);
 
 int KYTY_SYSV_ABI HttpInit(int memid, int ssl_ctx_id, uint64_t pool_size);
 int KYTY_SYSV_ABI HttpTerm(int http_ctx_id);
@@ -65,7 +65,7 @@ namespace NetCtl {
 struct NetCtlNatInfo;
 union NetCtlInfo;
 
-using NetCtlCallback = void (*)(int, void*);
+using NetCtlCallback = KYTY_SYSV_ABI void (*)(int, void*);
 
 int KYTY_SYSV_ABI  NetCtlInit();
 void KYTY_SYSV_ABI NetCtlTerm();
@@ -111,10 +111,13 @@ int KYTY_SYSV_ABI NpCheckCallbackForLib();
 
 namespace NpTrophy {
 
+struct NpTrophyFlagArray;
+
 int KYTY_SYSV_ABI NpTrophyCreateHandle(int* handle);
 int KYTY_SYSV_ABI NpTrophyCreateContext(int* context, int user_id, uint32_t service_label, uint64_t options);
 int KYTY_SYSV_ABI NpTrophyRegisterContext(int context, int handle, uint64_t options);
 int KYTY_SYSV_ABI NpTrophyDestroyHandle(int handle);
+int KYTY_SYSV_ABI NpTrophyGetTrophyUnlockState(int context, int handle, NpTrophyFlagArray* flags, uint32_t* count);
 
 } // namespace NpTrophy
 

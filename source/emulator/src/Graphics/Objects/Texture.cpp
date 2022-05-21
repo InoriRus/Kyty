@@ -6,11 +6,12 @@
 #include "Emulator/Config.h"
 #include "Emulator/Graphics/GraphicContext.h"
 #include "Emulator/Graphics/GraphicsRender.h"
+#include "Emulator/Graphics/Shader.h"
 #include "Emulator/Graphics/Tile.h"
 #include "Emulator/Graphics/Utils.h"
 #include "Emulator/Profiler.h"
 
-#include <vulkan/vulkan_core.h>
+// IWYU pragma: no_forward_declare VkImageView_T
 
 #ifdef KYTY_EMU_ENABLED
 
@@ -30,9 +31,25 @@ static VkFormat get_texture_format(uint32_t dfmt, uint32_t nfmt)
 	{
 		return VK_FORMAT_R8_UNORM;
 	}
+	if (nfmt == 0 && dfmt == 3)
+	{
+		return VK_FORMAT_R8G8_UNORM;
+	}
 	if (nfmt == 9 && dfmt == 37)
 	{
 		return VK_FORMAT_BC3_SRGB_BLOCK;
+	}
+	if (nfmt == 0 && dfmt == 37)
+	{
+		return VK_FORMAT_BC3_UNORM_BLOCK;
+	}
+	if (nfmt == 0 && dfmt == 36)
+	{
+		return VK_FORMAT_BC2_UNORM_BLOCK;
+	}
+	if (nfmt == 0 && dfmt == 35)
+	{
+		return VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
 	}
 	EXIT("unknown format: nfmt = %u, dfmt = %u\n", nfmt, dfmt);
 	return VK_FORMAT_UNDEFINED;
@@ -189,9 +206,10 @@ static void update_func(GraphicContext* ctx, const uint64_t* params, void* obj, 
 
 	if (tile == 13)
 	{
-		EXIT_NOT_IMPLEMENTED(pitch != width);
+		// EXIT_NOT_IMPLEMENTED(pitch != width);
 		auto* temp_buf = new uint8_t[*size];
-		TileConvertTiledToLinear(temp_buf, reinterpret_cast<void*>(*vaddr), TileMode::TextureTiled, dfmt, nfmt, width, height, levels, neo);
+		TileConvertTiledToLinear(temp_buf, reinterpret_cast<void*>(*vaddr), TileMode::TextureTiled, dfmt, nfmt, width, height, pitch,
+		                         levels, neo);
 		UtilFillImage(ctx, vk_obj, temp_buf, *size, regions, static_cast<uint64_t>(vk_layout));
 		delete[] temp_buf;
 	} else if (tile == 8)
@@ -389,10 +407,10 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 
 	VkComponentMapping components {};
 
-	components.r = get_swizzle(swizzle & 0xffu);
-	components.g = get_swizzle((swizzle >> 8u) & 0xffu);
-	components.b = get_swizzle((swizzle >> 16u) & 0xffu);
-	components.a = get_swizzle((swizzle >> 24u) & 0xffu);
+	components.r = get_swizzle(GetDstSel(swizzle, 0));
+	components.g = get_swizzle(GetDstSel(swizzle, 1));
+	components.b = get_swizzle(GetDstSel(swizzle, 2));
+	components.a = get_swizzle(GetDstSel(swizzle, 3));
 
 	auto pixel_format = get_texture_format(dfmt, nfmt);
 
@@ -433,8 +451,12 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 	vk_obj->extent.height = height;
 	vk_obj->format        = image_info.format;
 	vk_obj->image         = nullptr;
-	vk_obj->image_view    = nullptr;
 	vk_obj->layout        = image_info.initialLayout;
+
+	for (auto& view: vk_obj->image_view)
+	{
+		view = nullptr;
+	}
 
 	vkCreateImage(ctx->device, &image_info, nullptr, &vk_obj->image);
 
@@ -468,9 +490,9 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 	create_info.subresourceRange.layerCount     = 1;
 	create_info.subresourceRange.levelCount     = VK_REMAINING_MIP_LEVELS;
 
-	vkCreateImageView(ctx->device, &create_info, nullptr, &vk_obj->image_view);
+	vkCreateImageView(ctx->device, &create_info, nullptr, &vk_obj->image_view[VulkanImage::VIEW_DEFAULT]);
 
-	EXIT_NOT_IMPLEMENTED(vk_obj->image_view == nullptr);
+	EXIT_NOT_IMPLEMENTED(vk_obj->image_view[VulkanImage::VIEW_DEFAULT] == nullptr);
 
 	return vk_obj;
 }
@@ -497,10 +519,10 @@ static void* create2_func(GraphicContext* ctx, CommandBuffer* buffer, const uint
 
 	VkComponentMapping components {};
 
-	components.r = get_swizzle(swizzle & 0xffu);
-	components.g = get_swizzle((swizzle >> 8u) & 0xffu);
-	components.b = get_swizzle((swizzle >> 16u) & 0xffu);
-	components.a = get_swizzle((swizzle >> 24u) & 0xffu);
+	components.r = get_swizzle(GetDstSel(swizzle, 0));
+	components.g = get_swizzle(GetDstSel(swizzle, 1));
+	components.b = get_swizzle(GetDstSel(swizzle, 2));
+	components.a = get_swizzle(GetDstSel(swizzle, 3));
 
 	auto pixel_format = get_texture_format(dfmt, nfmt);
 
@@ -541,8 +563,12 @@ static void* create2_func(GraphicContext* ctx, CommandBuffer* buffer, const uint
 	vk_obj->extent.height = height;
 	vk_obj->format        = image_info.format;
 	vk_obj->image         = nullptr;
-	vk_obj->image_view    = nullptr;
 	vk_obj->layout        = image_info.initialLayout;
+
+	for (auto& view: vk_obj->image_view)
+	{
+		view = nullptr;
+	}
 
 	vkCreateImage(ctx->device, &image_info, nullptr, &vk_obj->image);
 
@@ -576,9 +602,9 @@ static void* create2_func(GraphicContext* ctx, CommandBuffer* buffer, const uint
 	create_info.subresourceRange.layerCount     = 1;
 	create_info.subresourceRange.levelCount     = VK_REMAINING_MIP_LEVELS;
 
-	vkCreateImageView(ctx->device, &create_info, nullptr, &vk_obj->image_view);
+	vkCreateImageView(ctx->device, &create_info, nullptr, &vk_obj->image_view[VulkanImage::VIEW_DEFAULT]);
 
-	EXIT_NOT_IMPLEMENTED(vk_obj->image_view == nullptr);
+	EXIT_NOT_IMPLEMENTED(vk_obj->image_view[VulkanImage::VIEW_DEFAULT] == nullptr);
 
 	return vk_obj;
 }
@@ -594,7 +620,7 @@ static void delete_func(GraphicContext* ctx, void* obj, VulkanMemory* mem)
 
 	DeleteDescriptor(vk_obj);
 
-	vkDestroyImageView(ctx->device, vk_obj->image_view, nullptr);
+	vkDestroyImageView(ctx->device, vk_obj->image_view[VulkanImage::VIEW_DEFAULT], nullptr);
 
 	vkDestroyImage(ctx->device, vk_obj->image, nullptr);
 

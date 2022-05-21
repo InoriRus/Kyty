@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -23,13 +23,13 @@
 #include "SDL_ibus.h"
 #include "SDL_fcitx.h"
 
-typedef SDL_bool (*_SDL_IME_Init)();
-typedef void (*_SDL_IME_Quit)();
+typedef SDL_bool (*_SDL_IME_Init)(void);
+typedef void (*_SDL_IME_Quit)(void);
 typedef void (*_SDL_IME_SetFocus)(SDL_bool);
-typedef void (*_SDL_IME_Reset)();
-typedef SDL_bool (*_SDL_IME_ProcessKeyEvent)(Uint32, Uint32);
+typedef void (*_SDL_IME_Reset)(void);
+typedef SDL_bool (*_SDL_IME_ProcessKeyEvent)(Uint32, Uint32, Uint8 state);
 typedef void (*_SDL_IME_UpdateTextRect)(SDL_Rect *);
-typedef void (*_SDL_IME_PumpEvents)();
+typedef void (*_SDL_IME_PumpEvents)(void);
 
 static _SDL_IME_Init SDL_IME_Init_Real = NULL;
 static _SDL_IME_Quit SDL_IME_Quit_Real = NULL;
@@ -43,7 +43,7 @@ static void
 InitIME()
 {
     static SDL_bool inited = SDL_FALSE;
-#ifdef HAVE_FCITX_FRONTEND_H
+#ifdef HAVE_FCITX
     const char *im_module = SDL_getenv("SDL_IM_MODULE");
     const char *xmodifiers = SDL_getenv("XMODIFIERS");
 #endif
@@ -54,7 +54,7 @@ InitIME()
     inited = SDL_TRUE;
 
     /* See if fcitx IME support is being requested */
-#ifdef HAVE_FCITX_FRONTEND_H
+#ifdef HAVE_FCITX
     if (!SDL_IME_Init_Real &&
         ((im_module && SDL_strcmp(im_module, "fcitx") == 0) ||
          (!im_module && xmodifiers && SDL_strstr(xmodifiers, "@im=fcitx") != NULL))) {
@@ -66,7 +66,7 @@ InitIME()
         SDL_IME_UpdateTextRect_Real = SDL_Fcitx_UpdateTextRect;
         SDL_IME_PumpEvents_Real = SDL_Fcitx_PumpEvents;
     }
-#endif /* HAVE_FCITX_FRONTEND_H */
+#endif /* HAVE_FCITX */
 
     /* default to IBus */
 #ifdef HAVE_IBUS_IBUS_H
@@ -127,10 +127,10 @@ SDL_IME_Reset(void)
 }
 
 SDL_bool
-SDL_IME_ProcessKeyEvent(Uint32 keysym, Uint32 keycode)
+SDL_IME_ProcessKeyEvent(Uint32 keysym, Uint32 keycode, Uint8 state)
 {
     if (SDL_IME_ProcessKeyEvent_Real)
-        return SDL_IME_ProcessKeyEvent_Real(keysym, keycode);
+        return SDL_IME_ProcessKeyEvent_Real(keysym, keycode, state);
 
     return SDL_FALSE;
 }

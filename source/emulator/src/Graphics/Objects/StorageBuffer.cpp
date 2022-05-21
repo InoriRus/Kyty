@@ -4,10 +4,9 @@
 
 #include "Emulator/Graphics/GraphicContext.h"
 #include "Emulator/Graphics/GraphicsRender.h"
+#include "Emulator/Graphics/GraphicsRun.h"
 #include "Emulator/Graphics/Utils.h"
 #include "Emulator/Profiler.h"
-
-#include "vulkan/vulkan_core.h"
 
 #ifdef KYTY_EMU_ENABLED
 
@@ -67,17 +66,18 @@ static void delete_func(GraphicContext* ctx, void* obj, VulkanMemory* /*mem*/)
 	EXIT_IF(vk_obj->buffer == nullptr);
 	EXIT_IF(ctx == nullptr);
 
-	EXIT_IF(vk_obj->cmd_buffer == nullptr);
+	EXIT_IF(vk_obj->cp == nullptr);
 
 	// All submitted commands that refer to any element of pDescriptorSets must have completed execution
-	vk_obj->cmd_buffer->CommandProcessorWait();
+	GraphicsRunCommandProcessorWait(vk_obj->cp);
 
 	VulkanDeleteBuffer(ctx, vk_obj);
 
 	delete vk_obj;
 }
 
-static void write_back(GraphicContext* ctx, void* obj, const uint64_t* vaddr, const uint64_t* size, int vaddr_num)
+static void write_back(GraphicContext* ctx, const uint64_t* /*params*/, void* obj, const uint64_t* vaddr, const uint64_t* size,
+                       int vaddr_num)
 {
 	KYTY_PROFILER_BLOCK("StorageBufferGpuObject::write_back");
 
@@ -131,9 +131,7 @@ GpuObject::update_func_t StorageBufferGpuObject::GetUpdateFunc() const
 
 void StorageBufferSet(CommandBuffer* cmd_buffer, StorageVulkanBuffer* buffer)
 {
-	// EXIT_IF(buffer->cmd_buffer != nullptr);
-
-	buffer->cmd_buffer = cmd_buffer;
+	buffer->cp = cmd_buffer->GetParent();
 }
 
 } // namespace Kyty::Libs::Graphics

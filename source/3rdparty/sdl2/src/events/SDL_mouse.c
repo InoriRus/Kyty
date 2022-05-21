@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -22,20 +22,27 @@
 
 /* General mouse handling code for SDL */
 
-#include "SDL_assert.h"
 #include "SDL_hints.h"
 #include "SDL_timer.h"
 #include "SDL_events.h"
 #include "SDL_events_c.h"
+#include "../SDL_hints_c.h"
 #include "../video/SDL_sysvideo.h"
 #ifdef __WIN32__
 #include "../core/windows/SDL_windows.h"    // For GetDoubleClickTime()
+#endif
+#if defined(__OS2__)
+#define INCL_WIN
+#include <os2.h>
 #endif
 
 /* #define DEBUG_MOUSE */
 
 /* The mouse state */
 static SDL_Mouse SDL_mouse;
+
+/* for mapping mouse events to touch */
+static SDL_bool track_mouse_down = SDL_FALSE;
 
 static int
 SDL_PrivateSendMouseMotion(SDL_Window * window, SDL_MouseID mouseID, int relative, int x, int y);
@@ -50,6 +57,8 @@ SDL_MouseDoubleClickTimeChanged(void *userdata, const char *name, const char *ol
     } else {
 #ifdef __WIN32__
         mouse->double_click_time = GetDoubleClickTime();
+#elif defined(__OS2__)
+        mouse->double_click_time = WinQuerySysValue(HWND_DESKTOP, SV_DBLCLKTIME);
 #else
         mouse->double_click_time = 500;
 #endif
@@ -97,10 +106,58 @@ SDL_TouchMouseEventsChanged(void *userdata, const char *name, const char *oldVal
 {
     SDL_Mouse *mouse = (SDL_Mouse *)userdata;
 
-    if (hint && (*hint == '0' || SDL_strcasecmp(hint, "false") == 0)) {
-        mouse->touch_mouse_events = SDL_FALSE;
-    } else {
-        mouse->touch_mouse_events = SDL_TRUE;
+    mouse->touch_mouse_events = SDL_GetStringBoolean(hint, SDL_TRUE);
+}
+
+#if defined(__vita__)
+static void SDLCALL
+SDL_VitaTouchMouseDeviceChanged(void *userdata, const char *name, const char *oldValue, const char *hint)
+{
+    SDL_Mouse *mouse = (SDL_Mouse *)userdata;
+    if (hint) {
+        switch(*hint) {
+        default:
+        case '0':
+            mouse->vita_touch_mouse_device = 0;
+            break;
+        case '1':
+            mouse->vita_touch_mouse_device = 1;
+            break;
+        case '2':
+            mouse->vita_touch_mouse_device = 2;
+            break;
+        }
+    }
+}
+#endif
+
+static void SDLCALL
+SDL_MouseTouchEventsChanged(void *userdata, const char *name, const char *oldValue, const char *hint)
+{
+    SDL_Mouse *mouse = (SDL_Mouse *)userdata;
+    SDL_bool default_value;
+
+#if defined(__ANDROID__) || (defined(__IPHONEOS__) && !defined(__TVOS__))
+    default_value = SDL_TRUE;
+#else
+    default_value = SDL_FALSE;
+#endif
+    mouse->mouse_touch_events = SDL_GetStringBoolean(hint, default_value);
+
+    if (mouse->mouse_touch_events) {
+        SDL_AddTouch(SDL_MOUSE_TOUCHID, SDL_TOUCH_DEVICE_DIRECT, "mouse_input");
+    }
+}
+
+static void SDLCALL
+SDL_MouseAutoCaptureChanged(void *userdata, const char *name, const char *oldValue, const char *hint)
+{
+    SDL_Mouse *mouse = (SDL_Mouse *)userdata;
+    SDL_bool auto_capture = SDL_GetStringBoolean(hint, SDL_TRUE);
+
+    if (auto_capture != mouse->auto_capture) {
+        mouse->auto_capture = auto_capture;
+        SDL_UpdateMouseCapture(SDL_FALSE);
     }
 }
 
@@ -127,6 +184,19 @@ SDL_MouseInit(void)
     SDL_AddHintCallback(SDL_HINT_TOUCH_MOUSE_EVENTS,
                         SDL_TouchMouseEventsChanged, mouse);
 
+#if defined(__vita__)
+    SDL_AddHintCallback(SDL_HINT_VITA_TOUCH_MOUSE_DEVICE,
+                        SDL_VitaTouchMouseDeviceChanged, mouse);
+#endif
+
+    SDL_AddHintCallback(SDL_HINT_MOUSE_TOUCH_EVENTS,
+                        SDL_MouseTouchEventsChanged, mouse);
+
+    SDL_AddHintCallback(SDL_HINT_MOUSE_AUTO_CAPTURE,
+                        SDL_MouseAutoCaptureChanged, mouse);
+
+    mouse->was_touch_mouse_events = SDL_FALSE; /* no touch to mouse movement event pending */
+
     mouse->cursor_shown = SDL_TRUE;
 
     return (0);
@@ -149,6 +219,17 @@ SDL_GetMouse(void)
     return &SDL_mouse;
 }
 
+static Uint32 GetButtonState(SDL_Mouse *mouse)
+{
+    int i;
+    Uint32 buttonstate = 0;
+
+    for (i = 0; i < mouse->num_sources; ++i) {
+        buttonstate |= mouse->sources[i].buttonstate;
+    }
+    return buttonstate;
+}
+
 SDL_Window *
 SDL_GetMouseFocus(void)
 {
@@ -156,25 +237,6 @@ SDL_GetMouseFocus(void)
 
     return mouse->focus;
 }
-
-#if 0
-void
-SDL_ResetMouse(void)
-{
-    SDL_Mouse *mouse = SDL_GetMouse();
-    Uint8 i;
-
-#ifdef DEBUG_MOUSE
-    printf("Resetting mouse\n");
-#endif
-    for (i = 1; i <= sizeof(mouse->buttonstate)*8; ++i) {
-        if (mouse->buttonstate & SDL_BUTTON(i)) {
-            SDL_SendMouseButton(mouse->focus, mouse->mouseID, SDL_RELEASED, i);
-        }
-    }
-    SDL_assert(mouse->buttonstate == 0);
-}
-#endif
 
 void
 SDL_SetMouseFocus(SDL_Window * window)
@@ -215,7 +277,7 @@ SDL_SetMouseFocus(SDL_Window * window)
 
 /* Check to see if we need to synthesize focus events */
 static SDL_bool
-SDL_UpdateMouseFocus(SDL_Window * window, int x, int y, Uint32 buttonstate)
+SDL_UpdateMouseFocus(SDL_Window * window, int x, int y, Uint32 buttonstate, SDL_bool send_mouse_motion)
 {
     SDL_Mouse *mouse = SDL_GetMouse();
     SDL_bool inWindow = SDL_TRUE;
@@ -228,25 +290,14 @@ SDL_UpdateMouseFocus(SDL_Window * window, int x, int y, Uint32 buttonstate)
         }
     }
 
-/* Linux doesn't give you mouse events outside your window unless you grab
-   the pointer.
-
-   Windows doesn't give you mouse events outside your window unless you call
-   SetCapture().
-
-   Both of these are slightly scary changes, so for now we'll punt and if the
-   mouse leaves the window you'll lose mouse focus and reset button state.
-*/
-#ifdef SUPPORT_DRAG_OUTSIDE_WINDOW
-    if (!inWindow && !buttonstate) {
-#else
     if (!inWindow) {
-#endif
         if (window == mouse->focus) {
 #ifdef DEBUG_MOUSE
-            printf("Mouse left window, synthesizing move & focus lost event\n");
+            SDL_Log("Mouse left window, synthesizing move & focus lost event\n");
 #endif
-            SDL_PrivateSendMouseMotion(window, mouse->mouseID, 0, x, y);
+            if (send_mouse_motion) {
+                SDL_PrivateSendMouseMotion(window, mouse->mouseID, 0, x, y);
+            }
             SDL_SetMouseFocus(NULL);
         }
         return SDL_FALSE;
@@ -254,10 +305,12 @@ SDL_UpdateMouseFocus(SDL_Window * window, int x, int y, Uint32 buttonstate)
 
     if (window != mouse->focus) {
 #ifdef DEBUG_MOUSE
-        printf("Mouse entered window, synthesizing focus gain & move event\n");
+        SDL_Log("Mouse entered window, synthesizing focus gain & move event\n");
 #endif
         SDL_SetMouseFocus(window);
-        SDL_PrivateSendMouseMotion(window, mouse->mouseID, 0, x, y);
+        if (send_mouse_motion) {
+            SDL_PrivateSendMouseMotion(window, mouse->mouseID, 0, x, y);
+        }
     }
     return SDL_TRUE;
 }
@@ -267,7 +320,7 @@ SDL_SendMouseMotion(SDL_Window * window, SDL_MouseID mouseID, int relative, int 
 {
     if (window && !relative) {
         SDL_Mouse *mouse = SDL_GetMouse();
-        if (!SDL_UpdateMouseFocus(window, x, y, mouse->buttonstate)) {
+        if (!SDL_UpdateMouseFocus(window, x, y, GetButtonState(mouse), (mouseID == SDL_TOUCH_MOUSEID) ? SDL_FALSE : SDL_TRUE)) {
             return 0;
         }
     }
@@ -298,8 +351,22 @@ SDL_PrivateSendMouseMotion(SDL_Window * window, SDL_MouseID mouseID, int relativ
     int xrel;
     int yrel;
 
-    if (mouseID == SDL_TOUCH_MOUSEID && !mouse->touch_mouse_events) {
-        return 0;
+    /* SDL_HINT_MOUSE_TOUCH_EVENTS: controlling whether mouse events should generate synthetic touch events */
+    if (mouse->mouse_touch_events) {
+        if (mouseID != SDL_TOUCH_MOUSEID && !relative && track_mouse_down) {
+            if (window) {
+                float fx = (float)x / (float)window->w;
+                float fy = (float)y / (float)window->h;
+                SDL_SendTouchMotion(SDL_MOUSE_TOUCHID, 0, window, fx, fy, 1.0f);
+            }
+        }
+    }
+
+    /* SDL_HINT_TOUCH_MOUSE_EVENTS: if not set, discard synthetic mouse events coming from platform layer */
+    if (mouse->touch_mouse_events == 0) {
+        if (mouseID == SDL_TOUCH_MOUSEID) {
+            return 0;
+        }
     }
 
     if (mouseID != SDL_TOUCH_MOUSEID && mouse->relative_mode_warp) {
@@ -312,7 +379,13 @@ SDL_PrivateSendMouseMotion(SDL_Window * window, SDL_MouseID mouseID, int relativ
             mouse->last_y = center_y;
             return 0;
         }
-        SDL_WarpMouseInWindow(window, center_x, center_y);
+        if (window && (window->flags & SDL_WINDOW_INPUT_FOCUS) != 0) {
+            if (mouse->WarpMouse) {
+                mouse->WarpMouse(window, center_x, center_y);
+            } else {
+                SDL_PrivateSendMouseMotion(window, mouseID, 0, center_x, center_y);
+            }
+        }
     }
 
     if (relative) {
@@ -332,23 +405,20 @@ SDL_PrivateSendMouseMotion(SDL_Window * window, SDL_MouseID mouseID, int relativ
         yrel = y - mouse->last_y;
     }
 
-    /* Drop events that don't change state */
-    if (!xrel && !yrel) {
+    /* Ignore relative motion when first positioning the mouse */
+    if (!mouse->has_position) {
+        mouse->x = x;
+        mouse->y = y;
+        mouse->has_position = SDL_TRUE;
+    } else if (!xrel && !yrel) {  /* Drop events that don't change state */
 #ifdef DEBUG_MOUSE
-        printf("Mouse event didn't change state - dropped!\n");
+        SDL_Log("Mouse event didn't change state - dropped!\n");
 #endif
         return 0;
     }
 
-    /* Ignore relative motion when first positioning the mouse */
-    if (!mouse->has_position) {
-        xrel = 0;
-        yrel = 0;
-        mouse->has_position = SDL_TRUE;
-    }
-
     /* Ignore relative motion positioning the first touch */
-    if (mouseID == SDL_TOUCH_MOUSEID && !mouse->buttonstate) {
+    if (mouseID == SDL_TOUCH_MOUSEID && !GetButtonState(mouse)) {
         xrel = 0;
         yrel = 0;
     }
@@ -365,25 +435,42 @@ SDL_PrivateSendMouseMotion(SDL_Window * window, SDL_MouseID mouseID, int relativ
     /* make sure that the pointers find themselves inside the windows,
        unless we have the mouse captured. */
     if (window && ((window->flags & SDL_WINDOW_MOUSE_CAPTURE) == 0)) {
-        int x_max = 0, y_max = 0;
+        int x_min = 0, x_max = 0;
+        int y_min = 0, y_max = 0;
+        const SDL_Rect *confine = SDL_GetWindowMouseRect(window);
 
-        /* !!! FIXME: shouldn't this be (window) instead of (mouse->focus)? */
-        SDL_GetWindowSize(mouse->focus, &x_max, &y_max);
+        SDL_GetWindowSize(window, &x_max, &y_max);
         --x_max;
         --y_max;
+
+        if (confine) {
+            SDL_Rect window_rect;
+            SDL_Rect mouse_rect;
+
+            window_rect.x = 0;
+            window_rect.y = 0;
+            window_rect.w = x_max + 1;
+            window_rect.h = y_max + 1;
+            if (SDL_IntersectRect(confine, &window_rect, &mouse_rect)) {
+                x_min = mouse_rect.x;
+                y_min = mouse_rect.y;
+                x_max = x_min + mouse_rect.w - 1;
+                y_max = y_min + mouse_rect.h - 1;
+            }
+        }
 
         if (mouse->x > x_max) {
             mouse->x = x_max;
         }
-        if (mouse->x < 0) {
-            mouse->x = 0;
+        if (mouse->x < x_min) {
+            mouse->x = x_min;
         }
 
         if (mouse->y > y_max) {
             mouse->y = y_max;
         }
-        if (mouse->y < 0) {
-            mouse->y = 0;
+        if (mouse->y < y_min) {
+            mouse->y = y_min;
         }
     }
 
@@ -403,7 +490,9 @@ SDL_PrivateSendMouseMotion(SDL_Window * window, SDL_MouseID mouseID, int relativ
         event.motion.type = SDL_MOUSEMOTION;
         event.motion.windowID = mouse->focus ? mouse->focus->id : 0;
         event.motion.which = mouseID;
-        event.motion.state = mouse->buttonstate;
+        /* Set us pending (or clear during a normal mouse movement event) as having triggered */
+        mouse->was_touch_mouse_events = (mouseID == SDL_TOUCH_MOUSEID)? SDL_TRUE : SDL_FALSE;
+        event.motion.state = GetButtonState(mouse);
         event.motion.x = mouse->x;
         event.motion.y = mouse->y;
         event.motion.xrel = xrel;
@@ -419,6 +508,30 @@ SDL_PrivateSendMouseMotion(SDL_Window * window, SDL_MouseID mouseID, int relativ
         mouse->last_y = y;
     }
     return posted;
+}
+
+static SDL_MouseInputSource *GetMouseInputSource(SDL_Mouse *mouse, SDL_MouseID mouseID)
+{
+    SDL_MouseInputSource *source, *sources;
+    int i;
+
+    for (i = 0; i < mouse->num_sources; ++i) {
+        source = &mouse->sources[i];
+        if (source->mouseID == mouseID) {
+            return source;
+        }
+    }
+
+    sources = (SDL_MouseInputSource *)SDL_realloc(mouse->sources, (mouse->num_sources + 1)*sizeof(*mouse->sources));
+    if (sources) {
+        mouse->sources = sources;
+        ++mouse->num_sources;
+        source = &sources[mouse->num_sources - 1];
+        source->mouseID = mouseID;
+        source->buttonstate = 0;
+        return source;
+    }
+    return NULL;
 }
 
 static SDL_MouseClickState *GetMouseClickState(SDL_Mouse *mouse, Uint8 button)
@@ -445,10 +558,36 @@ SDL_PrivateSendMouseButton(SDL_Window * window, SDL_MouseID mouseID, Uint8 state
     SDL_Mouse *mouse = SDL_GetMouse();
     int posted;
     Uint32 type;
-    Uint32 buttonstate = mouse->buttonstate;
+    Uint32 buttonstate;
+    SDL_MouseInputSource *source;
 
-    if (mouseID == SDL_TOUCH_MOUSEID && !mouse->touch_mouse_events) {
+    source = GetMouseInputSource(mouse, mouseID);
+    if (!source) {
         return 0;
+    }
+    buttonstate = source->buttonstate;
+
+    /* SDL_HINT_MOUSE_TOUCH_EVENTS: controlling whether mouse events should generate synthetic touch events */
+    if (mouse->mouse_touch_events) {
+        if (mouseID != SDL_TOUCH_MOUSEID && button == SDL_BUTTON_LEFT) {
+            if (state == SDL_PRESSED) {
+                track_mouse_down = SDL_TRUE;
+            } else {
+                track_mouse_down = SDL_FALSE;
+            }
+            if (window) {
+                float fx = (float)mouse->x / (float)window->w;
+                float fy = (float)mouse->y / (float)window->h;
+                SDL_SendTouch(SDL_MOUSE_TOUCHID, 0, window, track_mouse_down, fx, fy, 1.0f);
+            }
+        }
+    }
+
+    /* SDL_HINT_TOUCH_MOUSE_EVENTS: if not set, discard synthetic mouse events coming from platform layer */
+    if (mouse->touch_mouse_events == 0) {
+        if (mouseID == SDL_TOUCH_MOUSEID) {
+            return 0;
+        }
     }
 
     /* Figure out which event to perform */
@@ -468,14 +607,14 @@ SDL_PrivateSendMouseButton(SDL_Window * window, SDL_MouseID mouseID, Uint8 state
 
     /* We do this after calculating buttonstate so button presses gain focus */
     if (window && state == SDL_PRESSED) {
-        SDL_UpdateMouseFocus(window, mouse->x, mouse->y, buttonstate);
+        SDL_UpdateMouseFocus(window, mouse->x, mouse->y, buttonstate, SDL_TRUE);
     }
 
-    if (buttonstate == mouse->buttonstate) {
+    if (buttonstate == source->buttonstate) {
         /* Ignore this event, no state change */
         return 0;
     }
-    mouse->buttonstate = buttonstate;
+    source->buttonstate = buttonstate;
 
     if (clicks < 0) {
         SDL_MouseClickState *clickstate = GetMouseClickState(mouse, button);
@@ -518,9 +657,14 @@ SDL_PrivateSendMouseButton(SDL_Window * window, SDL_MouseID mouseID, Uint8 state
 
     /* We do this after dispatching event so button releases can lose focus */
     if (window && state == SDL_RELEASED) {
-        SDL_UpdateMouseFocus(window, mouse->x, mouse->y, buttonstate);
+        SDL_UpdateMouseFocus(window, mouse->x, mouse->y, buttonstate, SDL_TRUE);
     }
-    
+
+    /* Automatically capture the mouse while buttons are pressed */
+    if (mouse->auto_capture) {
+        SDL_UpdateMouseCapture(SDL_FALSE);
+    }
+
     return posted;
 }
 
@@ -548,24 +692,42 @@ SDL_SendMouseWheel(SDL_Window * window, SDL_MouseID mouseID, float x, float y, S
         SDL_SetMouseFocus(window);
     }
 
-    if (!x && !y) {
+    if (x == 0.0f && y == 0.0f) {
         return 0;
     }
 
+    if (x > 0.0f) {
+        if (mouse->accumulated_wheel_x < 0.0f) {
+            mouse->accumulated_wheel_x = 0.0f;
+        }
+    } else if (x < 0.0f) {
+        if (mouse->accumulated_wheel_x > 0.0f) {
+            mouse->accumulated_wheel_x = 0.0f;
+        }
+    }
     mouse->accumulated_wheel_x += x;
-    if (mouse->accumulated_wheel_x > 0) {
+    if (mouse->accumulated_wheel_x > 0.0f) {
         integral_x = (int)SDL_floor(mouse->accumulated_wheel_x);
-    } else if (mouse->accumulated_wheel_x < 0) {
+    } else if (mouse->accumulated_wheel_x < 0.0f) {
         integral_x = (int)SDL_ceil(mouse->accumulated_wheel_x);
     } else {
         integral_x = 0;
     }
     mouse->accumulated_wheel_x -= integral_x;
 
+    if (y > 0.0f) {
+        if (mouse->accumulated_wheel_y < 0.0f) {
+            mouse->accumulated_wheel_y = 0.0f;
+        }
+    } else if (y < 0.0f) {
+        if (mouse->accumulated_wheel_y > 0.0f) {
+            mouse->accumulated_wheel_y = 0.0f;
+        }
+    }
     mouse->accumulated_wheel_y += y;
-    if (mouse->accumulated_wheel_y > 0) {
+    if (mouse->accumulated_wheel_y > 0.0f) {
         integral_y = (int)SDL_floor(mouse->accumulated_wheel_y);
-    } else if (mouse->accumulated_wheel_y < 0) {
+    } else if (mouse->accumulated_wheel_y < 0.0f) {
         integral_y = (int)SDL_ceil(mouse->accumulated_wheel_y);
     } else {
         integral_y = 0;
@@ -579,12 +741,10 @@ SDL_SendMouseWheel(SDL_Window * window, SDL_MouseID mouseID, float x, float y, S
         event.type = SDL_MOUSEWHEEL;
         event.wheel.windowID = mouse->focus ? mouse->focus->id : 0;
         event.wheel.which = mouseID;
-#if 0 /* Uncomment this when it goes in for SDL 2.1 */
-        event.wheel.preciseX = x;
-        event.wheel.preciseY = y;
-#endif
         event.wheel.x = integral_x;
         event.wheel.y = integral_y;
+        event.wheel.preciseX = x;
+        event.wheel.preciseY = y;
         event.wheel.direction = (Uint32)direction;
         posted = (SDL_PushEvent(&event) > 0);
     }
@@ -599,6 +759,7 @@ SDL_MouseQuit(void)
 
     if (mouse->CaptureMouse) {
         SDL_CaptureMouse(SDL_FALSE);
+        SDL_UpdateMouseCapture(SDL_TRUE);
     }
     SDL_SetRelativeMouseMode(SDL_FALSE);
     SDL_ShowCursor(1);
@@ -610,22 +771,45 @@ SDL_MouseQuit(void)
         cursor = next;
     }
     mouse->cursors = NULL;
+    mouse->cur_cursor = NULL;
 
     if (mouse->def_cursor && mouse->FreeCursor) {
         mouse->FreeCursor(mouse->def_cursor);
         mouse->def_cursor = NULL;
     }
 
+    if (mouse->sources) {
+        SDL_free(mouse->sources);
+        mouse->sources = NULL;
+    }
+    mouse->num_sources = 0;
+
     if (mouse->clickstate) {
         SDL_free(mouse->clickstate);
         mouse->clickstate = NULL;
     }
+    mouse->num_clickstates = 0;
+
+    SDL_DelHintCallback(SDL_HINT_MOUSE_DOUBLE_CLICK_TIME,
+                        SDL_MouseDoubleClickTimeChanged, mouse);
+
+    SDL_DelHintCallback(SDL_HINT_MOUSE_DOUBLE_CLICK_RADIUS,
+                        SDL_MouseDoubleClickRadiusChanged, mouse);
 
     SDL_DelHintCallback(SDL_HINT_MOUSE_NORMAL_SPEED_SCALE,
                         SDL_MouseNormalSpeedScaleChanged, mouse);
 
     SDL_DelHintCallback(SDL_HINT_MOUSE_RELATIVE_SPEED_SCALE,
                         SDL_MouseRelativeSpeedScaleChanged, mouse);
+
+    SDL_DelHintCallback(SDL_HINT_TOUCH_MOUSE_EVENTS,
+                        SDL_TouchMouseEventsChanged, mouse);
+
+    SDL_DelHintCallback(SDL_HINT_MOUSE_TOUCH_EVENTS,
+                        SDL_MouseTouchEventsChanged, mouse);
+
+    SDL_DelHintCallback(SDL_HINT_MOUSE_AUTO_CAPTURE,
+                        SDL_MouseAutoCaptureChanged, mouse);
 }
 
 Uint32
@@ -639,7 +823,7 @@ SDL_GetMouseState(int *x, int *y)
     if (y) {
         *y = mouse->y;
     }
-    return mouse->buttonstate;
+    return GetButtonState(mouse);
 }
 
 Uint32
@@ -655,30 +839,31 @@ SDL_GetRelativeMouseState(int *x, int *y)
     }
     mouse->xdelta = 0;
     mouse->ydelta = 0;
-    return mouse->buttonstate;
+    return GetButtonState(mouse);
 }
 
 Uint32
 SDL_GetGlobalMouseState(int *x, int *y)
 {
     SDL_Mouse *mouse = SDL_GetMouse();
-    int tmpx, tmpy;
 
-    /* make sure these are never NULL for the backend implementations... */
-    if (!x) {
-        x = &tmpx;
+    if (mouse->GetGlobalMouseState) {
+        int tmpx, tmpy;
+
+        /* make sure these are never NULL for the backend implementations... */
+        if (!x) {
+            x = &tmpx;
+        }
+        if (!y) {
+            y = &tmpy;
+        }
+
+        *x = *y = 0;
+
+        return mouse->GetGlobalMouseState(x, y);
+    } else {
+        return SDL_GetMouseState(x, y);
     }
-    if (!y) {
-        y = &tmpy;
-    }
-
-    *x = *y = 0;
-
-    if (!mouse->GetGlobalMouseState) {
-        return 0;
-    }
-
-    return mouse->GetGlobalMouseState(x, y);
 }
 
 void
@@ -694,10 +879,18 @@ SDL_WarpMouseInWindow(SDL_Window * window, int x, int y)
         return;
     }
 
-    if (mouse->WarpMouse) {
+    if ((window->flags & SDL_WINDOW_MINIMIZED) == SDL_WINDOW_MINIMIZED) {
+        return;
+    }
+
+    /* Ignore the previous position when we warp */
+    mouse->has_position = SDL_FALSE;
+
+    if (mouse->WarpMouse &&
+        (!mouse->relative_mode || mouse->relative_mode_warp)) {
         mouse->WarpMouse(window, x, y);
     } else {
-        SDL_SendMouseMotion(window, mouse->mouseID, 0, x, y);
+        SDL_PrivateSendMouseMotion(window, mouse->mouseID, 0, x, y);
     }
 }
 
@@ -716,9 +909,9 @@ SDL_WarpMouseGlobal(int x, int y)
 static SDL_bool
 ShouldUseRelativeModeWarp(SDL_Mouse *mouse)
 {
-    if (!mouse->SetRelativeMouseMode) {
-        SDL_assert(mouse->WarpMouse);   /* Need this functionality for relative mode warp implementation */
-        return SDL_TRUE;
+    if (!mouse->WarpMouse) {
+        /* Need this functionality for relative mode warp implementation */
+        return SDL_FALSE;
     }
 
     return SDL_GetHintBoolean(SDL_HINT_MOUSE_RELATIVE_MODE_WARP, SDL_FALSE);
@@ -734,20 +927,12 @@ SDL_SetRelativeMouseMode(SDL_bool enabled)
         return 0;
     }
 
-    if (enabled && focusWindow) {
-        /* Center it in the focused window to prevent clicks from going through
-         * to background windows.
-         */
-        SDL_SetMouseFocus(focusWindow);
-        SDL_WarpMouseInWindow(focusWindow, focusWindow->w/2, focusWindow->h/2);
-    }
-
     /* Set the relative mode */
     if (!enabled && mouse->relative_mode_warp) {
         mouse->relative_mode_warp = SDL_FALSE;
     } else if (enabled && ShouldUseRelativeModeWarp(mouse)) {
         mouse->relative_mode_warp = SDL_TRUE;
-    } else if (mouse->SetRelativeMouseMode(enabled) < 0) {
+    } else if (!mouse->SetRelativeMouseMode || mouse->SetRelativeMouseMode(enabled) < 0) {
         if (enabled) {
             /* Fall back to warp mode if native relative mode failed */
             if (!mouse->WarpMouse) {
@@ -760,20 +945,36 @@ SDL_SetRelativeMouseMode(SDL_bool enabled)
     mouse->scale_accum_x = 0.0f;
     mouse->scale_accum_y = 0.0f;
 
-    if (mouse->focus) {
-        SDL_UpdateWindowGrab(mouse->focus);
+    if (enabled) {
+        /* Update cursor visibility before we potentially warp the mouse */
+        SDL_SetCursor(NULL);
+    }
+
+    if (enabled && focusWindow) {
+        SDL_SetMouseFocus(focusWindow);
+
+        if (mouse->relative_mode_warp)
+            SDL_WarpMouseInWindow(focusWindow, focusWindow->w/2, focusWindow->h/2);
+    }
+
+    if (focusWindow) {
+        SDL_UpdateWindowGrab(focusWindow);
 
         /* Put the cursor back to where the application expects it */
         if (!enabled) {
-            SDL_WarpMouseInWindow(mouse->focus, mouse->x, mouse->y);
+            SDL_WarpMouseInWindow(focusWindow, mouse->x, mouse->y);
         }
+
+        SDL_UpdateMouseCapture(SDL_FALSE);
+    }
+
+    if (!enabled) {
+        /* Update cursor visibility after we restore the mouse position */
+        SDL_SetCursor(NULL);
     }
 
     /* Flush pending mouse motion - ideally we would pump events, but that's not always safe */
     SDL_FlushEvent(SDL_MOUSEMOTION);
-
-    /* Update cursor visibility */
-    SDL_SetCursor(NULL);
 
     return 0;
 }
@@ -787,38 +988,58 @@ SDL_GetRelativeMouseMode()
 }
 
 int
+SDL_UpdateMouseCapture(SDL_bool force_release)
+{
+    SDL_Mouse *mouse = SDL_GetMouse();
+    SDL_Window *capture_window = NULL;
+
+    if (!mouse->CaptureMouse) {
+        return 0;
+    }
+
+    if (!force_release) {
+        if (mouse->capture_desired || (mouse->auto_capture && SDL_GetMouseState(NULL, NULL) != 0)) {
+            if (!mouse->relative_mode) {
+                capture_window = SDL_GetKeyboardFocus();
+            }
+        }
+    }
+
+    if (capture_window != mouse->capture_window) {
+        if (mouse->capture_window) {
+            mouse->CaptureMouse(NULL);
+            mouse->capture_window->flags &= ~SDL_WINDOW_MOUSE_CAPTURE;
+            mouse->capture_window = NULL;
+        }
+
+        if (capture_window) {
+            if (mouse->CaptureMouse(capture_window) < 0) {
+                /* CaptureMouse() will have set an error */
+                return -1;
+            }
+            capture_window->flags |= SDL_WINDOW_MOUSE_CAPTURE;
+        }
+
+        mouse->capture_window = capture_window;
+    }
+    return 0;
+}
+
+int
 SDL_CaptureMouse(SDL_bool enabled)
 {
     SDL_Mouse *mouse = SDL_GetMouse();
-    SDL_Window *focusWindow;
-    SDL_bool isCaptured;
 
     if (!mouse->CaptureMouse) {
         return SDL_Unsupported();
     }
 
-    focusWindow = SDL_GetKeyboardFocus();
-
-    isCaptured = focusWindow && (focusWindow->flags & SDL_WINDOW_MOUSE_CAPTURE);
-    if (isCaptured == enabled) {
-        return 0;  /* already done! */
+    if (enabled && SDL_GetKeyboardFocus() == NULL) {
+        return SDL_SetError("No window has focus");
     }
+    mouse->capture_desired = enabled;
 
-    if (enabled) {
-        if (!focusWindow) {
-            return SDL_SetError("No window has focus");
-        } else if (mouse->CaptureMouse(focusWindow) == -1) {
-            return -1;  /* CaptureMouse() should call SetError */
-        }
-        focusWindow->flags |= SDL_WINDOW_MOUSE_CAPTURE;
-    } else {
-        if (mouse->CaptureMouse(NULL) == -1) {
-            return -1;  /* CaptureMouse() should call SetError */
-        }
-        focusWindow->flags &= ~SDL_WINDOW_MOUSE_CAPTURE;
-    }
-
-    return 0;
+    return SDL_UpdateMouseCapture(SDL_FALSE);
 }
 
 SDL_Cursor *
@@ -878,7 +1099,7 @@ SDL_CreateColorCursor(SDL_Surface *surface, int hot_x, int hot_y)
     SDL_Cursor *cursor;
 
     if (!surface) {
-        SDL_SetError("Passed NULL cursor surface");
+        SDL_InvalidParamError("surface");
         return NULL;
     }
 

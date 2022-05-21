@@ -56,11 +56,15 @@ String GetCommandBufferDumpFolder();
 
 Log::Direction GetPrintfDirection();
 String         GetPrintfOutputFile();
+String         GetPrintfOutputFolder();
 
 ProfilerDirection GetProfilerDirection();
 String            GetProfilerOutputFile();
 
 bool SpirvDebugPrintfEnabled();
+
+bool   PipelineDumpEnabled();
+String GetPipelineDumpFolder();
 
 } // namespace Kyty::Config
 

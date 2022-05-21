@@ -1,6 +1,6 @@
 #include "Kyty/Core/MemoryAlloc.h"
 
-#include "Kyty/Core/ArrayWrapper.h"
+#include "Kyty/Core/ArrayWrapper.h" // IWYU pragma: keep
 #include "Kyty/Core/Common.h"
 #include "Kyty/Core/DateTime.h" // IWYU pragma: keep
 #include "Kyty/Core/Debug.h"    // IWYU pragma: keep
@@ -67,6 +67,10 @@ static size_t                              g_total_allocated = 0;
 
 #define KYTY_MDBG(str, ptr)                                                                                                                \
 	{                                                                                                                                      \
+		if (false)                                                                                                                         \
+		{                                                                                                                                  \
+			printf("%s, %016" PRIx64 "\n", str, reinterpret_cast<uint64_t>(ptr));                                                          \
+		}                                                                                                                                  \
 	}
 
 #endif

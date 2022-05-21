@@ -1,14 +1,16 @@
 #include "Emulator/Graphics/GraphicsRender.h"
 
 #include "Kyty/Core/DbgAssert.h"
+#include "Kyty/Core/File.h"
 #include "Kyty/Core/Hash.h"
 #include "Kyty/Core/Hashmap.h"
+#include "Kyty/Core/String.h"
 #include "Kyty/Core/Threads.h"
 #include "Kyty/Core/Vector.h"
-#include "Kyty/Math/Rand.h"
 
 #include "Emulator/Config.h"
 #include "Emulator/Graphics/GraphicContext.h"
+#include "Emulator/Graphics/GraphicsRun.h"
 #include "Emulator/Graphics/HardwareContext.h"
 #include "Emulator/Graphics/Objects/DepthStencilBuffer.h"
 #include "Emulator/Graphics/Objects/GpuMemory.h"
@@ -19,7 +21,6 @@
 #include "Emulator/Graphics/Objects/StorageTexture.h"
 #include "Emulator/Graphics/Objects/Texture.h"
 #include "Emulator/Graphics/Objects/VertexBuffer.h"
-#include "Emulator/Graphics/Objects/VideoOutBuffer.h"
 #include "Emulator/Graphics/Shader.h"
 #include "Emulator/Graphics/Tile.h"
 #include "Emulator/Graphics/Utils.h"
@@ -31,7 +32,8 @@
 #include "Emulator/Profiler.h"
 
 #include <atomic>
-#include <vulkan/vulkan_core.h>
+
+// IWYU pragma: no_forward_declare VkImageView_T
 
 #ifdef KYTY_EMU_ENABLED
 
@@ -142,7 +144,7 @@ public:
 	void            DeleteAllPipelines();
 
 private:
-	static constexpr uint32_t MAX_PIPELINES = 32;
+	static constexpr uint32_t MAX_PIPELINES = 128;
 
 	struct Pipeline
 	{
@@ -157,7 +159,10 @@ private:
 
 	[[nodiscard]] VulkanPipeline* Find(const Pipeline& p) const;
 
-	static void DeletePipelineInternal(Pipeline& p);
+	void DeletePipelineInternal(uint32_t id);
+
+	void DumpToFile(Core::File* f, const Pipeline& p);
+	void DumpPipeline(const char* action, uint32_t id);
 
 	Vector<Pipeline> m_pipelines;
 	Core::Mutex      m_mutex;
@@ -165,9 +170,9 @@ private:
 
 struct VulkanDescriptorSet
 {
-	VkDescriptorSet       set    = nullptr;
-	VkDescriptorPool      pool   = nullptr;
-	VkDescriptorSetLayout layout = nullptr;
+	VkDescriptorSet       set     = nullptr;
+	VkDescriptorSetLayout layout  = nullptr;
+	int                   pool_id = -1;
 };
 
 class DescriptorCache
@@ -199,7 +204,7 @@ public:
 	void                 Free(VulkanDescriptorSet* set);
 
 	VulkanDescriptorSet* GetDescriptor(Stage stage, VulkanBuffer** storage_buffers, VulkanImage** textures2d_sampled,
-	                                   const bool* textures2d_depth, VulkanImage** textures2d_storage, uint64_t* samplers,
+	                                   const int* textures2d_sampled_view, VulkanImage** textures2d_storage, uint64_t* samplers,
 	                                   VulkanBuffer** gds_buffers, const ShaderBindResources& bind);
 	void                 FreeDescriptor(VulkanBuffer* buffer);
 	void                 FreeDescriptor(VulkanImage* image);
@@ -222,6 +227,14 @@ private:
 		int                  gds_buffers_num                             = 0;
 		uint64_t             gds_buffers_id[GDS_BUFFER_MAX]              = {};
 	};
+
+	struct Pool
+	{
+		VkDescriptorPool pool           = nullptr;
+		int              next_free_pool = -1;
+		bool             free           = true;
+	};
+
 	void Init();
 	void CreatePool();
 
@@ -229,10 +242,11 @@ private:
 
 	VulkanDescriptorSet* FindSet(const Set& s);
 
-	Core::Mutex              m_mutex;
-	Vector<VkDescriptorPool> m_pools;
-	Vector<Set>              m_sets;
-	int                      m_first_free_set = -1;
+	Core::Mutex  m_mutex;
+	Vector<Pool> m_pools;
+	Vector<Set>  m_sets;
+	int          m_first_free_set  = -1;
+	int          m_first_free_pool = -1;
 
 	Core::Hashmap<uint32_t, Vector<int>> m_sets_map;
 
@@ -402,7 +416,7 @@ enum class RenderColorType
 {
 	NoColorOutput,
 	DisplayBuffer,
-	OffscreenBuffer,
+	// OffscreenBuffer,
 	RenderTexture,
 };
 
@@ -530,7 +544,7 @@ static void rt_check(const HW::RenderTarget& rt)
 		EXIT_NOT_IMPLEMENTED(rt.attrib.num_samples != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(rt.attrib.num_fragments != 0x00000000);
 		// EXIT_NOT_IMPLEMENTED(rt.dcc_max_uncompressed_block_size != 0x00000002);
-		EXIT_NOT_IMPLEMENTED(rt.dcc.max_compressed_block_size != 0x00000000);
+		// EXIT_NOT_IMPLEMENTED(rt.dcc.max_compressed_block_size != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(rt.dcc.min_compressed_block_size != 0x00000000);
 		// EXIT_NOT_IMPLEMENTED(rt.dcc.color_transform != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(rt.dcc.enable_overwrite_combiner != false);
@@ -768,13 +782,13 @@ static void bc_print(const char* func, const HW::BlendControl& c, const HW::Blen
 	printf("\t cc.op                = %" PRIu8 "\n", cc.op);
 }
 
-static void bc_check(const HW::BlendControl& c, const HW::BlendColor& color, const HW::ColorControl& cc)
+static void bc_check(const HW::BlendControl& /*c*/, const HW::BlendColor& color, const HW::ColorControl& cc)
 {
 	// EXIT_NOT_IMPLEMENTED(c.color_srcblend != 0);
-	EXIT_NOT_IMPLEMENTED(c.color_comb_fcn != 0);
+	// EXIT_NOT_IMPLEMENTED(c.color_comb_fcn != 0);
 	// EXIT_NOT_IMPLEMENTED(c.color_destblend != 0);
 	// EXIT_NOT_IMPLEMENTED(c.alpha_srcblend != 0);
-	EXIT_NOT_IMPLEMENTED(c.alpha_comb_fcn != 0);
+	// EXIT_NOT_IMPLEMENTED(c.alpha_comb_fcn != 0);
 	// EXIT_NOT_IMPLEMENTED(c.alpha_destblend != 0);
 	// EXIT_NOT_IMPLEMENTED(c.separate_alpha_blend != false);
 	// EXIT_NOT_IMPLEMENTED(c.enable != false);
@@ -939,6 +953,9 @@ static void vp_check(const HW::ScreenViewport& vp, const HW::ScanModeControl& sm
 	// EXIT_NOT_IMPLEMENTED(smc.vport_scissor_enable);
 	EXIT_NOT_IMPLEMENTED(smc.line_stipple_enable);
 
+	bool generic_scissor =
+	    (vp.generic_scissor_left != 0 || vp.generic_scissor_top != 0 || vp.generic_scissor_right != 0 || vp.generic_scissor_bottom != 0);
+
 	EXIT_NOT_IMPLEMENTED(vp.viewports[0].zmin != 0.000000);
 	EXIT_NOT_IMPLEMENTED(vp.viewports[0].zmax != 1.000000);
 	// EXIT_NOT_IMPLEMENTED(vp.viewports[0].xscale != 960.000000);
@@ -948,10 +965,10 @@ static void vp_check(const HW::ScreenViewport& vp, const HW::ScanModeControl& sm
 	// EXIT_NOT_IMPLEMENTED(vp.viewports[0].zscale != 0.500000);
 	// EXIT_NOT_IMPLEMENTED(vp.viewports[0].zoffset != 0.500000);
 	EXIT_NOT_IMPLEMENTED(vp.transform_control != 1087);
-	EXIT_NOT_IMPLEMENTED(vp.generic_scissor_left != 0 && !(vp.screen_scissor_left == vp.generic_scissor_left));
-	EXIT_NOT_IMPLEMENTED(vp.generic_scissor_top != 0 && !(vp.screen_scissor_top == vp.generic_scissor_top));
-	EXIT_NOT_IMPLEMENTED(vp.generic_scissor_right != 0 && !(vp.screen_scissor_right == vp.generic_scissor_right));
-	EXIT_NOT_IMPLEMENTED(vp.generic_scissor_bottom != 0 && !(vp.screen_scissor_bottom == vp.generic_scissor_bottom));
+	EXIT_NOT_IMPLEMENTED(generic_scissor && !(vp.screen_scissor_left <= vp.generic_scissor_left));
+	EXIT_NOT_IMPLEMENTED(generic_scissor && !(vp.screen_scissor_top <= vp.generic_scissor_top));
+	EXIT_NOT_IMPLEMENTED(generic_scissor && !(vp.screen_scissor_right >= vp.generic_scissor_right));
+	EXIT_NOT_IMPLEMENTED(generic_scissor && !(vp.screen_scissor_bottom >= vp.generic_scissor_bottom));
 	// EXIT_NOT_IMPLEMENTED(vp.hw_offset_x != 60);
 	// EXIT_NOT_IMPLEMENTED(vp.hw_offset_y != 32);
 	// EXIT_NOT_IMPLEMENTED(fabsf(vp.guard_band_horz_clip - 33.133327f) > 0.001f);
@@ -1364,7 +1381,8 @@ VulkanFramebuffer* FramebufferCache::CreateFramebuffer(RenderColorInfo* color, R
 
 	EXIT_NOT_IMPLEMENTED(framebuffer->render_pass == nullptr);
 
-	VkImageView views[] = {vulkan_buffer->image_view, (with_depth ? depth->vulkan_buffer->image_view : nullptr)};
+	VkImageView views[] = {vulkan_buffer->image_view[VulkanImage::VIEW_DEFAULT],
+	                       (with_depth ? depth->vulkan_buffer->image_view[VulkanImage::VIEW_DEFAULT] : nullptr)};
 
 	VkFramebufferCreateInfo framebuffer_info {};
 	framebuffer_info.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -1488,8 +1506,12 @@ VideoOutVulkanImage* FramebufferCache::CreateDummyBuffer(VkFormat format, uint32
 	vk_obj->extent.height = height;
 	vk_obj->format        = format;
 	vk_obj->image         = nullptr;
-	vk_obj->image_view    = nullptr;
 	vk_obj->layout        = VK_IMAGE_LAYOUT_UNDEFINED;
+
+	for (auto& view: vk_obj->image_view)
+	{
+		view = nullptr;
+	}
 
 	VkImageCreateInfo image_info {};
 	image_info.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -1543,9 +1565,9 @@ VideoOutVulkanImage* FramebufferCache::CreateDummyBuffer(VkFormat format, uint32
 	create_info.subresourceRange.layerCount     = 1;
 	create_info.subresourceRange.levelCount     = 1;
 
-	vkCreateImageView(ctx->device, &create_info, nullptr, &vk_obj->image_view);
+	vkCreateImageView(ctx->device, &create_info, nullptr, &vk_obj->image_view[VulkanImage::VIEW_DEFAULT]);
 
-	EXIT_NOT_IMPLEMENTED(vk_obj->image_view == nullptr);
+	EXIT_NOT_IMPLEMENTED(vk_obj->image_view[VulkanImage::VIEW_DEFAULT] == nullptr);
 
 	UtilSetImageLayoutOptimal(vk_obj);
 
@@ -1658,28 +1680,34 @@ uint64_t SamplerCache::GetSamplerId(const ShaderSamplerResource& r)
 	return m_samplers_size;
 }
 
-static VkFormat get_input_format(const ShaderBufferResource& res)
+static void get_input_format(const ShaderBufferResource& res, VkFormat* format, uint32_t* size)
 {
+	EXIT_IF(format == nullptr);
+	EXIT_IF(size == nullptr);
 	auto nfmt = res.Nfmt();
 	auto dfmt = res.Dfmt();
 	if (nfmt == 7 && dfmt == 14)
 	{
-		return VK_FORMAT_R32G32B32A32_SFLOAT;
-	}
-	if (nfmt == 7 && dfmt == 13)
+		*format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		*size   = 4;
+	} else if (nfmt == 7 && dfmt == 13)
 	{
-		return VK_FORMAT_R32G32B32_SFLOAT;
-	}
-	if (nfmt == 7 && dfmt == 11)
+		*format = VK_FORMAT_R32G32B32_SFLOAT;
+		*size   = 3;
+	} else if (nfmt == 7 && dfmt == 11)
 	{
-		return VK_FORMAT_R32G32_SFLOAT;
-	}
-	if (nfmt == 0 && dfmt == 10)
+		*format = VK_FORMAT_R32G32_SFLOAT;
+		*size   = 2;
+	} else if (nfmt == 0 && dfmt == 10)
 	{
-		return VK_FORMAT_R8G8B8A8_UNORM;
+		*format = VK_FORMAT_R8G8B8A8_UNORM;
+		*size   = 4;
+	} else
+	{
+		EXIT("unknown format: nfmt = %u, dfmt = %u\n", nfmt, dfmt);
+		*format = VK_FORMAT_UNDEFINED;
+		*size   = 4;
 	}
-	EXIT("unknown format: nfmt = %u, dfmt = %u\n", nfmt, dfmt);
-	return VK_FORMAT_UNDEFINED;
 }
 
 static VkBlendFactor get_blend_factor(uint32_t factor)
@@ -1818,6 +1846,7 @@ static VulkanPipeline* CreatePipelineInternal(VkRenderPass render_pass, const Sh
 
 	VkVertexInputAttributeDescription input_attr[ShaderVertexInputInfo::RES_MAX];
 	VkVertexInputBindingDescription   input_desc[ShaderVertexInputInfo::RES_MAX];
+
 	for (int bi = 0; bi < vs_input_info->buffers_num; bi++)
 	{
 		const auto& b            = vs_input_info->buffers[bi];
@@ -1827,19 +1856,53 @@ static VulkanPipeline* CreatePipelineInternal(VkRenderPass render_pass, const Sh
 
 		for (int ai = 0; ai < b.attr_num; ai++)
 		{
-			input_attr[ai].binding  = bi;
-			input_attr[ai].location = ai;
-			input_attr[ai].offset   = b.attr_offsets[ai];
-			input_attr[ai].format   = get_input_format(vs_input_info->resources[ai]);
+			auto index                 = b.attr_indices[ai];
+			input_attr[index].binding  = bi;
+			input_attr[index].location = index;
+			input_attr[index].offset   = b.attr_offsets[ai];
 
-			auto registers_num = vs_input_info->resources_dst[ai].registers_num;
+			uint32_t attr_size = 4;
+			get_input_format(vs_input_info->resources[index], &input_attr[index].format, &attr_size);
 
-			EXIT_NOT_IMPLEMENTED(vs_input_info->resources[ai].AddTid());
-			EXIT_NOT_IMPLEMENTED(vs_input_info->resources[ai].SwizzleEnabled());
-			EXIT_NOT_IMPLEMENTED(vs_input_info->resources[ai].DstSelX() != 4);
-			EXIT_NOT_IMPLEMENTED(registers_num >= 2 && vs_input_info->resources[ai].DstSelY() != 5);
-			EXIT_NOT_IMPLEMENTED(registers_num >= 3 && vs_input_info->resources[ai].DstSelZ() != 6);
-			EXIT_NOT_IMPLEMENTED(registers_num >= 4 && vs_input_info->resources[ai].DstSelW() != 7);
+			auto registers_num = vs_input_info->resources_dst[index].registers_num;
+
+			EXIT_NOT_IMPLEMENTED(vs_input_info->resources[index].AddTid());
+			EXIT_NOT_IMPLEMENTED(vs_input_info->resources[index].SwizzleEnabled());
+
+			switch (registers_num)
+			{
+				case 1:
+				{
+					auto swizzle = vs_input_info->resources[index].DstSelX();
+					EXIT_NOT_IMPLEMENTED(swizzle != DstSel(4));
+					break;
+				}
+				case 2:
+				{
+					auto swizzle = vs_input_info->resources[index].DstSelXY();
+					EXIT_NOT_IMPLEMENTED(attr_size == 1 && swizzle != DstSel(4, 0));
+					EXIT_NOT_IMPLEMENTED(attr_size >= 2 && swizzle != DstSel(4, 5));
+					break;
+				}
+				case 3:
+				{
+					auto swizzle = vs_input_info->resources[index].DstSelXYZ();
+					EXIT_NOT_IMPLEMENTED(attr_size == 1 && swizzle != DstSel(4, 0, 0));
+					EXIT_NOT_IMPLEMENTED(attr_size == 2 && swizzle != DstSel(4, 5, 0));
+					EXIT_NOT_IMPLEMENTED(attr_size >= 3 && swizzle != DstSel(4, 5, 6));
+					break;
+				}
+				case 4:
+				{
+					auto swizzle = vs_input_info->resources[index].DstSelXYZW();
+					EXIT_NOT_IMPLEMENTED(attr_size == 1 && swizzle != DstSel(4, 0, 0, 1));
+					EXIT_NOT_IMPLEMENTED(attr_size == 2 && swizzle != DstSel(4, 5, 0, 1));
+					EXIT_NOT_IMPLEMENTED(attr_size == 3 && swizzle != DstSel(4, 5, 6, 1));
+					EXIT_NOT_IMPLEMENTED(attr_size == 4 && swizzle != DstSel(4, 5, 6, 7));
+					break;
+				}
+				default: EXIT("invalid registers_num");
+			}
 		}
 	}
 
@@ -2166,36 +2229,6 @@ static VulkanPipeline* CreatePipelineInternal(const ShaderComputeInputInfo* inpu
 	return pipeline;
 }
 
-void PipelineCache::DeletePipelineInternal(Pipeline& p)
-{
-	EXIT_IF(g_render_ctx == nullptr);
-	EXIT_IF(p.pipeline == nullptr);
-	EXIT_IF(p.pipeline->pipeline == nullptr);
-	EXIT_IF(p.pipeline->pipeline_layout == nullptr);
-	EXIT_IF(p.static_params == nullptr);
-	EXIT_IF(p.dynamic_params == nullptr);
-
-	EXIT_IF(p.pipeline->static_params != p.static_params);
-	EXIT_IF(p.pipeline->dynamic_params != p.dynamic_params);
-
-	delete p.static_params;
-	delete p.dynamic_params;
-
-	p.static_params  = nullptr;
-	p.dynamic_params = nullptr;
-
-	auto* gctx = g_render_ctx->GetGraphicCtx();
-
-	EXIT_IF(gctx == nullptr);
-
-	vkDestroyPipeline(gctx->device, p.pipeline->pipeline, nullptr);
-	vkDestroyPipelineLayout(gctx->device, p.pipeline->pipeline_layout, nullptr);
-
-	delete p.pipeline;
-
-	p.pipeline = nullptr;
-}
-
 bool PipelineStaticParameters::operator==(const PipelineStaticParameters& other) const
 {
 	return (0 == memcmp(this, &other, sizeof(struct PipelineStaticParameters)));
@@ -2245,6 +2278,42 @@ bool PipelineDynamicParameters::operator==(const PipelineDynamicParameters& othe
 		}
 	}
 	return true;
+}
+
+void PipelineCache::DeletePipelineInternal(uint32_t id)
+{
+	EXIT_NOT_IMPLEMENTED(!m_pipelines.IndexValid(id));
+
+	Pipeline& p = m_pipelines[id];
+
+	EXIT_IF(g_render_ctx == nullptr);
+	EXIT_IF(p.pipeline == nullptr);
+	EXIT_IF(p.pipeline->pipeline == nullptr);
+	EXIT_IF(p.pipeline->pipeline_layout == nullptr);
+	EXIT_IF(p.static_params == nullptr);
+	EXIT_IF(p.dynamic_params == nullptr);
+
+	EXIT_IF(p.pipeline->static_params != p.static_params);
+	EXIT_IF(p.pipeline->dynamic_params != p.dynamic_params);
+
+	DumpPipeline("delete", id);
+
+	delete p.static_params;
+	delete p.dynamic_params;
+
+	p.static_params  = nullptr;
+	p.dynamic_params = nullptr;
+
+	auto* gctx = g_render_ctx->GetGraphicCtx();
+
+	EXIT_IF(gctx == nullptr);
+
+	vkDestroyPipeline(gctx->device, p.pipeline->pipeline, nullptr);
+	vkDestroyPipelineLayout(gctx->device, p.pipeline->pipeline_layout, nullptr);
+
+	delete p.pipeline;
+
+	p.pipeline = nullptr;
 }
 
 VulkanPipeline* PipelineCache::Find(const Pipeline& p) const
@@ -2306,16 +2375,19 @@ VulkanPipeline* PipelineCache::CreatePipeline(VulkanFramebuffer* framebuffer, Re
 
 	EXIT_NOT_IMPLEMENTED(depth->depth_test_enable && ps_input_info->ps_execute_on_noop);
 
+	bool generic_scissor =
+	    (vp.generic_scissor_left != 0 || vp.generic_scissor_top != 0 || vp.generic_scissor_right != 0 || vp.generic_scissor_bottom != 0);
+
 	p.static_params->viewport_scale[0]        = vp.viewports[0].xscale;
 	p.static_params->viewport_scale[1]        = vp.viewports[0].yscale;
 	p.static_params->viewport_scale[2]        = vp.viewports[0].zscale;
 	p.static_params->viewport_offset[0]       = vp.viewports[0].xoffset;
 	p.static_params->viewport_offset[1]       = vp.viewports[0].yoffset;
 	p.static_params->viewport_offset[2]       = vp.viewports[0].zoffset;
-	p.static_params->scissor_ltrb[0]          = vp.screen_scissor_left;
-	p.static_params->scissor_ltrb[1]          = vp.screen_scissor_top;
-	p.static_params->scissor_ltrb[2]          = vp.screen_scissor_right;
-	p.static_params->scissor_ltrb[3]          = vp.screen_scissor_bottom;
+	p.static_params->scissor_ltrb[0]          = (generic_scissor ? vp.generic_scissor_left : vp.screen_scissor_left);
+	p.static_params->scissor_ltrb[1]          = (generic_scissor ? vp.generic_scissor_top : vp.screen_scissor_top);
+	p.static_params->scissor_ltrb[2]          = (generic_scissor ? vp.generic_scissor_right : vp.screen_scissor_right);
+	p.static_params->scissor_ltrb[3]          = (generic_scissor ? vp.generic_scissor_bottom : vp.screen_scissor_bottom);
 	p.static_params->topology                 = topology;
 	p.static_params->with_depth               = (depth->format != VK_FORMAT_UNDEFINED && depth->vulkan_buffer != nullptr);
 	p.static_params->depth_test_enable        = depth->depth_test_enable;
@@ -2374,26 +2446,37 @@ VulkanPipeline* PipelineCache::CreatePipeline(VulkanFramebuffer* framebuffer, Re
 	EXIT_NOT_IMPLEMENTED(p.pipeline == nullptr);
 
 	bool updated = false;
+	int  index   = 0;
 	for (auto& pn: m_pipelines)
 	{
 		if (pn.pipeline == nullptr)
 		{
 			pn      = p;
 			updated = true;
+
+			DumpPipeline("create", index);
+
 			break;
 		}
+		index++;
 	}
 
 	if (!updated)
 	{
 		if (m_pipelines.Size() >= PipelineCache::MAX_PIPELINES)
 		{
-			auto& pn = m_pipelines[Math::Rand::UintInclusiveRange(0, m_pipelines.Size() - 1)];
-			DeletePipelineInternal(pn);
-			pn = p;
+			EXIT_NOT_IMPLEMENTED(m_pipelines.Size() >= PipelineCache::MAX_PIPELINES);
+			//			auto  index = Math::Rand::UintInclusiveRange(0, m_pipelines.Size() - 1);
+			//			auto& pn    = m_pipelines[index];
+			//			DeletePipelineInternal(index);
+			//			pn = p;
 		} else
 		{
+			EXIT_IF(m_pipelines.Size() != index);
+
 			m_pipelines.Add(p);
+
+			DumpPipeline("create", index);
 		}
 	}
 
@@ -2457,9 +2540,11 @@ VulkanPipeline* PipelineCache::CreatePipeline(const ShaderComputeInputInfo* inpu
 	{
 		if (m_pipelines.Size() >= PipelineCache::MAX_PIPELINES)
 		{
-			auto& pn = m_pipelines[Math::Rand::UintInclusiveRange(0, m_pipelines.Size() - 1)];
-			DeletePipelineInternal(pn);
-			pn = p;
+			EXIT_NOT_IMPLEMENTED(m_pipelines.Size() >= PipelineCache::MAX_PIPELINES);
+			//			auto  index = Math::Rand::UintInclusiveRange(0, m_pipelines.Size() - 1);
+			//			auto& pn    = m_pipelines[index];
+			//			DeletePipelineInternal(index);
+			//			pn = p;
 		} else
 		{
 			m_pipelines.Add(p);
@@ -2479,8 +2564,7 @@ void PipelineCache::DeletePipeline(VulkanPipeline* pipeline)
 
 	if (m_pipelines.IndexValid(index))
 	{
-		DeletePipelineInternal(m_pipelines[index]);
-		m_pipelines[index].pipeline = nullptr;
+		DeletePipelineInternal(index);
 	}
 }
 
@@ -2490,13 +2574,14 @@ void PipelineCache::DeletePipelines(VulkanFramebuffer* framebuffer)
 
 	Core::LockGuard lock(m_mutex);
 
+	int index = 0;
 	for (auto& p: m_pipelines)
 	{
 		if (p.pipeline != nullptr && p.render_pass_id == framebuffer->render_pass_id)
 		{
-			DeletePipelineInternal(p);
-			p.pipeline = nullptr;
+			DeletePipelineInternal(index);
 		}
+		index++;
 	}
 }
 
@@ -2504,10 +2589,36 @@ void PipelineCache::DeleteAllPipelines()
 {
 	Core::LockGuard lock(m_mutex);
 
-	for (auto& p: m_pipelines)
+	for (uint32_t index = 0; index < m_pipelines.Size(); index++)
 	{
-		DeletePipelineInternal(p);
-		p.pipeline = nullptr;
+		DeletePipelineInternal(index);
+	}
+}
+
+void PipelineCache::DumpToFile(Core::File* f, const Pipeline& p) {}
+
+void PipelineCache::DumpPipeline(const char* action, uint32_t id)
+{
+	EXIT_IF(!m_pipelines.IndexValid(id));
+	EXIT_IF(action == nullptr);
+
+	static std::atomic_int dump_id = 0;
+
+	if (Config::PipelineDumpEnabled())
+	{
+		Core::File f;
+		String     file_name = Config::GetPipelineDumpFolder().FixDirectorySlash() +
+		                   String::FromPrintf("%04d_%04d_pipeline_%u_%s.log", GraphicsRunGetFrameNum(), dump_id++, id, action);
+		Core::File::CreateDirectories(file_name.DirectoryWithoutFilename());
+		f.Create(file_name);
+		if (f.IsInvalid())
+		{
+			printf(FG_BRIGHT_RED "Can't create file: %s\n" FG_DEFAULT, file_name.C_Str());
+			return;
+		}
+		Pipeline& p = m_pipelines[id];
+		DumpToFile(&f, p);
+		f.Close();
 	}
 }
 
@@ -2647,18 +2758,22 @@ void DescriptorCache::Init()
 
 void DescriptorCache::CreatePool()
 {
+	KYTY_PROFILER_BLOCK("DescriptorCache::CreatePool");
+
 	auto* gctx = g_render_ctx->GetGraphicCtx();
 	EXIT_IF(gctx == nullptr);
 
+	static const uint32_t max_sets = 512;
+
 	VkDescriptorPoolSize pool_size[4];
 	pool_size[0].type            = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-	pool_size[0].descriptorCount = 32;
+	pool_size[0].descriptorCount = max_sets * (BUFFERS_MAX + GDS_BUFFER_MAX);
 	pool_size[1].type            = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-	pool_size[1].descriptorCount = 32;
+	pool_size[1].descriptorCount = max_sets * TEXTURES_SAMPLED_MAX;
 	pool_size[2].type            = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-	pool_size[2].descriptorCount = 32;
+	pool_size[2].descriptorCount = max_sets * TEXTURES_STORAGE_MAX;
 	pool_size[3].type            = VK_DESCRIPTOR_TYPE_SAMPLER;
-	pool_size[3].descriptorCount = 32;
+	pool_size[3].descriptorCount = max_sets * SAMPLERS_MAX;
 
 	VkDescriptorPoolCreateInfo pool_info {};
 	pool_info.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -2666,13 +2781,17 @@ void DescriptorCache::CreatePool()
 	pool_info.flags         = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
 	pool_info.poolSizeCount = 4;
 	pool_info.pPoolSizes    = pool_size;
-	pool_info.maxSets       = 32;
+	pool_info.maxSets       = max_sets;
 
-	VkDescriptorPool pool = nullptr;
+	Pool pool {};
 
-	vkCreateDescriptorPool(gctx->device, &pool_info, nullptr, &pool);
+	vkCreateDescriptorPool(gctx->device, &pool_info, nullptr, &pool.pool);
 
-	EXIT_NOT_IMPLEMENTED(pool == nullptr);
+	EXIT_NOT_IMPLEMENTED(pool.pool == nullptr);
+
+	pool.free           = true;
+	pool.next_free_pool = m_first_free_pool;
+	m_first_free_pool   = static_cast<int>(m_pools.Size());
 
 	m_pools.Add(pool);
 }
@@ -2680,6 +2799,8 @@ void DescriptorCache::CreatePool()
 VulkanDescriptorSet* DescriptorCache::Allocate(Stage stage, int storage_buffers_num, int textures2d_sampled_num, int textures2d_storage_num,
                                                int samplers_num, int gds_buffers_num)
 {
+	KYTY_PROFILER_BLOCK("DescriptorCache::Allocate");
+
 	EXIT_IF(storage_buffers_num < 0 || storage_buffers_num > BUFFERS_MAX);
 	EXIT_IF(textures2d_sampled_num < 0 || textures2d_sampled_num > TEXTURES_SAMPLED_MAX);
 	EXIT_IF(textures2d_storage_num < 0 || textures2d_storage_num > TEXTURES_STORAGE_MAX);
@@ -2699,12 +2820,15 @@ VulkanDescriptorSet* DescriptorCache::Allocate(Stage stage, int storage_buffers_
 
 	for (int try_num = 0; try_num < 2; try_num++)
 	{
-		for (auto* pool: m_pools)
+		int pool_id = m_first_free_pool;
+		while (pool_id != -1)
 		{
+			auto& pool = m_pools[pool_id];
+
 			VkDescriptorSetAllocateInfo alloc_info {};
 			alloc_info.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 			alloc_info.pNext              = nullptr;
-			alloc_info.descriptorPool     = pool;
+			alloc_info.descriptorPool     = pool.pool;
 			alloc_info.descriptorSetCount = 1;
 
 			switch (stage)
@@ -2724,15 +2848,25 @@ VulkanDescriptorSet* DescriptorCache::Allocate(Stage stage, int storage_buffers_
 				default: EXIT("unknown stage\n");
 			}
 
-			ret->pool   = pool;
-			ret->layout = *alloc_info.pSetLayouts;
+			ret->pool_id = pool_id;
+			ret->layout  = *alloc_info.pSetLayouts;
 
-			auto result = vkAllocateDescriptorSets(gctx->device, &alloc_info, &ret->set);
+			EXIT_IF(!pool.free);
 
-			if (result == VK_SUCCESS)
 			{
-				return ret;
+				KYTY_PROFILER_BLOCK("vkAllocateDescriptorSets");
+
+				auto result = vkAllocateDescriptorSets(gctx->device, &alloc_info, &ret->set);
+
+				if (result == VK_SUCCESS)
+				{
+					return ret;
+				}
 			}
+
+			pool.free         = false;
+			m_first_free_pool = pool.next_free_pool;
+			pool_id           = pool.next_free_pool;
 		}
 
 		CreatePool();
@@ -2750,8 +2884,18 @@ void DescriptorCache::Free(VulkanDescriptorSet* set)
 
 	auto* gctx = g_render_ctx->GetGraphicCtx();
 	EXIT_IF(gctx == nullptr);
+	EXIT_IF(!m_pools.IndexValid(set->pool_id));
 
-	vkFreeDescriptorSets(gctx->device, set->pool, 1, &set->set);
+	auto& pool = m_pools[set->pool_id];
+
+	vkFreeDescriptorSets(gctx->device, pool.pool, 1, &set->set);
+
+	if (!pool.free)
+	{
+		pool.free           = true;
+		pool.next_free_pool = m_first_free_pool;
+		m_first_free_pool   = set->pool_id;
+	}
 
 	delete set;
 }
@@ -2867,8 +3011,8 @@ VulkanDescriptorSet* DescriptorCache::FindSet(const Set& s)
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 VulkanDescriptorSet* DescriptorCache::GetDescriptor(Stage stage, VulkanBuffer** storage_buffers, VulkanImage** textures2d_sampled,
-                                                    const bool* textures2d_depth, VulkanImage** textures2d_storage, uint64_t* samplers,
-                                                    VulkanBuffer** gds_buffers, const ShaderBindResources& bind)
+                                                    const int* textures2d_sampled_view, VulkanImage** textures2d_storage,
+                                                    uint64_t* samplers, VulkanBuffer** gds_buffers, const ShaderBindResources& bind)
 {
 	KYTY_PROFILER_BLOCK("DescriptorCache::GetDescriptor::search");
 
@@ -2942,24 +3086,18 @@ VulkanDescriptorSet* DescriptorCache::GetDescriptor(Stage stage, VulkanBuffer** 
 	VkDescriptorImageInfo texture2d_sampled_info[TEXTURES_SAMPLED_MAX] {};
 	for (int i = 0; i < textures2d_sampled_num; i++)
 	{
-		if (textures2d_depth[i])
-		{
-			texture2d_sampled_info[i].sampler     = nullptr;
-			texture2d_sampled_info[i].imageView   = static_cast<DepthStencilVulkanImage*>(textures2d_sampled[i])->texture_view;
-			texture2d_sampled_info[i].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-		} else
-		{
-			texture2d_sampled_info[i].sampler     = nullptr;
-			texture2d_sampled_info[i].imageView   = textures2d_sampled[i]->image_view;
-			texture2d_sampled_info[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		}
+		texture2d_sampled_info[i].sampler   = nullptr;
+		texture2d_sampled_info[i].imageView = textures2d_sampled[i]->image_view[textures2d_sampled_view[i]];
+		texture2d_sampled_info[i].imageLayout =
+		    (textures2d_sampled[i]->type == VulkanImageType::DepthStencil ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+		                                                                  : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	}
 
 	VkDescriptorImageInfo texture2d_storage_info[TEXTURES_STORAGE_MAX] {};
 	for (int i = 0; i < textures2d_storage_num; i++)
 	{
 		texture2d_storage_info[i].sampler     = nullptr;
-		texture2d_storage_info[i].imageView   = textures2d_storage[i]->image_view;
+		texture2d_storage_info[i].imageView   = textures2d_storage[i]->image_view[VulkanImage::VIEW_DEFAULT];
 		texture2d_storage_info[i].imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 	}
 
@@ -3094,6 +3232,8 @@ VulkanDescriptorSet* DescriptorCache::GetDescriptor(Stage stage, VulkanBuffer** 
 
 void DescriptorCache::FreeDescriptor(VulkanBuffer* buffer)
 {
+	KYTY_PROFILER_FUNCTION();
+
 	EXIT_IF(buffer == nullptr);
 
 	Core::LockGuard lock(m_mutex);
@@ -3111,7 +3251,12 @@ void DescriptorCache::FreeDescriptor(VulkanBuffer* buffer)
 					set.set           = nullptr;
 					set.next_free_set = m_first_free_set;
 					m_first_free_set  = index;
-					m_sets_map[set.hash].Remove(index);
+					auto& ids         = m_sets_map[set.hash];
+					ids.Remove(index);
+					if (ids.IsEmpty())
+					{
+						m_sets_map.Remove(set.hash);
+					}
 					break;
 				}
 			}
@@ -3122,6 +3267,8 @@ void DescriptorCache::FreeDescriptor(VulkanBuffer* buffer)
 
 void DescriptorCache::FreeDescriptor(VulkanImage* image)
 {
+	KYTY_PROFILER_FUNCTION();
+
 	EXIT_IF(image == nullptr);
 
 	Core::LockGuard lock(m_mutex);
@@ -3139,7 +3286,12 @@ void DescriptorCache::FreeDescriptor(VulkanImage* image)
 					set.set           = nullptr;
 					set.next_free_set = m_first_free_set;
 					m_first_free_set  = index;
-					m_sets_map[set.hash].Remove(index);
+					auto& ids         = m_sets_map[set.hash];
+					ids.Remove(index);
+					if (ids.IsEmpty())
+					{
+						m_sets_map.Remove(set.hash);
+					}
 					break;
 				}
 			}
@@ -3625,39 +3777,36 @@ static void FindRenderColorInfo(uint64_t submit_id, CommandBuffer* buffer, const
 		return;
 	}
 
-	auto     width             = rt.size.width;
-	auto     height            = rt.size.height;
-	auto     pitch             = (rt.pitch.pitch_div8_minus1 + 1) * 8;
-	auto     size              = (rt.slice.slice_div64_minus1 + 1) * 64 * 4;
-	bool     tile              = false;
-	uint32_t format            = 0;
-	bool     render_to_texture = false;
+	auto width      = rt.size.width;
+	auto height     = rt.size.height;
+	auto pitch      = (rt.pitch.pitch_div8_minus1 + 1) * 8;
+	auto size       = (rt.slice.slice_div64_minus1 + 1) * 64 * 4;
+	bool tile       = false;
+	bool write_back = false;
 
-	auto video_image = VideoOut::VideoOutGetImage(rt.base.addr);
+	auto video_image       = VideoOut::VideoOutGetImage(rt.base.addr);
+	bool render_to_texture = (video_image.image == nullptr);
 
-	if (rt.attrib.tile_mode == 0x8)
+	switch (rt.attrib.tile_mode)
 	{
-		tile = false;
-	} else if (rt.attrib.tile_mode == 0xa)
-	{
-		tile = true;
+		case 0x8:
+			tile       = false;
+			write_back = false;
+			break;
 
-		if (rt.info.format == 0xa && rt.info.channel_type == 0x0 && (rt.info.channel_order == 0x0 || rt.info.channel_order == 0x1))
-		{
-			render_to_texture = true;
-		}
-	} else if (rt.attrib.tile_mode == 0xd || rt.attrib.tile_mode == 0xe)
-	{
-		tile              = true;
-		render_to_texture = true;
-	} else
-	{
-		EXIT("unknown tile mode: %u\n", rt.attrib.tile_mode);
-	}
+		case 0x1f:
+			tile       = false;
+			write_back = true;
+			break;
 
-	if (render_to_texture && video_image.image != nullptr)
-	{
-		render_to_texture = false;
+		case 0xa:
+		case 0xd:
+		case 0xe:
+			tile       = true;
+			write_back = false;
+			break;
+
+		default: EXIT("unknown tile mode: %u\n", rt.attrib.tile_mode);
 	}
 
 	if (render_to_texture)
@@ -3667,16 +3816,22 @@ static void FindRenderColorInfo(uint64_t submit_id, CommandBuffer* buffer, const
 		if (rt.info.format == 0xa && rt.info.channel_type == 0x0 && rt.info.channel_order == 0x0)
 		{
 			rt_format = RenderTextureFormat::R8G8B8A8Unorm;
+		} else if (rt.info.format == 0xa && rt.info.channel_type == 0x6 && rt.info.channel_order == 0x0)
+		{
+			rt_format = RenderTextureFormat::R8G8B8A8Srgb;
 		} else if (rt.info.format == 0xa && rt.info.channel_type == 0x0 && rt.info.channel_order == 0x1)
 		{
 			rt_format = RenderTextureFormat::B8G8R8A8Unorm;
+		} else if (rt.info.format == 0xa && rt.info.channel_type == 0x6 && rt.info.channel_order == 0x1)
+		{
+			rt_format = RenderTextureFormat::B8G8R8A8Srgb;
 		} else
 		{
 			EXIT("unknown format");
 		}
 
 		// Render to texture
-		RenderTextureObject vulkan_buffer_info(rt_format, width, height, tile, rt.info.neo_mode, pitch);
+		RenderTextureObject vulkan_buffer_info(rt_format, width, height, tile, rt.info.neo_mode, pitch, write_back);
 		auto*               buffer_vulkan = static_cast<Graphics::RenderTextureVulkanImage*>(
             Graphics::GpuMemoryCreateObject(submit_id, g_render_ctx->GetGraphicCtx(), buffer, rt.base.addr, size, vulkan_buffer_info));
 		EXIT_NOT_IMPLEMENTED(buffer_vulkan == nullptr);
@@ -3686,35 +3841,16 @@ static void FindRenderColorInfo(uint64_t submit_id, CommandBuffer* buffer, const
 		r->buffer_size   = size;
 	} else
 	{
-		if (rt.info.format == 0xa && (rt.info.channel_type == 0x6 || rt.info.channel_type == 0x0) && rt.info.channel_order == 0x1)
-		{
-			format = 0x80000000;
-		} else
-		{
-			EXIT("unknown format");
-		}
+		EXIT_NOT_IMPLEMENTED(
+		    !(rt.info.format == 0xa && (rt.info.channel_type == 0x6 || rt.info.channel_type == 0x0) && rt.info.channel_order == 0x1));
 
-		if (video_image.image == nullptr)
-		{
-			// Offscreen buffer
-			VideoOutBufferObject vulkan_buffer_info(format, width, height, tile, Config::IsNeo(), pitch);
-			auto*                buffer_vulkan = static_cast<Graphics::VideoOutVulkanImage*>(
-                Graphics::GpuMemoryCreateObject(submit_id, g_render_ctx->GetGraphicCtx(), nullptr, rt.base.addr, size, vulkan_buffer_info));
-			EXIT_NOT_IMPLEMENTED(buffer_vulkan == nullptr);
-			r->type          = RenderColorType::OffscreenBuffer;
-			r->base_addr     = rt.base.addr;
-			r->vulkan_buffer = buffer_vulkan;
-			r->buffer_size   = size;
-		} else
-		{
-			// Display buffer
-			EXIT_NOT_IMPLEMENTED(video_image.buffer_size != size);
-			EXIT_NOT_IMPLEMENTED(video_image.buffer_pitch != pitch);
-			r->type          = RenderColorType::DisplayBuffer;
-			r->base_addr     = rt.base.addr;
-			r->vulkan_buffer = video_image.image;
-			r->buffer_size   = video_image.buffer_size;
-		}
+		// Display buffer
+		EXIT_NOT_IMPLEMENTED(video_image.buffer_size != size);
+		EXIT_NOT_IMPLEMENTED(video_image.buffer_pitch != pitch);
+		r->type          = RenderColorType::DisplayBuffer;
+		r->base_addr     = rt.base.addr;
+		r->vulkan_buffer = video_image.image;
+		r->buffer_size   = video_image.buffer_size;
 	}
 }
 
@@ -3726,10 +3862,10 @@ static void InvalidateMemoryObject(const RenderColorInfo& r)
 	{
 		if (r.type == RenderColorType::RenderTexture)
 		{
-			GpuMemoryResetHash(g_render_ctx->GetGraphicCtx(), &r.base_addr, &r.buffer_size, 1, GpuMemoryObjectType::RenderTexture);
-		} else if (r.type == RenderColorType::DisplayBuffer || r.type == RenderColorType::OffscreenBuffer)
+			GpuMemoryResetHash(&r.base_addr, &r.buffer_size, 1, GpuMemoryObjectType::RenderTexture);
+		} else if (r.type == RenderColorType::DisplayBuffer /*|| r.type == RenderColorType::OffscreenBuffer*/)
 		{
-			GpuMemoryResetHash(g_render_ctx->GetGraphicCtx(), &r.base_addr, &r.buffer_size, 1, GpuMemoryObjectType::VideoOutBuffer);
+			GpuMemoryResetHash(&r.base_addr, &r.buffer_size, 1, GpuMemoryObjectType::VideoOutBuffer);
 		}
 	}
 }
@@ -3740,7 +3876,7 @@ static void InvalidateMemoryObject(const RenderDepthInfo& r)
 
 	if (with_depth)
 	{
-		GpuMemoryResetHash(g_render_ctx->GetGraphicCtx(), r.vaddr, r.size, r.vaddr_num, GpuMemoryObjectType::DepthStencilBuffer);
+		GpuMemoryResetHash(r.vaddr, r.size, r.vaddr_num, GpuMemoryObjectType::DepthStencilBuffer);
 	}
 }
 
@@ -3759,14 +3895,10 @@ static void PrepareStorageBuffers(uint64_t submit_id, CommandBuffer* buffer, con
 
 		EXIT_NOT_IMPLEMENTED(r.AddTid());
 		EXIT_NOT_IMPLEMENTED(r.SwizzleEnabled());
-		EXIT_NOT_IMPLEMENTED(!((r.Stride() == 4 && r.DstSelX() == 4 && r.DstSelY() == 0 && r.DstSelZ() == 0 && r.DstSelW() == 0 &&
-		                        r.Dfmt() == 4 && r.Nfmt() == 4) ||
-		                       (r.Stride() == 4 && r.DstSelX() == 4 && r.DstSelY() == 0 && r.DstSelZ() == 0 && r.DstSelW() == 1 &&
-		                        r.Dfmt() == 4 && r.Nfmt() == 7) ||
-		                       (r.Stride() == 8 && r.DstSelX() == 4 && r.DstSelY() == 5 && r.DstSelZ() == 0 && r.DstSelW() == 0 &&
-		                        r.Dfmt() == 11 && r.Nfmt() == 4) ||
-		                       (r.Stride() == 16 && r.DstSelX() == 4 && r.DstSelY() == 5 && r.DstSelZ() == 6 && r.DstSelW() == 7 &&
-		                        r.Dfmt() == 14 && r.Nfmt() == 7)));
+		EXIT_NOT_IMPLEMENTED(!((r.Stride() == 4 && r.DstSelXYZW() == DstSel(4, 0, 0, 0) && r.Dfmt() == 4 && r.Nfmt() == 4) ||
+		                       (r.Stride() == 4 && r.DstSelXYZW() == DstSel(4, 0, 0, 1) && r.Dfmt() == 4 && r.Nfmt() == 7) ||
+		                       (r.Stride() == 8 && r.DstSelXYZW() == DstSel(4, 5, 0, 0) && r.Dfmt() == 11 && r.Nfmt() == 4) ||
+		                       (r.Stride() == 16 && r.DstSelXYZW() == DstSel(4, 5, 6, 7) && r.Dfmt() == 14 && r.Nfmt() == 7)));
 		EXIT_NOT_IMPLEMENTED(!(r.MemoryType() == 0x00 || r.MemoryType() == 0x10 || r.MemoryType() == 0x6d));
 
 		auto addr        = r.Base();
@@ -3807,7 +3939,7 @@ static void PrepareStorageBuffers(uint64_t submit_id, CommandBuffer* buffer, con
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 static void PrepareTextures(uint64_t submit_id, CommandBuffer* buffer, const ShaderTextureResources& textures, VulkanImage** images_sampled,
-                            VulkanImage** images_storage, bool* images_depth, uint32_t** sgprs /*, const bool* without_sampler*/)
+                            VulkanImage** images_storage, int* images_sampled_view, uint32_t** sgprs)
 {
 	KYTY_PROFILER_FUNCTION();
 
@@ -3815,7 +3947,6 @@ static void PrepareTextures(uint64_t submit_id, CommandBuffer* buffer, const Sha
 	EXIT_IF(images_storage == nullptr);
 	EXIT_IF(sgprs == nullptr);
 	EXIT_IF(*sgprs == nullptr);
-	//	EXIT_IF(without_sampler == nullptr);
 
 	int index_sampled = 0;
 	int index_storage = 0;
@@ -3826,24 +3957,15 @@ static void PrepareTextures(uint64_t submit_id, CommandBuffer* buffer, const Sha
 
 		EXIT_NOT_IMPLEMENTED(r.Base() == 0);
 		EXIT_NOT_IMPLEMENTED(r.MinLod() != 0);
-		EXIT_NOT_IMPLEMENTED(r.Dfmt() != 1 && r.Dfmt() != 10 && r.Dfmt() != 37 && r.Dfmt() != 4);
+		EXIT_NOT_IMPLEMENTED(r.Dfmt() != 1 && r.Dfmt() != 10 && r.Dfmt() != 37 && r.Dfmt() != 4 && r.Dfmt() != 35 && r.Dfmt() != 3 &&
+		                     r.Dfmt() != 36);
 		EXIT_NOT_IMPLEMENTED(r.Nfmt() != 9 && r.Nfmt() != 0 && r.Nfmt() != 7);
-		// EXIT_NOT_IMPLEMENTED(r.Width() != 511);
-		// EXIT_NOT_IMPLEMENTED(r.Height() != 511);
 		EXIT_NOT_IMPLEMENTED(r.PerfMod() != 7 && r.PerfMod() != 0);
 		EXIT_NOT_IMPLEMENTED(r.Interlaced() != false);
-		// EXIT_NOT_IMPLEMENTED(r.DstSelX() != 4);
-		// EXIT_NOT_IMPLEMENTED(r.DstSelY() != 5);
-		// EXIT_NOT_IMPLEMENTED(r.DstSelZ() != 6);
-		// EXIT_NOT_IMPLEMENTED(r.DstSelW() != 7);
-		// EXIT_NOT_IMPLEMENTED(r.BaseLevel() != 0);
-		// EXIT_NOT_IMPLEMENTED(r.LastLevel() != 0 && r.LastLevel() != 9);
-		EXIT_NOT_IMPLEMENTED(
-		    !(r.TilingIdx() == 8 || r.TilingIdx() == 13 || r.TilingIdx() == 14 || r.TilingIdx() == 2 || r.TilingIdx() == 10));
-		// EXIT_NOT_IMPLEMENTED(!(r.LastLevel() == 0 && r.Pow2Pad() == false) && !(r.LastLevel() == 9 && r.Pow2Pad() == true));
+		EXIT_NOT_IMPLEMENTED(!(r.TilingIdx() == 8 || r.TilingIdx() == 13 || r.TilingIdx() == 14 || r.TilingIdx() == 2 ||
+		                       r.TilingIdx() == 10 || r.TilingIdx() == 31));
 		EXIT_NOT_IMPLEMENTED(r.Type() != 9);
 		EXIT_NOT_IMPLEMENTED(r.Depth() != 0);
-		// EXIT_NOT_IMPLEMENTED(r.Pitch() != 511);
 		EXIT_NOT_IMPLEMENTED(r.BaseArray() != 0);
 		EXIT_NOT_IMPLEMENTED(r.LastArray() != 0);
 		EXIT_NOT_IMPLEMENTED(r.MinLodWarn() != 0);
@@ -3864,12 +3986,13 @@ static void PrepareTextures(uint64_t submit_id, CommandBuffer* buffer, const Sha
 		auto          base_level = r.BaseLevel();
 		auto          levels     = r.LastLevel() + 1;
 		auto          tile       = r.TilingIdx();
-		uint32_t      swizzle    = static_cast<uint32_t>(r.DstSelX()) | (static_cast<uint32_t>(r.DstSelY()) << 8u) |
-		                   (static_cast<uint32_t>(r.DstSelZ()) << 16u) | (static_cast<uint32_t>(r.DstSelW()) << 24u);
+		auto          dfmt       = r.Dfmt();
+		auto          nfmt       = r.Nfmt();
+		uint32_t      swizzle    = r.DstSelXYZW();
 
 		bool check_depth_texture = (tile == 2);
 
-		TileGetTextureSize(r.Dfmt(), r.Nfmt(), width, height, pitch, levels, tile, neo, &size, nullptr, nullptr, nullptr);
+		TileGetTextureSize(dfmt, nfmt, width, height, pitch, levels, tile, neo, &size, nullptr, nullptr, nullptr);
 
 		EXIT_NOT_IMPLEMENTED(size.size == 0);
 		EXIT_NOT_IMPLEMENTED((addr & (static_cast<uint64_t>(size.align) - 1u)) != 0);
@@ -3877,6 +4000,7 @@ static void PrepareTextures(uint64_t submit_id, CommandBuffer* buffer, const Sha
 		VulkanImage* tex            = nullptr;
 		bool         render_texture = false;
 		bool         depth_texture  = false;
+		int          view_type      = VulkanImage::VIEW_DEFAULT;
 
 		if (check_depth_texture)
 		{
@@ -3885,7 +4009,7 @@ static void PrepareTextures(uint64_t submit_id, CommandBuffer* buffer, const Sha
 			if (depth_texture)
 			{
 				EXIT_NOT_IMPLEMENTED(dtex.Size() > 1);
-				EXIT_NOT_IMPLEMENTED(swizzle != 0x04040404);
+				EXIT_NOT_IMPLEMENTED(swizzle != DstSel(4, 4, 4, 4));
 				EXIT_NOT_IMPLEMENTED(dtex.At(0)->compressed);
 				tex = dtex.At(0);
 			}
@@ -3896,8 +4020,12 @@ static void PrepareTextures(uint64_t submit_id, CommandBuffer* buffer, const Sha
 			if (render_texture)
 			{
 				EXIT_NOT_IMPLEMENTED(rtex.Size() > 1);
-				EXIT_NOT_IMPLEMENTED(swizzle != 0x07060504);
+				EXIT_NOT_IMPLEMENTED(swizzle != DstSel(4, 5, 6, 7) && swizzle != DstSel(6, 5, 4, 7));
 				tex = rtex.At(0);
+				if (swizzle == DstSel(6, 5, 4, 7))
+				{
+					view_type = VulkanImage::VIEW_BGRA;
+				}
 			}
 		}
 
@@ -3907,18 +4035,30 @@ static void PrepareTextures(uint64_t submit_id, CommandBuffer* buffer, const Sha
 			{
 				EXIT_NOT_IMPLEMENTED(textures.desc[i].usage != ShaderTextureUsage::ReadWrite);
 
-				StorageTextureObject vulkan_texture_info(r.Dfmt(), r.Nfmt(), width, height, pitch, base_level, levels, tile, neo, swizzle);
-
+				StorageTextureObject vulkan_texture_info(dfmt, nfmt, width, height, pitch, base_level, levels, tile, neo, swizzle);
 				tex = static_cast<StorageTextureVulkanImage*>(
 				    GpuMemoryCreateObject(submit_id, g_render_ctx->GetGraphicCtx(), buffer, addr, size.size, vulkan_texture_info));
 			} else
 			{
 				EXIT_NOT_IMPLEMENTED(textures.desc[i].usage != ShaderTextureUsage::ReadOnly);
 
-				TextureObject vulkan_texture_info(r.Dfmt(), r.Nfmt(), width, height, pitch, base_level, levels, tile, neo, swizzle);
+				if (tile == 10)
+				{
+					RenderTextureFormat rt_format = RenderTextureFormat::Unknown;
+					if (dfmt == 10 && nfmt == 0)
+					{
+						rt_format = RenderTextureFormat::R8G8B8A8Unorm;
+					}
 
-				tex = static_cast<TextureVulkanImage*>(
-				    GpuMemoryCreateObject(submit_id, g_render_ctx->GetGraphicCtx(), buffer, addr, size.size, vulkan_texture_info));
+					RenderTextureObject vulkan_buffer_info(rt_format, width, height, true, neo, pitch, false);
+					tex = static_cast<Graphics::RenderTextureVulkanImage*>(Graphics::GpuMemoryCreateObject(
+					    submit_id, g_render_ctx->GetGraphicCtx(), buffer, addr, size.size, vulkan_buffer_info));
+				} else
+				{
+					TextureObject vulkan_texture_info(dfmt, nfmt, width, height, pitch, base_level, levels, tile, neo, swizzle);
+					tex = static_cast<TextureVulkanImage*>(
+					    GpuMemoryCreateObject(submit_id, g_render_ctx->GetGraphicCtx(), buffer, addr, size.size, vulkan_texture_info));
+				}
 			}
 		}
 
@@ -3931,8 +4071,8 @@ static void PrepareTextures(uint64_t submit_id, CommandBuffer* buffer, const Sha
 			index_storage++;
 		} else
 		{
-			images_sampled[index_sampled] = tex;
-			images_depth[index_sampled]   = depth_texture;
+			images_sampled[index_sampled]      = tex;
+			images_sampled_view[index_sampled] = (depth_texture ? VulkanImage::VIEW_DEPTH_TEXTURE : view_type);
 			r.UpdateAddress(index_sampled);
 			index_sampled++;
 		}
@@ -4043,8 +4183,8 @@ static void BindDescriptors(uint64_t submit_id, CommandBuffer* buffer, VkPipelin
 
 		VulkanBuffer* storage_buffers[DescriptorCache::BUFFERS_MAX];
 		VulkanImage*  textures2d_sampled[DescriptorCache::TEXTURES_SAMPLED_MAX];
+		int           textures2d_sampled_view[DescriptorCache::TEXTURES_SAMPLED_MAX];
 		VulkanImage*  textures2d_storage[DescriptorCache::TEXTURES_STORAGE_MAX];
-		bool          textures2d_depth[DescriptorCache::TEXTURES_SAMPLED_MAX];
 		uint64_t      samplers[DescriptorCache::SAMPLERS_MAX];
 		uint32_t      sgprs[DescriptorCache::PUSH_CONSTANTS_MAX];
 
@@ -4058,7 +4198,8 @@ static void BindDescriptors(uint64_t submit_id, CommandBuffer* buffer, VkPipelin
 		}
 		if (bind.textures2D.textures_num > 0)
 		{
-			PrepareTextures(submit_id, buffer, bind.textures2D, textures2d_sampled, textures2d_storage, textures2d_depth, &sgprs_ptr);
+			PrepareTextures(submit_id, buffer, bind.textures2D, textures2d_sampled, textures2d_storage, textures2d_sampled_view,
+			                &sgprs_ptr);
 		}
 		if (bind.samplers.samplers_num > 0)
 		{
@@ -4072,9 +4213,8 @@ static void BindDescriptors(uint64_t submit_id, CommandBuffer* buffer, VkPipelin
 
 		EXIT_IF(bind.push_constant_size != (sgprs_ptr - sgprs) * 4);
 
-		auto* descriptor_set =
-		    g_render_ctx->GetDescriptorCache()->GetDescriptor(stage, storage_buffers, textures2d_sampled, textures2d_depth,
-		                                                      textures2d_storage, samplers, &gds_buffer, bind /*, bind_params*/);
+		auto* descriptor_set = g_render_ctx->GetDescriptorCache()->GetDescriptor(
+		    stage, storage_buffers, textures2d_sampled, textures2d_sampled_view, textures2d_storage, samplers, &gds_buffer, bind);
 
 		EXIT_IF(descriptor_set == nullptr);
 
@@ -4084,9 +4224,12 @@ static void BindDescriptors(uint64_t submit_id, CommandBuffer* buffer, VkPipelin
 		{
 			for (int i = 0; i < bind.textures2D.textures2d_sampled_num; i++)
 			{
-				if (textures2d_depth[i])
+				if (textures2d_sampled[i]->type == VulkanImageType::DepthStencil)
 				{
 					GraphicsRenderDepthStencilBarrier(vk_buffer, textures2d_sampled[i]);
+				} else if (textures2d_sampled[i]->type == VulkanImageType::RenderTexture)
+				{
+					GraphicsRenderRenderTextureBarrier(vk_buffer, textures2d_sampled[i]);
 				}
 			}
 		}
@@ -4190,6 +4333,7 @@ void GraphicsRenderDrawIndex(uint64_t submit_id, CommandBuffer* buffer, HW::Hard
 		case 4: topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST; break;  // kPrimitiveTypeTriList
 		case 5: topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN; break;   // kPrimitiveTypeTriFan
 		case 6: topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP; break; // kPrimitiveTypeTriStrip
+		case 19: topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN; break;  // kPrimitiveTypeQuadList
 		default: EXIT("unknown primitive type: %u\n", ucfg->GetPrimType());
 	}
 
@@ -4238,10 +4382,10 @@ void GraphicsRenderDrawIndex(uint64_t submit_id, CommandBuffer* buffer, HW::Hard
 	ShaderPixelInputInfo ps_input_info;
 	ShaderGetInputInfoPS(&ctx->GetPs(), &vs_input_info, &ps_input_info);
 
-	EXIT_NOT_IMPLEMENTED(vs_input_info.buffers_num > 1);
-
 	auto* pipeline = g_render_ctx->GetPipelineCache()->CreatePipeline(framebuffer, &color_info, &depth_info, &vs_input_info, ctx,
 	                                                                  &ps_input_info, topology);
+
+	// EXIT_NOT_IMPLEMENTED(vs_input_info.buffers_num > 1);
 
 	vkCmdBindPipeline(vk_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
 
@@ -4276,7 +4420,20 @@ void GraphicsRenderDrawIndex(uint64_t submit_id, CommandBuffer* buffer, HW::Hard
 
 	buffer->BeginRenderPass(framebuffer, &color_info, &depth_info);
 
-	vkCmdDrawIndexed(vk_buffer, index_count, 1, 0, 0, 0);
+	switch (ucfg->GetPrimType())
+	{
+		case 4:
+		case 5:
+		case 6: vkCmdDrawIndexed(vk_buffer, index_count, 1, 0, 0, 0); break;
+		case 19:
+			EXIT_NOT_IMPLEMENTED((index_count & 0x3u) != 0);
+			for (uint32_t i = 0; i < index_count; i += 4)
+			{
+				vkCmdDrawIndexed(vk_buffer, 4, 1, i, 0, 0);
+			}
+			break;
+		default: EXIT("unknown primitive type: %u\n", ucfg->GetPrimType());
+	}
 
 	buffer->EndRenderPass();
 
@@ -4350,10 +4507,10 @@ void GraphicsRenderDrawIndexAuto(uint64_t submit_id, CommandBuffer* buffer, HW::
 	ShaderPixelInputInfo ps_input_info;
 	ShaderGetInputInfoPS(&pixel_shader_info, &vs_input_info, &ps_input_info);
 
-	EXIT_NOT_IMPLEMENTED(vs_input_info.buffers_num > 1);
-
 	auto* pipeline = g_render_ctx->GetPipelineCache()->CreatePipeline(framebuffer, &color_info, &depth_info, &vs_input_info, ctx,
 	                                                                  &ps_input_info, topology);
+
+	// EXIT_NOT_IMPLEMENTED(vs_input_info.buffers_num > 1);
 
 	vkCmdBindPipeline(vk_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
 
@@ -4467,7 +4624,8 @@ void GraphicsRenderWriteAtEndOfPipeGds32(uint64_t submit_id, CommandBuffer* buff
 
 	Core::LockGuard lock(g_render_ctx->GetMutex());
 
-	uint64_t args[4] = {static_cast<uint64_t>(dw_offset), static_cast<uint64_t>(dw_num), reinterpret_cast<uint64_t>(dst_gpu_addr), 0};
+	uint64_t args[LABEL_ARGS_MAX] = {static_cast<uint64_t>(dw_offset), static_cast<uint64_t>(dw_num),
+	                                 reinterpret_cast<uint64_t>(dst_gpu_addr), 0};
 
 	Graphics::LabelGpuObject label_info(
 	    0,
@@ -4513,7 +4671,7 @@ void GraphicsRenderWriteAtEndOfPipeClockCounter(uint64_t submit_id, CommandBuffe
 
 	Core::LockGuard lock(g_render_ctx->GetMutex());
 
-	uint64_t args[4] = {reinterpret_cast<uint64_t>(dst_gpu_addr), 0, 0, 0};
+	uint64_t args[LABEL_ARGS_MAX] = {reinterpret_cast<uint64_t>(dst_gpu_addr), 0, 0, 0};
 
 	Graphics::LabelGpuObject label_info(
 	    0,
@@ -4543,15 +4701,20 @@ void GraphicsRenderWriteAtEndOfPipeWithWriteBack64(uint64_t submit_id, CommandBu
 
 	Core::LockGuard lock(g_render_ctx->GetMutex());
 
+	uint64_t args[LABEL_ARGS_MAX] = {reinterpret_cast<uint64_t>(buffer->GetParent())};
+
 	Graphics::LabelGpuObject label_info(
 	    value,
-	    [](const uint64_t* /*args*/)
+	    [](const uint64_t* args)
 	    {
 		    EXIT_IF(g_render_ctx == nullptr);
-		    GpuMemoryWriteBack(g_render_ctx->GetGraphicCtx());
+
+		    auto* cp = reinterpret_cast<CommandProcessor*>(args[0]);
+
+		    GpuMemoryWriteBack(g_render_ctx->GetGraphicCtx(), cp);
 		    return true;
 	    },
-	    nullptr);
+	    nullptr, args);
 
 	auto* label = static_cast<Label*>(
 	    GpuMemoryCreateObject(submit_id, g_render_ctx->GetGraphicCtx(), nullptr, reinterpret_cast<uint64_t>(dst_gpu_addr), 8, label_info));
@@ -4569,12 +4732,17 @@ void GraphicsRenderWriteAtEndOfPipeWithInterruptWriteBack64(uint64_t submit_id, 
 
 	Core::LockGuard lock(g_render_ctx->GetMutex());
 
+	uint64_t args[LABEL_ARGS_MAX] = {reinterpret_cast<uint64_t>(buffer->GetParent())};
+
 	Graphics::LabelGpuObject label_info(
 	    value,
-	    [](const uint64_t* /*args*/)
+	    [](const uint64_t* args)
 	    {
 		    EXIT_IF(g_render_ctx == nullptr);
-		    GpuMemoryWriteBack(g_render_ctx->GetGraphicCtx());
+
+		    auto* cp = reinterpret_cast<CommandProcessor*>(args[0]);
+
+		    GpuMemoryWriteBack(g_render_ctx->GetGraphicCtx(), cp);
 		    return true;
 	    },
 	    [](const uint64_t* /*args*/)
@@ -4582,7 +4750,8 @@ void GraphicsRenderWriteAtEndOfPipeWithInterruptWriteBack64(uint64_t submit_id, 
 		    EXIT_IF(g_render_ctx == nullptr);
 		    g_render_ctx->TriggerEopEvent();
 		    return true;
-	    });
+	    },
+	    args);
 
 	auto* label = static_cast<Label*>(
 	    GpuMemoryCreateObject(submit_id, g_render_ctx->GetGraphicCtx(), nullptr, reinterpret_cast<uint64_t>(dst_gpu_addr), 8, label_info));
@@ -4646,15 +4815,18 @@ void GraphicsRenderWriteAtEndOfPipeWithInterruptWriteBackFlip32(uint64_t submit_
 
 	Core::LockGuard lock(g_render_ctx->GetMutex());
 
-	uint64_t args[] = {static_cast<uint64_t>(handle), static_cast<uint64_t>(index), static_cast<uint64_t>(flip_mode),
-	                   static_cast<uint64_t>(flip_arg)};
+	uint64_t args[LABEL_ARGS_MAX] = {static_cast<uint64_t>(handle), static_cast<uint64_t>(index), static_cast<uint64_t>(flip_mode),
+	                                 static_cast<uint64_t>(flip_arg), reinterpret_cast<uint64_t>(buffer->GetParent())};
 
 	Graphics::LabelGpuObject label_info(
 	    value,
 	    [](const uint64_t* args)
 	    {
 		    EXIT_IF(g_render_ctx == nullptr);
-		    GpuMemoryWriteBack(g_render_ctx->GetGraphicCtx());
+
+		    auto* cp = reinterpret_cast<CommandProcessor*>(args[4]);
+
+		    GpuMemoryWriteBack(g_render_ctx->GetGraphicCtx(), cp);
 
 		    int     handle    = static_cast<int>(args[0]);
 		    int     index     = static_cast<int>(args[1]);
@@ -4688,8 +4860,8 @@ void GraphicsRenderWriteAtEndOfPipeWithFlip32(uint64_t submit_id, CommandBuffer*
 
 	Core::LockGuard lock(g_render_ctx->GetMutex());
 
-	uint64_t args[] = {static_cast<uint64_t>(handle), static_cast<uint64_t>(index), static_cast<uint64_t>(flip_mode),
-	                   static_cast<uint64_t>(flip_arg)};
+	uint64_t args[LABEL_ARGS_MAX] = {static_cast<uint64_t>(handle), static_cast<uint64_t>(index), static_cast<uint64_t>(flip_mode),
+	                                 static_cast<uint64_t>(flip_arg)};
 
 	Graphics::LabelGpuObject label_info(
 	    value,
@@ -4720,8 +4892,8 @@ void GraphicsRenderWriteAtEndOfPipeOnlyFlip(uint64_t /*submit_id*/, CommandBuffe
 
 	Core::LockGuard lock(g_render_ctx->GetMutex());
 
-	uint64_t args[] = {static_cast<uint64_t>(handle), static_cast<uint64_t>(index), static_cast<uint64_t>(flip_mode),
-	                   static_cast<uint64_t>(flip_arg)};
+	uint64_t args[LABEL_ARGS_MAX] = {static_cast<uint64_t>(handle), static_cast<uint64_t>(index), static_cast<uint64_t>(flip_mode),
+	                                 static_cast<uint64_t>(flip_arg)};
 
 	auto* label = LabelCreate32(
 	    g_render_ctx->GetGraphicCtx(), nullptr, 0,
@@ -4742,13 +4914,13 @@ void GraphicsRenderWriteAtEndOfPipeOnlyFlip(uint64_t /*submit_id*/, CommandBuffe
 	LabelDelete(label);
 }
 
-void GraphicsRenderWriteBack()
+void GraphicsRenderWriteBack(CommandProcessor* cp)
 {
 	Core::LockGuard lock(g_render_ctx->GetMutex());
 
 	EXIT_IF(g_render_ctx == nullptr);
 
-	GpuMemoryWriteBack(g_render_ctx->GetGraphicCtx());
+	GpuMemoryWriteBack(g_render_ctx->GetGraphicCtx(), cp);
 }
 
 static void eop_event_reset_func(LibKernel::EventQueue::KernelEqueueEvent* event)
@@ -4833,6 +5005,16 @@ void GraphicsRenderReadGds(uint32_t* dst, uint32_t dw_offset, uint32_t dw_size)
 void GraphicsRenderMemoryFree(uint64_t vaddr, uint64_t size)
 {
 	GpuMemoryFree(g_render_ctx->GetGraphicCtx(), vaddr, size, false);
+}
+
+void GraphicsRenderDeleteIndexBuffers()
+{
+	IndexBufferDeleteAll(g_render_ctx->GetGraphicCtx());
+}
+
+void GraphicsRenderMemoryFlush(uint64_t vaddr, uint64_t size)
+{
+	GpuMemoryFlush(g_render_ctx->GetGraphicCtx(), vaddr, size);
 }
 
 bool CommandBuffer::IsInvalid() const

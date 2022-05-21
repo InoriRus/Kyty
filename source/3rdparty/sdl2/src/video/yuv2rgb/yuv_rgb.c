@@ -2,6 +2,8 @@
 // Distributed under BSD 3-Clause License
 #include "../../SDL_internal.h"
 
+#if SDL_HAVE_YUV
+
 #include "yuv_rgb.h"
 
 #include "SDL_cpuinfo.h"
@@ -89,7 +91,7 @@ static uint8_t clampU8(int32_t v)
 	255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
 	255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255
 	};
-	return lut[(v+128*PRECISION_FACTOR)>>PRECISION];
+	return lut[((v+128*PRECISION_FACTOR)>>PRECISION)&511];
 }
 
 
@@ -685,3 +687,4 @@ void rgb24_yuv420_sseu(uint32_t width, uint32_t height,
 
 #endif //__SSE2__
 
+#endif /* SDL_HAVE_YUV */

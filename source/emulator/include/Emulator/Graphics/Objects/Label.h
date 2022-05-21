@@ -16,6 +16,8 @@ struct GraphicContext;
 
 void LabelInit();
 
+constexpr int LABEL_ARGS_MAX = 5;
+
 class LabelGpuObject: public GpuObject
 {
 public:
@@ -28,6 +30,7 @@ public:
 	static constexpr int PARAM_ARG_2      = 4;
 	static constexpr int PARAM_ARG_3      = 5;
 	static constexpr int PARAM_ARG_4      = 6;
+	static constexpr int PARAM_ARG_5      = 7;
 
 	explicit LabelGpuObject(uint64_t value, callback_t callback_1, callback_t callback_2, const uint64_t* args = nullptr)
 	{
@@ -40,6 +43,7 @@ public:
 			params[PARAM_ARG_2] = args[1];
 			params[PARAM_ARG_3] = args[2];
 			params[PARAM_ARG_4] = args[3];
+			params[PARAM_ARG_5] = args[4];
 		}
 		check_hash = false;
 		type       = Graphics::GpuMemoryObjectType::Label;

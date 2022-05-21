@@ -589,8 +589,6 @@ int KYTY_SYSV_ABI KernelMapDirectMemory(void** addr, size_t len, int prot, int f
 
 	EXIT_IF(g_physical_memory == nullptr);
 
-	// EXIT_NOT_IMPLEMENTED(!Core::Thread::IsMainThread());
-
 	EXIT_NOT_IMPLEMENTED(addr == nullptr);
 	EXIT_NOT_IMPLEMENTED(flags != 0);
 
@@ -619,12 +617,14 @@ int KYTY_SYSV_ABI KernelMapDirectMemory(void** addr, size_t len, int prot, int f
 	auto out_addr = VirtualMemory::AllocAligned(in_addr, len, mode, alignment);
 	*addr         = reinterpret_cast<void*>(out_addr);
 
-	printf("\tin_addr  = 0x%016" PRIx64 "\n", in_addr);
-	printf("\tout_addr = 0x%016" PRIx64 "\n", out_addr);
-	printf("\tsize     = 0x%016" PRIx64 "\n", len);
-	printf("\tmode     = %s\n", Core::EnumName(mode).C_Str());
-	printf("\talign    = 0x%016" PRIx64 "\n", alignment);
-	printf("\tgpu_mode   = %s\n", Core::EnumName(gpu_mode).C_Str());
+	printf("\t in_addr  = 0x%016" PRIx64 "\n", in_addr);
+	printf("\t out_addr = 0x%016" PRIx64 "\n", out_addr);
+	printf("\t size     = 0x%016" PRIx64 "\n", len);
+	printf("\t mode     = %s\n", Core::EnumName(mode).C_Str());
+	printf("\t align    = 0x%016" PRIx64 "\n", alignment);
+	printf("\t gpu_mode = %s\n", Core::EnumName(gpu_mode).C_Str());
+
+	EXIT_NOT_IMPLEMENTED(out_addr == 0);
 
 	if (out_addr == 0)
 	{
@@ -633,8 +633,11 @@ int KYTY_SYSV_ABI KernelMapDirectMemory(void** addr, size_t len, int prot, int f
 
 	if (!g_physical_memory->Map(out_addr, direct_memory_start, len, prot, mode, gpu_mode))
 	{
-		printf(FG_RED "\t[Fail]\n" FG_DEFAULT);
+		printf(FG_RED "\t [Fail]\n" FG_DEFAULT);
 		VirtualMemory::Free(out_addr);
+
+		KYTY_NOT_IMPLEMENTED;
+
 		return KERNEL_ERROR_EBUSY;
 	}
 
@@ -643,7 +646,7 @@ int KYTY_SYSV_ABI KernelMapDirectMemory(void** addr, size_t len, int prot, int f
 		Graphics::GpuMemorySetAllocatedRange(out_addr, len);
 	}
 
-	printf(FG_GREEN "\t[Ok]\n" FG_DEFAULT);
+	printf(FG_GREEN "\t [Ok]\n" FG_DEFAULT);
 
 	return OK;
 }

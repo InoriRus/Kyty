@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -22,16 +22,19 @@
 
 /* General keyboard handling code for SDL */
 
+#include "SDL_hints.h"
 #include "SDL_timer.h"
 #include "SDL_events.h"
 #include "SDL_events_c.h"
-#include "SDL_assert.h"
 #include "../video/SDL_sysvideo.h"
 
 
 /* #define DEBUG_KEYBOARD */
 
 /* Global keyboard information */
+
+#define KEYBOARD_HARDWARE       0x01
+#define KEYBOARD_AUTORELEASE    0x02
 
 typedef struct SDL_Keyboard SDL_Keyboard;
 
@@ -40,8 +43,10 @@ struct SDL_Keyboard
     /* Data common to all keyboards */
     SDL_Window *focus;
     Uint16 modstate;
+    Uint8 keysource[SDL_NUM_SCANCODES];
     Uint8 keystate[SDL_NUM_SCANCODES];
     SDL_Keycode keymap[SDL_NUM_SCANCODES];
+    SDL_bool autorelease_pending;
 };
 
 static SDL_Keyboard SDL_keyboard;
@@ -532,27 +537,12 @@ SDL_UCS4ToUTF8(Uint32 ch, char *dst)
         p[1] = 0x80 | (Uint8) ((ch >> 6) & 0x3F);
         p[2] = 0x80 | (Uint8) (ch & 0x3F);
         dst += 3;
-    } else if (ch <= 0x1FFFFF) {
+    } else {
         p[0] = 0xF0 | (Uint8) ((ch >> 18) & 0x07);
         p[1] = 0x80 | (Uint8) ((ch >> 12) & 0x3F);
         p[2] = 0x80 | (Uint8) ((ch >> 6) & 0x3F);
         p[3] = 0x80 | (Uint8) (ch & 0x3F);
         dst += 4;
-    } else if (ch <= 0x3FFFFFF) {
-        p[0] = 0xF8 | (Uint8) ((ch >> 24) & 0x03);
-        p[1] = 0x80 | (Uint8) ((ch >> 18) & 0x3F);
-        p[2] = 0x80 | (Uint8) ((ch >> 12) & 0x3F);
-        p[3] = 0x80 | (Uint8) ((ch >> 6) & 0x3F);
-        p[4] = 0x80 | (Uint8) (ch & 0x3F);
-        dst += 5;
-    } else {
-        p[0] = 0xFC | (Uint8) ((ch >> 30) & 0x01);
-        p[1] = 0x80 | (Uint8) ((ch >> 24) & 0x3F);
-        p[2] = 0x80 | (Uint8) ((ch >> 18) & 0x3F);
-        p[3] = 0x80 | (Uint8) ((ch >> 12) & 0x3F);
-        p[4] = 0x80 | (Uint8) ((ch >> 6) & 0x3F);
-        p[5] = 0x80 | (Uint8) (ch & 0x3F);
-        dst += 6;
     }
     return dst;
 }
@@ -615,6 +605,9 @@ SDL_SetKeymap(int start, SDL_Keycode * keys, int length)
 void
 SDL_SetScancodeName(SDL_Scancode scancode, const char *name)
 {
+    if (scancode >= SDL_NUM_SCANCODES) {
+        return;
+    }
     SDL_scancode_names[scancode] = name;
 }
 
@@ -645,6 +638,7 @@ SDL_SetKeyboardFocus(SDL_Window * window)
         /* old window must lose an existing mouse capture. */
         if (keyboard->focus->flags & SDL_WINDOW_MOUSE_CAPTURE) {
             SDL_CaptureMouse(SDL_FALSE);  /* drop the capture. */
+            SDL_UpdateMouseCapture(SDL_TRUE);
             SDL_assert(!(keyboard->focus->flags & SDL_WINDOW_MOUSE_CAPTURE));
         }
 
@@ -675,19 +669,20 @@ SDL_SetKeyboardFocus(SDL_Window * window)
     }
 }
 
-int
-SDL_SendKeyboardKey(Uint8 state, SDL_Scancode scancode)
+static int
+SDL_SendKeyboardKeyInternal(Uint8 source, Uint8 state, SDL_Scancode scancode)
 {
     SDL_Keyboard *keyboard = &SDL_keyboard;
     int posted;
     SDL_Keymod modifier;
     SDL_Keycode keycode;
     Uint32 type;
-    Uint8 repeat;
+    Uint8 repeat = SDL_FALSE;
 
-    if (!scancode) {
+    if (scancode == SDL_SCANCODE_UNKNOWN || scancode >= SDL_NUM_SCANCODES) {
         return 0;
     }
+
 #ifdef DEBUG_KEYBOARD
     printf("The '%s' key has been %s\n", SDL_GetScancodeName(scancode),
            state == SDL_PRESSED ? "pressed" : "released");
@@ -707,18 +702,30 @@ SDL_SendKeyboardKey(Uint8 state, SDL_Scancode scancode)
     }
 
     /* Drop events that don't change state */
-    repeat = (state && keyboard->keystate[scancode]);
-    if (keyboard->keystate[scancode] == state && !repeat) {
-#if 0
-        printf("Keyboard event didn't change state - dropped!\n");
-#endif
-        return 0;
+    if (state) {
+        if (keyboard->keystate[scancode]) {
+            if (!(keyboard->keysource[scancode] & source)) {
+                keyboard->keysource[scancode] |= source;
+                return 0;
+            }
+            repeat = SDL_TRUE;
+        }
+        keyboard->keysource[scancode] |= source;
+    } else {
+        if (!keyboard->keystate[scancode]) {
+            return 0;
+        }
+        keyboard->keysource[scancode] = 0;
     }
 
     /* Update internal keyboard state */
     keyboard->keystate[scancode] = state;
 
     keycode = keyboard->keymap[scancode];
+
+    if (source == KEYBOARD_AUTORELEASE) {
+        keyboard->autorelease_pending = SDL_TRUE;
+    }
 
     /* Update modifiers state if applicable */
     switch (keycode) {
@@ -761,6 +768,9 @@ SDL_SendKeyboardKey(Uint8 state, SDL_Scancode scancode)
         case SDLK_CAPSLOCK:
             keyboard->modstate ^= KMOD_CAPS;
             break;
+        case SDLK_SCROLLLOCK:
+            keyboard->modstate ^= KMOD_SCROLL;
+            break;
         default:
             keyboard->modstate |= modifier;
             break;
@@ -782,7 +792,65 @@ SDL_SendKeyboardKey(Uint8 state, SDL_Scancode scancode)
         event.key.windowID = keyboard->focus ? keyboard->focus->id : 0;
         posted = (SDL_PushEvent(&event) > 0);
     }
+
+    /* If the keyboard is grabbed and the grabbed window is in full-screen,
+       minimize the window when we receive Alt+Tab, unless the application
+       has explicitly opted out of this behavior. */
+    if (keycode == SDLK_TAB &&
+        state == SDL_PRESSED &&
+        (keyboard->modstate & KMOD_ALT) &&
+        keyboard->focus &&
+        (keyboard->focus->flags & SDL_WINDOW_KEYBOARD_GRABBED) &&
+        (keyboard->focus->flags & SDL_WINDOW_FULLSCREEN) &&
+        SDL_GetHintBoolean(SDL_HINT_ALLOW_ALT_TAB_WHILE_GRABBED, SDL_TRUE)) {
+        /* We will temporarily forfeit our grab by minimizing our window, 
+           allowing the user to escape the application */
+        SDL_MinimizeWindow(keyboard->focus);
+    }
+
     return (posted);
+}
+
+int
+SDL_SendKeyboardKey(Uint8 state, SDL_Scancode scancode)
+{
+    return SDL_SendKeyboardKeyInternal(KEYBOARD_HARDWARE, state, scancode);
+}
+
+int
+SDL_SendKeyboardKeyAutoRelease(SDL_Scancode scancode)
+{
+    return SDL_SendKeyboardKeyInternal(KEYBOARD_AUTORELEASE, SDL_PRESSED, scancode);
+}
+
+void
+SDL_ReleaseAutoReleaseKeys(void)
+{
+    SDL_Keyboard *keyboard = &SDL_keyboard;
+    SDL_Scancode scancode;
+
+    if (keyboard->autorelease_pending) {
+        for (scancode = SDL_SCANCODE_UNKNOWN; scancode < SDL_NUM_SCANCODES; ++scancode) {
+            if (keyboard->keysource[scancode] == KEYBOARD_AUTORELEASE) {
+                SDL_SendKeyboardKeyInternal(KEYBOARD_AUTORELEASE, SDL_RELEASED, scancode);
+            }
+        }
+        keyboard->autorelease_pending = SDL_FALSE;
+    }
+}
+
+SDL_bool
+SDL_HardwareKeyboardKeyPressed(void)
+{
+    SDL_Keyboard *keyboard = &SDL_keyboard;
+    SDL_Scancode scancode;
+
+    for (scancode = SDL_SCANCODE_UNKNOWN; scancode < SDL_NUM_SCANCODES; ++scancode) {
+        if ((keyboard->keysource[scancode] & KEYBOARD_HARDWARE) != 0) {
+            return SDL_TRUE;
+        }
+    }
+    return SDL_FALSE;
 }
 
 int
@@ -800,10 +868,14 @@ SDL_SendKeyboardText(const char *text)
     posted = 0;
     if (SDL_GetEventState(SDL_TEXTINPUT) == SDL_ENABLE) {
         SDL_Event event;
+        size_t i = 0, length = SDL_strlen(text);
+
         event.text.type = SDL_TEXTINPUT;
         event.text.windowID = keyboard->focus ? keyboard->focus->id : 0;
-        SDL_utf8strlcpy(event.text.text, text, SDL_arraysize(event.text.text));
-        posted = (SDL_PushEvent(&event) > 0);
+        while (i < length) {
+            i += SDL_utf8strlcpy(event.text.text, text + i, SDL_arraysize(event.text.text));
+            posted |= (SDL_PushEvent(&event) > 0);
+        }
     }
     return (posted);
 }
@@ -823,6 +895,22 @@ SDL_SendEditingText(const char *text, int start, int length)
         event.edit.start = start;
         event.edit.length = length;
         SDL_utf8strlcpy(event.edit.text, text, SDL_arraysize(event.edit.text));
+
+        if (SDL_GetHintBoolean(SDL_HINT_IME_SUPPORT_EXTENDED_TEXT, SDL_FALSE) &&
+            SDL_strlen(text) > SDL_arraysize(event.text.text)) {
+            event.editExt.type = SDL_TEXTEDITING_EXT;
+            event.editExt.windowID = keyboard->focus ? keyboard->focus->id : 0;
+            event.editExt.text = text ? SDL_strdup(text) : NULL;
+            event.editExt.start = start;
+            event.editExt.length = length;
+        } else {
+            event.edit.type = SDL_TEXTEDITING;
+            event.edit.windowID = keyboard->focus ? keyboard->focus->id : 0;
+            event.edit.start = start;
+            event.edit.length = length;
+            SDL_utf8strlcpy(event.edit.text, text, SDL_arraysize(event.edit.text));
+        }
+
         posted = (SDL_PushEvent(&event) > 0);
     }
     return (posted);
@@ -878,7 +966,7 @@ SDL_GetKeyFromScancode(SDL_Scancode scancode)
 {
     SDL_Keyboard *keyboard = &SDL_keyboard;
 
-    if (((int)scancode) < ((int)SDL_SCANCODE_UNKNOWN) || scancode >= SDL_NUM_SCANCODES) {
+    if (((int)scancode) < SDL_SCANCODE_UNKNOWN || scancode >= SDL_NUM_SCANCODES) {
           SDL_InvalidParamError("scancode");
           return 0;
     }
@@ -905,7 +993,7 @@ const char *
 SDL_GetScancodeName(SDL_Scancode scancode)
 {
     const char *name;
-    if (((int)scancode) < ((int)SDL_SCANCODE_UNKNOWN) || scancode >= SDL_NUM_SCANCODES) {
+    if (((int)scancode) < SDL_SCANCODE_UNKNOWN || scancode >= SDL_NUM_SCANCODES) {
           SDL_InvalidParamError("scancode");
           return "";
     }

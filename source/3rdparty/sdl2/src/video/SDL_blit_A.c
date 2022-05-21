@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -19,6 +19,8 @@
   3. This notice may not be removed or altered from any source distribution.
 */
 #include "../SDL_internal.h"
+
+#if SDL_HAVE_BLIT_A
 
 #include "SDL_video.h"
 #include "SDL_blit.h"
@@ -389,6 +391,70 @@ BlitRGBtoRGBPixelAlphaMMX(SDL_BlitInfo * info)
 
 #endif /* __MMX__ */
 
+#if SDL_ARM_SIMD_BLITTERS
+void BlitARGBto565PixelAlphaARMSIMDAsm(int32_t w, int32_t h, uint16_t *dst, int32_t dst_stride, uint32_t *src, int32_t src_stride);
+
+static void
+BlitARGBto565PixelAlphaARMSIMD(SDL_BlitInfo * info)
+{
+    int32_t width = info->dst_w;
+    int32_t height = info->dst_h;
+    uint16_t *dstp = (uint16_t *)info->dst;
+    int32_t dststride = width + (info->dst_skip >> 1);
+    uint32_t *srcp = (uint32_t *)info->src;
+    int32_t srcstride = width + (info->src_skip >> 2);
+
+    BlitARGBto565PixelAlphaARMSIMDAsm(width, height, dstp, dststride, srcp, srcstride);
+}
+
+void BlitRGBtoRGBPixelAlphaARMSIMDAsm(int32_t w, int32_t h, uint32_t *dst, int32_t dst_stride, uint32_t *src, int32_t src_stride);
+
+static void
+BlitRGBtoRGBPixelAlphaARMSIMD(SDL_BlitInfo * info)
+{
+    int32_t width = info->dst_w;
+    int32_t height = info->dst_h;
+    uint32_t *dstp = (uint32_t *)info->dst;
+    int32_t dststride = width + (info->dst_skip >> 2);
+    uint32_t *srcp = (uint32_t *)info->src;
+    int32_t srcstride = width + (info->src_skip >> 2);
+
+    BlitRGBtoRGBPixelAlphaARMSIMDAsm(width, height, dstp, dststride, srcp, srcstride);
+}
+#endif
+
+#if SDL_ARM_NEON_BLITTERS
+void BlitARGBto565PixelAlphaARMNEONAsm(int32_t w, int32_t h, uint16_t *dst, int32_t dst_stride, uint32_t *src, int32_t src_stride);
+
+static void
+BlitARGBto565PixelAlphaARMNEON(SDL_BlitInfo * info)
+{
+    int32_t width = info->dst_w;
+    int32_t height = info->dst_h;
+    uint16_t *dstp = (uint16_t *)info->dst;
+    int32_t dststride = width + (info->dst_skip >> 1);
+    uint32_t *srcp = (uint32_t *)info->src;
+    int32_t srcstride = width + (info->src_skip >> 2);
+
+    BlitARGBto565PixelAlphaARMNEONAsm(width, height, dstp, dststride, srcp, srcstride);
+}
+
+void BlitRGBtoRGBPixelAlphaARMNEONAsm(int32_t w, int32_t h, uint32_t *dst, int32_t dst_stride, uint32_t *src, int32_t src_stride);
+
+static void
+BlitRGBtoRGBPixelAlphaARMNEON(SDL_BlitInfo * info)
+{
+    int32_t width = info->dst_w;
+    int32_t height = info->dst_h;
+    uint32_t *dstp = (uint32_t *)info->dst;
+    int32_t dststride = width + (info->dst_skip >> 2);
+    uint32_t *srcp = (uint32_t *)info->src;
+    int32_t srcstride = width + (info->src_skip >> 2);
+
+    BlitRGBtoRGBPixelAlphaARMNEONAsm(width, height, dstp, dststride, srcp, srcstride);
+}
+#endif
+
 /* fast RGB888->(A)RGB888 blending with surface alpha=128 special case */
 static void
 BlitRGBtoRGBSurfaceAlpha128(SDL_BlitInfo * info)
@@ -494,6 +560,61 @@ BlitRGBtoRGBPixelAlpha(SDL_BlitInfo * info)
             d1 = d & 0xff00ff;
             d1 = (d1 + ((s1 - d1) * alpha >> 8)) & 0xff00ff;
             s &= 0xff00;
+            d &= 0xff00;
+            d = (d + ((s - d) * alpha >> 8)) & 0xff00;
+            dalpha = alpha + (dalpha * (alpha ^ 0xFF) >> 8);
+            *dstp = d1 | d | (dalpha << 24);
+          }
+        }
+        ++srcp;
+        ++dstp;
+        }, width);
+        /* *INDENT-ON* */
+        srcp += srcskip;
+        dstp += dstskip;
+    }
+}
+
+/* fast ARGB888->(A)BGR888 blending with pixel alpha */
+static void
+BlitRGBtoBGRPixelAlpha(SDL_BlitInfo * info)
+{
+    int width = info->dst_w;
+    int height = info->dst_h;
+    Uint32 *srcp = (Uint32 *) info->src;
+    int srcskip = info->src_skip >> 2;
+    Uint32 *dstp = (Uint32 *) info->dst;
+    int dstskip = info->dst_skip >> 2;
+
+    while (height--) {
+        /* *INDENT-OFF* */
+        DUFFS_LOOP4({
+        Uint32 dalpha;
+        Uint32 d;
+        Uint32 s1;
+        Uint32 d1;
+        Uint32 s = *srcp;
+        Uint32 alpha = s >> 24;
+        /* FIXME: Here we special-case opaque alpha since the
+           compositioning used (>>8 instead of /255) doesn't handle
+           it correctly. Also special-case alpha=0 for speed?
+           Benchmark this! */
+        if (alpha) {
+          /*
+           * take out the middle component (green), and process
+           * the other two in parallel. One multiply less.
+           */
+          s1 = s & 0xff00ff;
+          s1 = (s1 >> 16) | (s1 << 16);
+          s &= 0xff00;
+
+          if (alpha == SDL_ALPHA_OPAQUE) {
+              *dstp = 0xff000000 | s | s1;
+          } else {
+            d = *dstp;
+            dalpha = d >> 24;
+            d1 = d & 0xff00ff;
+            d1 = (d1 + ((s1 - d1) * alpha >> 8)) & 0xff00ff;
             d &= 0xff00;
             d = (d + ((s - d) * alpha >> 8)) & 0xff00;
             dalpha = alpha + (dalpha * (alpha ^ 0xFF) >> 8);
@@ -1276,9 +1397,30 @@ SDL_CalculateBlitA(SDL_Surface * surface)
         /* Per-pixel alpha blits */
         switch (df->BytesPerPixel) {
         case 1:
-            return BlitNto1PixelAlpha;
+            if (df->palette != NULL) {
+                return BlitNto1PixelAlpha;
+            } else {
+                /* RGB332 has no palette ! */
+                return BlitNtoNPixelAlpha;
+            }
 
         case 2:
+#if SDL_ARM_NEON_BLITTERS || SDL_ARM_SIMD_BLITTERS
+                if (sf->BytesPerPixel == 4 && sf->Amask == 0xff000000
+                    && sf->Gmask == 0xff00 && df->Gmask == 0x7e0
+                    && ((sf->Rmask == 0xff && df->Rmask == 0x1f)
+                    || (sf->Bmask == 0xff && df->Bmask == 0x1f)))
+                {
+#if SDL_ARM_NEON_BLITTERS
+                    if (SDL_HasNEON())
+                        return BlitARGBto565PixelAlphaARMNEON;
+#endif
+#if SDL_ARM_SIMD_BLITTERS
+                    if (SDL_HasARMSIMD())
+                        return BlitARGBto565PixelAlphaARMSIMD;
+#endif
+                }
+#endif
                 if (sf->BytesPerPixel == 4 && sf->Amask == 0xff000000
                     && sf->Gmask == 0xff00
                     && ((sf->Rmask == 0xff && df->Rmask == 0x1f)
@@ -1310,7 +1452,21 @@ SDL_CalculateBlitA(SDL_Surface * surface)
                 }
 #endif /* __MMX__ || __3dNOW__ */
                 if (sf->Amask == 0xff000000) {
+#if SDL_ARM_NEON_BLITTERS
+                    if (SDL_HasNEON())
+                        return BlitRGBtoRGBPixelAlphaARMNEON;
+#endif
+#if SDL_ARM_SIMD_BLITTERS
+                    if (SDL_HasARMSIMD())
+                        return BlitRGBtoRGBPixelAlphaARMSIMD;
+#endif
                     return BlitRGBtoRGBPixelAlpha;
+                }
+            } else if (sf->Rmask == df->Bmask
+                && sf->Gmask == df->Gmask
+                && sf->Bmask == df->Rmask && sf->BytesPerPixel == 4) {
+                if (sf->Amask == 0xff000000) {
+                    return BlitRGBtoBGRPixelAlpha;
                 }
             }
             return BlitNtoNPixelAlpha;
@@ -1326,7 +1482,12 @@ SDL_CalculateBlitA(SDL_Surface * surface)
             /* Per-surface alpha blits */
             switch (df->BytesPerPixel) {
             case 1:
-                return BlitNto1SurfaceAlpha;
+                if (df->palette != NULL) {
+                    return BlitNto1SurfaceAlpha;
+                } else {
+                    /* RGB332 has no palette ! */
+                    return BlitNtoNSurfaceAlpha;
+                }
 
             case 2:
                 if (surface->map->identity) {
@@ -1374,7 +1535,13 @@ SDL_CalculateBlitA(SDL_Surface * surface)
     case SDL_COPY_COLORKEY | SDL_COPY_MODULATE_ALPHA | SDL_COPY_BLEND:
         if (sf->Amask == 0) {
             if (df->BytesPerPixel == 1) {
-                return BlitNto1SurfaceAlphaKey;
+
+                if (df->palette != NULL) {
+                    return BlitNto1SurfaceAlphaKey;
+                } else {
+                    /* RGB332 has no palette ! */
+                    return BlitNtoNSurfaceAlphaKey;
+                }
             } else {
                 return BlitNtoNSurfaceAlphaKey;
             }
@@ -1384,5 +1551,7 @@ SDL_CalculateBlitA(SDL_Surface * surface)
 
     return NULL;
 }
+
+#endif /* SDL_HAVE_BLIT_A */
 
 /* vi: set ts=4 sw=4 expandtab: */

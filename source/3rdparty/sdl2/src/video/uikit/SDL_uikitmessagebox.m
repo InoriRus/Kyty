@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -55,10 +55,8 @@ UIKit_WaitUntilMessageBoxClosed(const SDL_MessageBoxData *messageboxdata, int *c
 static BOOL
 UIKit_ShowMessageBoxAlertController(const SDL_MessageBoxData *messageboxdata, int *buttonid)
 {
-#ifdef __IPHONE_8_0
     int i;
     int __block clickedindex = messageboxdata->numbuttons;
-    const SDL_MessageBoxButtonData *buttons = messageboxdata->buttons;
     UIWindow *window = nil;
     UIWindow *alertwindow = nil;
 
@@ -74,17 +72,28 @@ UIKit_ShowMessageBoxAlertController(const SDL_MessageBoxData *messageboxdata, in
     for (i = 0; i < messageboxdata->numbuttons; i++) {
         UIAlertAction *action;
         UIAlertActionStyle style = UIAlertActionStyleDefault;
+        const SDL_MessageBoxButtonData *sdlButton;
 
-        if (buttons[i].flags & SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT) {
+        if (messageboxdata->flags & SDL_MESSAGEBOX_BUTTONS_RIGHT_TO_LEFT) {
+            sdlButton = &messageboxdata->buttons[messageboxdata->numbuttons - 1 - i];
+        } else {
+            sdlButton = &messageboxdata->buttons[i];
+        }
+
+        if (sdlButton->flags & SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT) {
             style = UIAlertActionStyleCancel;
         }
 
-        action = [UIAlertAction actionWithTitle:@(buttons[i].text)
-                                          style:style
-                                        handler:^(UIAlertAction *action) {
-                                            clickedindex = i;
-                                        }];
+        action = [UIAlertAction actionWithTitle:@(sdlButton->text)
+                                style:style
+                                handler:^(UIAlertAction *alertAction) {
+                                    clickedindex = (int)(sdlButton - messageboxdata->buttons);
+                                }];
         [alert addAction:action];
+
+        if (sdlButton->flags & SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT) {
+            alert.preferredAction = action;
+        }
     }
 
     if (messageboxdata->window) {
@@ -109,25 +118,10 @@ UIKit_ShowMessageBoxAlertController(const SDL_MessageBoxData *messageboxdata, in
         alertwindow.hidden = YES;
     }
 
-#if !TARGET_OS_TV
-    /* Force the main SDL window to re-evaluate home indicator state */
-    SDL_Window *focus = SDL_GetFocusWindow();
-    if (focus) {
-        SDL_WindowData *data = (__bridge SDL_WindowData *) focus->driverdata;
-        if (data != nil) {
-            if (@available(iOS 11.0, *)) {
-                [data.viewcontroller performSelectorOnMainThread:@selector(setNeedsUpdateOfHomeIndicatorAutoHidden) withObject:nil waitUntilDone:NO];
-                [data.viewcontroller performSelectorOnMainThread:@selector(setNeedsUpdateOfScreenEdgesDeferringSystemGestures) withObject:nil waitUntilDone:NO];
-            }
-        }
-    }
-#endif /* !TARGET_OS_TV */
+    UIKit_ForceUpdateHomeIndicator();
 
     *buttonid = messageboxdata->buttons[clickedindex].buttonid;
     return YES;
-#else
-    return NO;
-#endif /* __IPHONE_8_0 */
 }
 
 /* UIAlertView is deprecated in iOS 8+ in favor of UIAlertController. */
@@ -157,7 +151,6 @@ UIKit_ShowMessageBoxAlertView(const SDL_MessageBoxData *messageboxdata, int *but
 #if __IPHONE_OS_VERSION_MIN_REQUIRED < 80000
     int i;
     int clickedindex = messageboxdata->numbuttons;
-    const SDL_MessageBoxButtonData *buttons = messageboxdata->buttons;
     UIAlertView *alert = [[UIAlertView alloc] init];
     SDLAlertViewDelegate *delegate = [[SDLAlertViewDelegate alloc] init];
 
@@ -166,7 +159,13 @@ UIKit_ShowMessageBoxAlertView(const SDL_MessageBoxData *messageboxdata, int *but
     alert.message = @(messageboxdata->message);
 
     for (i = 0; i < messageboxdata->numbuttons; i++) {
-        [alert addButtonWithTitle:@(buttons[i].text)];
+        const SDL_MessageBoxButtonData *sdlButton;
+        if (messageboxdata->flags & SDL_MESSAGEBOX_BUTTONS_RIGHT_TO_LEFT) {
+            sdlButton = &messageboxdata->buttons[messageboxdata->numbuttons - 1 - i];
+        } else {
+            sdlButton = &messageboxdata->buttons[i];
+        }
+        [alert addButtonWithTitle:@(sdlButton->text)];
     }
 
     delegate.clickedIndex = &clickedindex;
@@ -177,6 +176,9 @@ UIKit_ShowMessageBoxAlertView(const SDL_MessageBoxData *messageboxdata, int *but
 
     alert.delegate = nil;
 
+    if (messageboxdata->flags & SDL_MESSAGEBOX_BUTTONS_RIGHT_TO_LEFT) {
+        clickedindex = messageboxdata->numbuttons - 1 - clickedindex;
+    }
     *buttonid = messageboxdata->buttons[clickedindex].buttonid;
     return YES;
 #else
@@ -184,8 +186,8 @@ UIKit_ShowMessageBoxAlertView(const SDL_MessageBoxData *messageboxdata, int *but
 #endif /* __IPHONE_OS_VERSION_MIN_REQUIRED < 80000 */
 }
 
-int
-UIKit_ShowMessageBox(const SDL_MessageBoxData *messageboxdata, int *buttonid)
+static void
+UIKit_ShowMessageBoxImpl(const SDL_MessageBoxData *messageboxdata, int *buttonid, int *returnValue)
 {
     BOOL success = NO;
 
@@ -197,11 +199,25 @@ UIKit_ShowMessageBox(const SDL_MessageBoxData *messageboxdata, int *buttonid)
     }
 
     if (!success) {
-        return SDL_SetError("Could not show message box.");
+        *returnValue = SDL_SetError("Could not show message box.");
+    } else {
+        *returnValue = 0;
     }
-
-    return 0;
 }
+
+int
+UIKit_ShowMessageBox(const SDL_MessageBoxData *messageboxdata, int *buttonid)
+{ @autoreleasepool
+{
+    __block int returnValue = 0;
+
+    if ([NSThread isMainThread]) {
+        UIKit_ShowMessageBoxImpl(messageboxdata, buttonid, &returnValue);
+    } else {
+        dispatch_sync(dispatch_get_main_queue(), ^{ UIKit_ShowMessageBoxImpl(messageboxdata, buttonid, &returnValue); });
+    }
+    return returnValue;
+}}
 
 #endif /* SDL_VIDEO_DRIVER_UIKIT */
 

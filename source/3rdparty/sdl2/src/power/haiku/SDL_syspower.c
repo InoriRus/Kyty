@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -45,7 +45,7 @@
 SDL_bool
 SDL_GetPowerInfo_Haiku(SDL_PowerState * state, int *seconds, int *percent)
 {
-    const int fd = open("/dev/misc/apm", O_RDONLY);
+    const int fd = open("/dev/misc/apm", O_RDONLY | O_CLOEXEC);
     SDL_bool need_details = SDL_FALSE;
     uint16 regs[6];
     uint8 ac_status;
@@ -59,7 +59,7 @@ SDL_GetPowerInfo_Haiku(SDL_PowerState * state, int *seconds, int *percent)
         return SDL_FALSE;       /* maybe some other method will work? */
     }
 
-    memset(regs, '\0', sizeof(regs));
+    SDL_memset(regs, '\0', sizeof(regs));
     regs[0] = APM_FUNC_OFFSET + APM_FUNC_GET_POWER_STATUS;
     regs[1] = APM_DEVICE_ALL;
     rc = ioctl(fd, APM_BIOS_CALL, regs);

@@ -74,6 +74,8 @@ constexpr uint64_t DESIRED_BASE_ADDR = 0x010000000;
 constexpr size_t   XSAVE_BUFFER_SIZE = 2688;
 constexpr uint64_t XSAVE_CHK_GUARD   = 0xDeadBeef5533CCAA;
 
+static uint64_t g_desired_base_addr = DESIRED_BASE_ADDR;
+
 static Program* g_tls_main_program = nullptr;
 alignas(64) static uint8_t g_tls_reg_save_area[XSAVE_BUFFER_SIZE + sizeof(XSAVE_CHK_GUARD)];
 static uint8_t g_tls_spinlock = 0;
@@ -153,6 +155,45 @@ static VirtualMemory::Mode get_mode(Elf64_Word flags)
 	}
 }
 
+struct FrameS
+{
+	FrameS*   next;
+	uintptr_t ret_addr;
+};
+
+static void KYTY_SYSV_ABI stackwalk_x86(uint64_t rbp, void** stack, int* depth, uintptr_t stack_addr, size_t stack_size,
+                                        uintptr_t code_addr, size_t code_size)
+{
+	auto* frame = reinterpret_cast<FrameS*>(rbp);
+
+	int d = *depth;
+	int i = 0;
+
+	for (; i < d; i++)
+	{
+		if (!(uintptr_t(frame) >= stack_addr && uintptr_t(frame) < stack_addr + stack_size))
+		{
+			break;
+		}
+
+		if (!(frame->ret_addr >= code_addr && frame->ret_addr < code_addr + code_size))
+		{
+			break;
+		}
+
+		stack[i] = reinterpret_cast<void*>(frame->ret_addr);
+
+		frame = frame->next;
+	}
+
+	*depth = i;
+}
+
+void KYTY_SYSV_ABI sys_stack_walk_x86(uint64_t rbp, void** stack, int* depth)
+{
+	stackwalk_x86(rbp, stack, depth, 0, UINT64_MAX, DESIRED_BASE_ADDR, g_desired_base_addr - DESIRED_BASE_ADDR);
+}
+
 static void kyty_exception_handler(const VirtualMemory::ExceptionHandler::ExceptionInfo* info)
 {
 	printf("kyty_exception_handler: %016" PRIx64 "\n", info->exception_address);
@@ -164,6 +205,8 @@ static void kyty_exception_handler(const VirtualMemory::ExceptionHandler::Except
 		{
 			return;
 		}
+
+		Core::Singleton<Loader::RuntimeLinker>::Instance()->StackTrace(info->rbp);
 
 		EXIT("Access violation: %s [%016" PRIx64 "] %s\n", Core::EnumName(info->access_violation_type).C_Str(),
 		     info->access_violation_vaddr, (info->access_violation_vaddr == INVALID_MEMORY ? "(Unpatched object)" : ""));
@@ -453,8 +496,11 @@ static KYTY_SYSV_ABI void RelocateHandler(RelocateHandlerStack s)
 		name = String::FromPrintf(FG_BRIGHT_RED "%s" DEFAULT, ri.name.C_Str());
 	}
 
-	// Restore return address (for debug)
+	// Restore return address (for stack trace)
 	stack[-1] = stack[1];
+
+	Core::Singleton<Loader::RuntimeLinker>::Instance()->StackTrace(reinterpret_cast<uint64_t>(s.stack - 2));
+
 	EXIT("=== Unpatched function!!! ===\n[%d]\t%s\n", Core::Thread::GetThreadIdUnique(),
 	     (Log::IsColoredPrintf() ? name : Log::RemoveColors(name)).C_Str());
 }
@@ -920,6 +966,23 @@ Program* RuntimeLinker::FindProgramByAddr(uint64_t vaddr)
 	return nullptr;
 }
 
+void RuntimeLinker::StackTrace(uint64_t frame_ptr)
+{
+	void* stack[20];
+	int   depth = 20;
+
+	sys_stack_walk_x86(frame_ptr, stack, &depth);
+
+	std::printf("Stack trace [thread = %d]:\n", Core::Thread::GetThreadIdUnique());
+
+	for (int i = 0; i < depth; i++)
+	{
+		auto  vaddr = reinterpret_cast<uint64_t>(stack[i]);
+		auto* p     = FindProgramByAddr(vaddr);
+		std::printf("[%d] %016" PRIx64 ", %s\n", i, vaddr, (p == nullptr ? "???" : p->file_name.FilenameWithoutDirectory().C_Str()));
+	}
+}
+
 void RuntimeLinker::StartAllModules()
 {
 	// EXIT_NOT_IMPLEMENTED(!Core::Thread::IsMainThread());
@@ -1043,7 +1106,7 @@ void RuntimeLinker::LoadProgramToMemory(Program* program)
 	EXIT_IF(program == nullptr || program->base_vaddr != 0 || program->base_size != 0 || program->elf == nullptr ||
 	        program->exception_handler != nullptr);
 
-	static uint64_t desired_base_addr = DESIRED_BASE_ADDR;
+	// static uint64_t desired_base_addr = DESIRED_BASE_ADDR;
 
 	bool is_shared   = program->elf->IsShared();
 	bool is_next_gen = program->elf->IsNextGen();
@@ -1060,14 +1123,14 @@ void RuntimeLinker::LoadProgramToMemory(Program* program)
 	uint64_t tls_handler_size       = is_shared ? 0 : Jit::SafeCall::GetSize();
 	uint64_t alloc_size             = program->base_size_aligned + exception_handler_size + tls_handler_size;
 
-	program->base_vaddr = VirtualMemory::Alloc(desired_base_addr, alloc_size, VirtualMemory::Mode::ExecuteReadWrite);
+	program->base_vaddr = VirtualMemory::Alloc(g_desired_base_addr, alloc_size, VirtualMemory::Mode::ExecuteReadWrite);
 
 	if (!is_shared)
 	{
 		program->tls.handler_vaddr = program->base_vaddr + program->base_size_aligned + exception_handler_size;
 	}
 
-	desired_base_addr += DESIRED_BASE_ADDR * (1 + alloc_size / DESIRED_BASE_ADDR);
+	g_desired_base_addr += DESIRED_BASE_ADDR * (1 + alloc_size / DESIRED_BASE_ADDR);
 
 	EXIT_IF(program->base_vaddr == 0);
 	EXIT_IF(program->base_size_aligned < program->base_size);

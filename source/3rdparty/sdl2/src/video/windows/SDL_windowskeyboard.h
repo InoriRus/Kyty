@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -32,6 +32,8 @@ extern void WIN_ResetDeadKeys(void);
 extern void WIN_StartTextInput(_THIS);
 extern void WIN_StopTextInput(_THIS);
 extern void WIN_SetTextInputRect(_THIS, SDL_Rect *rect);
+extern void WIN_ClearComposition(_THIS);
+extern SDL_bool WIN_IsTextInputShown(_THIS);
 
 extern SDL_bool IME_HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM *lParam, struct SDL_VideoData *videodata);
 

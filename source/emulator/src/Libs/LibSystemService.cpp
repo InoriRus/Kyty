@@ -116,7 +116,7 @@ static int KYTY_SYSV_ABI SystemServiceParamGetInt(int param_id, int* value)
 
 	switch (param_id)
 	{
-		case PARAM_ID_LANG: v = PARAM_LANG_RUSSIAN; break;
+		case PARAM_ID_LANG: v = PARAM_LANG_ENGLISH_US; break;
 		case PARAM_ID_DATE_FORMAT: v = PARAM_DATE_FORMAT_DDMMYYYY; break;
 		case PARAM_ID_TIME_FORMAT: v = PARAM_TIME_FORMAT_24HOUR; break;
 		case PARAM_ID_TIME_ZONE: v = +180; break;

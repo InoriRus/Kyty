@@ -65,7 +65,8 @@ enum class Direction
 {
 	Silent,
 	Console,
-	File
+	File,
+	Directory
 };
 
 Direction GetDirection();

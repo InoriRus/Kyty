@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -20,13 +20,13 @@
 */
 #include "../../SDL_internal.h"
 
+#include "SDL.h"
 #include "SDL_error.h"
 #include "SDL_haptic.h"
 #include "../SDL_syshaptic.h"
 
 #if SDL_HAPTIC_XINPUT
 
-#include "SDL_assert.h"
 #include "SDL_hints.h"
 #include "SDL_timer.h"
 #include "SDL_windowshaptic_c.h"
@@ -48,17 +48,18 @@ SDL_XINPUT_HapticInit(void)
         loaded_xinput = (WIN_LoadXInputDLL() == 0);
     }
 
-    if (loaded_xinput) {
+    /* If the joystick subsystem is active, it will manage adding XInput haptic devices */
+    if (loaded_xinput && !SDL_WasInit(SDL_INIT_JOYSTICK)) {
         DWORD i;
         for (i = 0; i < XUSER_MAX_COUNT; i++) {
-            SDL_XINPUT_MaybeAddDevice(i);
+            SDL_XINPUT_HapticMaybeAddDevice(i);
         }
     }
     return 0;
 }
 
 int
-SDL_XINPUT_MaybeAddDevice(const DWORD dwUserid)
+SDL_XINPUT_HapticMaybeAddDevice(const DWORD dwUserid)
 {
     const Uint8 userid = (Uint8)dwUserid;
     SDL_hapticlist_item *item;
@@ -107,7 +108,7 @@ SDL_XINPUT_MaybeAddDevice(const DWORD dwUserid)
 }
 
 int
-SDL_XINPUT_MaybeRemoveDevice(const DWORD dwUserid)
+SDL_XINPUT_HapticMaybeRemoveDevice(const DWORD dwUserid)
 {
     const Uint8 userid = (Uint8)dwUserid;
     SDL_hapticlist_item *item;
@@ -245,8 +246,7 @@ SDL_XINPUT_HapticOpenFromJoystick(SDL_Haptic * haptic, SDL_Joystick * joystick)
         ++index;
     }
 
-    SDL_SetError("Couldn't find joystick in haptic device list");
-    return -1;
+    return SDL_SetError("Couldn't find joystick in haptic device list");
 }
 
 void
@@ -378,13 +378,13 @@ SDL_XINPUT_HapticInit(void)
 }
 
 int
-SDL_XINPUT_MaybeAddDevice(const DWORD dwUserid)
+SDL_XINPUT_HapticMaybeAddDevice(const DWORD dwUserid)
 {
     return SDL_Unsupported();
 }
 
 int
-SDL_XINPUT_MaybeRemoveDevice(const DWORD dwUserid)
+SDL_XINPUT_HapticMaybeRemoveDevice(const DWORD dwUserid)
 {
     return SDL_Unsupported();
 }

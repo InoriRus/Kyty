@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -22,12 +22,12 @@
 
 #ifdef SDL_HAPTIC_LINUX
 
-#include "SDL_assert.h"
 #include "SDL_haptic.h"
 #include "../SDL_syshaptic.h"
 #include "SDL_joystick.h"
 #include "../../joystick/SDL_sysjoystick.h"     /* For the real SDL_Joystick */
 #include "../../joystick/linux/SDL_sysjoystick_c.h"     /* For joystick hwdata */
+#include "../../core/linux/SDL_evdev_capabilities.h"
 #include "../../core/linux/SDL_udev.h"
 
 #include <unistd.h>             /* close */
@@ -35,7 +35,6 @@
 #include <fcntl.h>              /* O_RDWR */
 #include <limits.h>             /* INT_MAX */
 #include <errno.h>              /* errno, strerror */
-#include <math.h>               /* atan2 */
 #include <sys/stat.h>           /* stat */
 
 /* Just in case. */
@@ -86,8 +85,6 @@ static SDL_hapticlist_item *SDL_hapticlist = NULL;
 static SDL_hapticlist_item *SDL_hapticlist_tail = NULL;
 static int numhaptics = 0;
 
-#define test_bit(nr, addr) \
-   (((1UL << ((nr) & 31)) & (((const unsigned int *) addr)[(nr) >> 5])) != 0)
 #define EV_TEST(ev,f) \
    if (test_bit((ev), features)) ret |= (f);
 /*
@@ -168,7 +165,7 @@ SDL_SYS_HapticInit(void)
     i = 0;
     for (j = 0; j < MAX_HAPTICS; ++j) {
 
-        snprintf(path, PATH_MAX, joydev_pattern, i++);
+        SDL_snprintf(path, PATH_MAX, joydev_pattern, i++);
         MaybeAddDevice(path);
     }
 
@@ -262,7 +259,7 @@ MaybeAddDevice(const char *path)
     }
 
     /* try to open */
-    fd = open(path, O_RDWR, 0);
+    fd = open(path, O_RDWR | O_CLOEXEC, 0);
     if (fd < 0) {
         return -1;
     }
@@ -377,7 +374,7 @@ SDL_SYS_HapticName(int index)
     item = HapticByDevIndex(index);
     /* Open the haptic device. */
     name = NULL;
-    fd = open(item->fname, O_RDONLY, 0);
+    fd = open(item->fname, O_RDONLY | O_CLOEXEC, 0);
 
     if (fd >= 0) {
 
@@ -455,7 +452,7 @@ SDL_SYS_HapticOpen(SDL_Haptic * haptic)
 
     item = HapticByDevIndex(haptic->index);
     /* Open the character device */
-    fd = open(item->fname, O_RDWR, 0);
+    fd = open(item->fname, O_RDWR | O_CLOEXEC, 0);
     if (fd < 0) {
         return SDL_SetError("Haptic: Unable to open %s: %s",
                             item->fname, strerror(errno));
@@ -485,7 +482,7 @@ SDL_SYS_HapticMouse(void)
 
     for (item = SDL_hapticlist; item; item = item->next) {
         /* Open the device. */
-        fd = open(item->fname, O_RDWR, 0);
+        fd = open(item->fname, O_RDWR | O_CLOEXEC, 0);
         if (fd < 0) {
             return SDL_SetError("Haptic: Unable to open %s: %s",
                                 item->fname, strerror(errno));
@@ -512,7 +509,15 @@ SDL_SYS_HapticMouse(void)
 int
 SDL_SYS_JoystickIsHaptic(SDL_Joystick * joystick)
 {
-    return EV_IsHaptic(joystick->hwdata->fd);
+#ifdef SDL_JOYSTICK_LINUX
+    if (joystick->driver != &SDL_LINUX_JoystickDriver) {
+        return SDL_FALSE;
+    }
+    if (EV_IsHaptic(joystick->hwdata->fd)) {
+        return SDL_TRUE;
+    }
+#endif
+    return SDL_FALSE;
 }
 
 
@@ -522,11 +527,16 @@ SDL_SYS_JoystickIsHaptic(SDL_Joystick * joystick)
 int
 SDL_SYS_JoystickSameHaptic(SDL_Haptic * haptic, SDL_Joystick * joystick)
 {
+#ifdef SDL_JOYSTICK_LINUX
+    if (joystick->driver != &SDL_LINUX_JoystickDriver) {
+        return 0;
+    }
     /* We are assuming Linux is using evdev which should trump the old
      * joystick methods. */
     if (SDL_strcmp(joystick->hwdata->fname, haptic->hwdata->fname) == 0) {
         return 1;
     }
+#endif
     return 0;
 }
 
@@ -537,11 +547,15 @@ SDL_SYS_JoystickSameHaptic(SDL_Haptic * haptic, SDL_Joystick * joystick)
 int
 SDL_SYS_HapticOpenFromJoystick(SDL_Haptic * haptic, SDL_Joystick * joystick)
 {
+#ifdef SDL_JOYSTICK_LINUX
     int device_index = 0;
     int fd;
     int ret;
     SDL_hapticlist_item *item;
-
+    
+    if (joystick->driver != &SDL_LINUX_JoystickDriver) {
+        return -1;
+    }
     /* Find the joystick in the haptic list. */
     for (item = SDL_hapticlist; item; item = item->next) {
         if (SDL_strcmp(item->fname, joystick->hwdata->fname) == 0) {
@@ -555,7 +569,7 @@ SDL_SYS_HapticOpenFromJoystick(SDL_Haptic * haptic, SDL_Joystick * joystick)
         return SDL_SetError("Haptic: Joystick doesn't have Haptic capabilities");
     }
 
-    fd = open(joystick->hwdata->fname, O_RDWR, 0);
+    fd = open(joystick->hwdata->fname, O_RDWR | O_CLOEXEC, 0);
     if (fd < 0) {
         return SDL_SetError("Haptic: Unable to open %s: %s",
                             joystick->hwdata->fname, strerror(errno));
@@ -568,6 +582,9 @@ SDL_SYS_HapticOpenFromJoystick(SDL_Haptic * haptic, SDL_Joystick * joystick)
     haptic->hwdata->fname = SDL_strdup( joystick->hwdata->fname );
 
     return 0;
+#else
+    return -1;
+#endif
 }
 
 
@@ -695,10 +712,10 @@ SDL_SYS_ToDirection(Uint16 *dest, SDL_HapticDirection * src)
         else {
             float f = SDL_atan2(src->dir[1], src->dir[0]);    /* Ideally we'd use fixed point math instead of floats... */
                     /*
-                      atan2 takes the parameters: Y-axis-value and X-axis-value (in that order)
+                      SDL_atan2 takes the parameters: Y-axis-value and X-axis-value (in that order)
                        - Y-axis-value is the second coordinate (from center to SOUTH)
                        - X-axis-value is the first coordinate (from center to EAST)
-                        We add 36000, because atan2 also returns negative values. Then we practically
+                        We add 36000, because SDL_atan2 also returns negative values. Then we practically
                         have the first spherical value. Therefore we proceed as in case
                         SDL_HAPTIC_SPHERICAL and add another 9000 to get the polar value.
                       --> add 45000 in total
@@ -709,7 +726,9 @@ SDL_SYS_ToDirection(Uint16 *dest, SDL_HapticDirection * src)
             *dest = (Uint16) tmp;
         }
         break;
-
+    case SDL_HAPTIC_STEERING_AXIS:
+        *dest = 0x4000;
+        break;
     default:
         return SDL_SetError("Haptic: Unsupported direction type.");
     }
@@ -801,8 +820,7 @@ SDL_SYS_ToFFEffect(struct ff_effect *dest, SDL_HapticEffect * src)
         else if (periodic->type == SDL_HAPTIC_SAWTOOTHDOWN)
             dest->u.periodic.waveform = FF_SAW_DOWN;
         dest->u.periodic.period = CLAMP(periodic->period);
-        /* Linux expects 0-65535, so multiply by 2 */
-        dest->u.periodic.magnitude = CLAMP(periodic->magnitude) * 2;
+        dest->u.periodic.magnitude = periodic->magnitude;
         dest->u.periodic.offset = periodic->offset;
         /* Linux phase is defined in interval "[0x0000, 0x10000[", corresponds with "[0deg, 360deg[" phase shift. */
         dest->u.periodic.phase = ((Uint32)periodic->phase * 0x10000U) / 36000;

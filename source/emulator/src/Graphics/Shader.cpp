@@ -18,6 +18,7 @@
 #include "spirv-tools/optimizer.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <string>
 #include <vector>
 
@@ -91,17 +92,17 @@ static String operand_to_str(ShaderOperand op)
 	{
 		case ShaderOperandType::LiteralConstant:
 			EXIT_IF(op.size != 0);
-			EXIT_IF(op.negate);
+			EXIT_IF(op.negate || op.absolute);
 			return String::FromPrintf("%f (%u)", op.constant.f, op.constant.u);
 			break;
 		case ShaderOperandType::IntegerInlineConstant:
 			EXIT_IF(op.size != 0);
-			EXIT_IF(op.negate);
+			EXIT_IF(op.negate || op.absolute);
 			return String::FromPrintf("%d", op.constant.i);
 			break;
 		case ShaderOperandType::FloatInlineConstant:
 			EXIT_IF(op.size != 0);
-			EXIT_IF(op.negate);
+			EXIT_IF(op.negate || op.absolute);
 			return String::FromPrintf("%f", op.constant.f);
 			break;
 		default: break;
@@ -121,6 +122,11 @@ static String operand_to_str(ShaderOperand op)
 		case ShaderOperandType::Vgpr: ret = String::FromPrintf("v%d", op.register_id); break;
 		case ShaderOperandType::Sgpr: ret = String::FromPrintf("s%d", op.register_id); break;
 		default: break;
+	}
+
+	if (op.absolute)
+	{
+		ret = U"abs(" + ret + U")";
 	}
 
 	if (op.negate)
@@ -170,6 +176,11 @@ static String operand_array_to_str(ShaderOperand op, int n)
 
 	EXIT_IF(ret == U"???");
 
+	if (op.absolute)
+	{
+		ret = U"abs(" + ret + U")";
+	}
+
 	if (op.negate)
 	{
 		return U"-" + ret;
@@ -192,6 +203,7 @@ static String dbg_fmt_to_str(const ShaderInstruction& inst)
 		case ShaderInstructionFormat::Param1Vsrc0Vsrc1Vsrc2Vsrc3: return U"Param1Vsrc0Vsrc1Vsrc2Vsrc3"; break;
 		case ShaderInstructionFormat::Param2Vsrc0Vsrc1Vsrc2Vsrc3: return U"Param2Vsrc0Vsrc1Vsrc2Vsrc3"; break;
 		case ShaderInstructionFormat::Param3Vsrc0Vsrc1Vsrc2Vsrc3: return U"Param3Vsrc0Vsrc1Vsrc2Vsrc3"; break;
+		case ShaderInstructionFormat::Param4Vsrc0Vsrc1Vsrc2Vsrc3: return U"Param4Vsrc0Vsrc1Vsrc2Vsrc3"; break;
 		case ShaderInstructionFormat::Pos0Vsrc0Vsrc1Vsrc2Vsrc3Done: return U"Pos0Vsrc0Vsrc1Vsrc2Vsrc3Done"; break;
 		case ShaderInstructionFormat::Saddr: return U"Saddr"; break;
 		case ShaderInstructionFormat::Sdst4SbaseSoffset: return U"Sdst4SbaseSoffset"; break;
@@ -207,13 +219,18 @@ static String dbg_fmt_to_str(const ShaderInstruction& inst)
 		case ShaderInstructionFormat::SmaskVsrc0Vsrc1: return U"SmaskVsrc0Vsrc1"; break;
 		case ShaderInstructionFormat::Ssrc0Ssrc1: return U"Ssrc0Ssrc1"; break;
 		case ShaderInstructionFormat::Vdata1VaddrSvSoffsIdxen: return U"Vdata1VaddrSvSoffsIdxen"; break;
+		case ShaderInstructionFormat::Vdata1VaddrSvSoffsIdxenFloat1: return U"Vdata1VaddrSvSoffsIdxenFloat1"; break;
 		case ShaderInstructionFormat::Vdata2VaddrSvSoffsIdxen: return U"Vdata2VaddrSvSoffsIdxen"; break;
 		case ShaderInstructionFormat::Vdata3VaddrSvSoffsIdxen: return U"Vdata3VaddrSvSoffsIdxen"; break;
 		case ShaderInstructionFormat::Vdata4VaddrSvSoffsIdxen: return U"Vdata4VaddrSvSoffsIdxen"; break;
 		case ShaderInstructionFormat::Vdata4VaddrSvSoffsIdxenFloat4: return U"Vdata4VaddrSvSoffsIdxenFloat4"; break;
 		case ShaderInstructionFormat::Vdata4Vaddr2SvSoffsOffenIdxenFloat4: return U"Vdata4Vaddr2SvSoffsOffenIdxenFloat4"; break;
 		case ShaderInstructionFormat::Vdata1Vaddr3StSsDmask1: return U"Vdata1Vaddr3StSsDmask1"; break;
+		case ShaderInstructionFormat::Vdata1Vaddr3StSsDmask8: return U"Vdata1Vaddr3StSsDmask8"; break;
+		case ShaderInstructionFormat::Vdata2Vaddr3StSsDmask3: return U"Vdata2Vaddr3StSsDmask3"; break;
+		case ShaderInstructionFormat::Vdata2Vaddr3StSsDmask5: return U"Vdata2Vaddr3StSsDmask5"; break;
 		case ShaderInstructionFormat::Vdata3Vaddr3StSsDmask7: return U"Vdata3Vaddr3StSsDmask7"; break;
+		case ShaderInstructionFormat::Vdata3Vaddr4StSsDmask7: return U"Vdata3Vaddr4StSsDmask7"; break;
 		case ShaderInstructionFormat::Vdata4Vaddr3StSsDmaskF: return U"Vdata4Vaddr3StSsDmaskF"; break;
 		case ShaderInstructionFormat::Vdata4Vaddr3StDmaskF: return U"Vdata4Vaddr3StDmaskF"; break;
 		case ShaderInstructionFormat::Vdata4Vaddr4StDmaskF: return U"Vdata4Vaddr4StDmaskF"; break;
@@ -275,6 +292,7 @@ static String dbg_fmt_print(const ShaderInstruction& inst)
 			case ShaderInstructionFormat::Attr: s = String::FromPrintf("attr%u.%u", inst.src[1].constant.u, inst.src[2].constant.u); break;
 			case ShaderInstructionFormat::Idxen: s = U"idxen"; break;
 			case ShaderInstructionFormat::Offen: s = U"offen"; break;
+			case ShaderInstructionFormat::Float1: s = U"format:float1"; break;
 			case ShaderInstructionFormat::Float4: s = U"format:float4"; break;
 			case ShaderInstructionFormat::Pos0: s = U"pos0"; break;
 			case ShaderInstructionFormat::Done: s = U"done"; break;
@@ -282,12 +300,16 @@ static String dbg_fmt_print(const ShaderInstruction& inst)
 			case ShaderInstructionFormat::Param1: s = U"param1"; break;
 			case ShaderInstructionFormat::Param2: s = U"param2"; break;
 			case ShaderInstructionFormat::Param3: s = U"param3"; break;
+			case ShaderInstructionFormat::Param4: s = U"param4"; break;
 			case ShaderInstructionFormat::Mrt0: s = U"mrt_color0"; break;
 			case ShaderInstructionFormat::Off: s = U"off"; break;
 			case ShaderInstructionFormat::Compr: s = U"compr"; break;
 			case ShaderInstructionFormat::Vm: s = U"vm"; break;
 			case ShaderInstructionFormat::L: s = String::FromPrintf("label_%04" PRIx32, inst.pc + 4 + inst.src[0].constant.i); break;
 			case ShaderInstructionFormat::Dmask1: s = U"dmask:0x1"; break;
+			case ShaderInstructionFormat::Dmask8: s = U"dmask:0x8"; break;
+			case ShaderInstructionFormat::Dmask3: s = U"dmask:0x3"; break;
+			case ShaderInstructionFormat::Dmask5: s = U"dmask:0x5"; break;
 			case ShaderInstructionFormat::Dmask7: s = U"dmask:0x7"; break;
 			case ShaderInstructionFormat::DmaskF: s = U"dmask:0xf"; break;
 			case ShaderInstructionFormat::Gds: s = U"gds"; break;
@@ -354,7 +376,7 @@ String ShaderCode::DbgDump() const
 	String ret;
 	for (const auto& inst: m_instructions)
 	{
-		if (m_labels.Contains(inst.pc, [](auto label, auto pc) { return label.GetDst() == pc; }))
+		if (m_labels.Contains(inst.pc, [](auto label, auto pc) { return (!label.IsDisabled() && label.GetDst() == pc); }))
 		{
 			ret += String::FromPrintf("label_%04" PRIx32 ":\n", inst.pc);
 		}
@@ -392,7 +414,7 @@ bool ShaderCode::IsDiscardBlock(uint32_t pc) const
 				const auto& inst = m_instructions.At(i);
 
 				if (inst.type == ShaderInstructionType::SEndpgm || inst.type == ShaderInstructionType::SCbranchExecz ||
-				    inst.type == ShaderInstructionType::SCbranchScc0)
+				    inst.type == ShaderInstructionType::SCbranchScc0 || inst.type == ShaderInstructionType::SCbranchVccz)
 				{
 					return false;
 				}
@@ -406,6 +428,35 @@ bool ShaderCode::IsDiscardBlock(uint32_t pc) const
 		}
 	}
 	return false;
+}
+
+Vector<ShaderInstruction> ShaderCode::GetDiscardBlock(uint32_t pc) const
+{
+	Vector<ShaderInstruction> ret;
+
+	auto inst_count = m_instructions.Size();
+	for (uint32_t index = 0; index < inst_count; index++)
+	{
+		const auto& inst = m_instructions.At(index);
+		if (inst.pc == pc)
+		{
+			for (uint32_t i = index; i < inst_count; i++)
+			{
+				const auto& inst = m_instructions.At(i);
+
+				ret.Add(inst);
+
+				if (IsDiscardInstruction(i))
+				{
+					ret.Add(m_instructions.At(i + 1));
+					break;
+				}
+			}
+			break;
+		}
+	}
+
+	return ret;
 }
 
 static ShaderOperand operand_parse(uint32_t code)
@@ -566,26 +617,21 @@ KYTY_SHADER_PARSER(shader_parse_sopp)
 	ShaderInstruction inst;
 	inst.pc = pc;
 
+	inst.format            = ShaderInstructionFormat::Label;
+	inst.src[0].type       = ShaderOperandType::LiteralConstant;
+	inst.src[0].constant.i = static_cast<int16_t>(simm) * 4;
+	inst.src_num           = 1;
+
 	switch (opcode)
 	{
 		case 0x01:
-			inst.type   = ShaderInstructionType::SEndpgm;
-			inst.format = ShaderInstructionFormat::Empty;
+			inst.type    = ShaderInstructionType::SEndpgm;
+			inst.format  = ShaderInstructionFormat::Empty;
+			inst.src_num = 0;
 			break;
-		case 0x04:
-			inst.type              = ShaderInstructionType::SCbranchScc0;
-			inst.format            = ShaderInstructionFormat::Label;
-			inst.src[0].type       = ShaderOperandType::LiteralConstant;
-			inst.src[0].constant.i = static_cast<int16_t>(simm) * 4;
-			inst.src_num           = 1;
-			break;
-		case 0x08:
-			inst.type              = ShaderInstructionType::SCbranchExecz;
-			inst.format            = ShaderInstructionFormat::Label;
-			inst.src[0].type       = ShaderOperandType::LiteralConstant;
-			inst.src[0].constant.i = static_cast<int16_t>(simm) * 4;
-			inst.src_num           = 1;
-			break;
+		case 0x04: inst.type = ShaderInstructionType::SCbranchScc0; break;
+		case 0x06: inst.type = ShaderInstructionType::SCbranchVccz; break;
+		case 0x08: inst.type = ShaderInstructionType::SCbranchExecz; break;
 		case 0x0c:
 			inst.type              = ShaderInstructionType::SWaitcnt;
 			inst.format            = ShaderInstructionFormat::Imm;
@@ -598,7 +644,8 @@ KYTY_SHADER_PARSER(shader_parse_sopp)
 
 	dst->GetInstructions().Add(inst);
 
-	if (inst.type == ShaderInstructionType::SCbranchScc0 || inst.type == ShaderInstructionType::SCbranchExecz)
+	if (inst.type == ShaderInstructionType::SCbranchScc0 || inst.type == ShaderInstructionType::SCbranchVccz ||
+	    inst.type == ShaderInstructionType::SCbranchExecz)
 	{
 		dst->GetLabels().Add(ShaderLabel(inst));
 	}
@@ -849,6 +896,8 @@ KYTY_SHADER_PARSER(shader_parse_vopc)
 		case 0x0d: inst.type = ShaderInstructionType::VCmpNeqF32; break;
 		case 0x0e: inst.type = ShaderInstructionType::VCmpNltF32; break;
 		case 0x0f: inst.type = ShaderInstructionType::VCmpTruF32; break;
+		case 0x11: inst.type = ShaderInstructionType::VCmpxLtF32; break;
+		case 0x14: inst.type = ShaderInstructionType::VCmpxGtF32; break;
 		case 0x1d: inst.type = ShaderInstructionType::VCmpxNeqF32; break;
 		case 0x80: inst.type = ShaderInstructionType::VCmpFI32; break;
 		case 0x81: inst.type = ShaderInstructionType::VCmpLtI32; break;
@@ -870,7 +919,9 @@ KYTY_SHADER_PARSER(shader_parse_vopc)
 		case 0xd4: inst.type = ShaderInstructionType::VCmpxGtU32; break;
 		case 0xd5: inst.type = ShaderInstructionType::VCmpxNeU32; break;
 		case 0xd6: inst.type = ShaderInstructionType::VCmpxGeU32; break;
-		default: printf("%s", dst->DbgDump().C_Str()); EXIT("unknown vopc opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 "\n", opcode, pc);
+		default:
+			printf("%s", dst->DbgDump().C_Str());
+			EXIT("unknown vopc opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 " (hash0 = 0x%08" PRIx32 ")\n", opcode, pc, dst->GetHash0());
 	}
 
 	dst->GetInstructions().Add(inst);
@@ -921,13 +972,17 @@ KYTY_SHADER_PARSER(shader_parse_vop1)
 		case 0x23: inst.type = ShaderInstructionType::VRndneF32; break;
 		case 0x24: inst.type = ShaderInstructionType::VFloorF32; break;
 		case 0x25: inst.type = ShaderInstructionType::VExpF32; break;
+		case 0x27: inst.type = ShaderInstructionType::VLogF32; break;
 		case 0x2a: inst.type = ShaderInstructionType::VRcpF32; break;
 		case 0x2e: inst.type = ShaderInstructionType::VRsqF32; break;
 		case 0x33: inst.type = ShaderInstructionType::VSqrtF32; break;
+		case 0x35: inst.type = ShaderInstructionType::VSinF32; break;
 		case 0x36: inst.type = ShaderInstructionType::VCosF32; break;
 		case 0x37: inst.type = ShaderInstructionType::VNotB32; break;
 		case 0x38: inst.type = ShaderInstructionType::VBfrevB32; break;
-		default: printf("%s", dst->DbgDump().C_Str()); EXIT("unknown vop1 opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 "\n", opcode, pc);
+		default:
+			printf("%s", dst->DbgDump().C_Str());
+			EXIT("unknown vop1 opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 " (hash0 = 0x%08" PRIx32 ")\n", opcode, pc, dst->GetHash0());
 	}
 
 	dst->GetInstructions().Add(inst);
@@ -972,6 +1027,7 @@ KYTY_SHADER_PARSER(shader_parse_vop2)
 			inst.src[2].size = 2;
 			inst.src_num     = 3;
 			break;
+		case 0x03: inst.type = ShaderInstructionType::VAddF32; break;
 		case 0x04: inst.type = ShaderInstructionType::VSubF32; break;
 		case 0x05: inst.type = ShaderInstructionType::VSubrevF32; break;
 		case 0x08: inst.type = ShaderInstructionType::VMulF32; break;
@@ -1171,6 +1227,7 @@ KYTY_SHADER_PARSER(shader_parse_vop3)
 			inst.src_num     = 3;
 			inst.src[2].size = 2;
 			break;
+		case 0x103: inst.type = ShaderInstructionType::VAddF32; break;
 		case 0x104: inst.type = ShaderInstructionType::VSubF32; break;
 		case 0x105: inst.type = ShaderInstructionType::VSubrevF32; break;
 		case 0x108: inst.type = ShaderInstructionType::VMulF32; break;
@@ -1213,6 +1270,10 @@ KYTY_SHADER_PARSER(shader_parse_vop3)
 		case 0x141: inst.type = ShaderInstructionType::VMadF32; break;
 		case 0x143: inst.type = ShaderInstructionType::VMadU32U24; break;
 		case 0x148: inst.type = ShaderInstructionType::VBfeU32; break;
+		case 0x14b: inst.type = ShaderInstructionType::VFmaF32; break;
+		case 0x151: inst.type = ShaderInstructionType::VMin3F32; break;
+		case 0x154: inst.type = ShaderInstructionType::VMax3F32; break;
+		case 0x157: inst.type = ShaderInstructionType::VMed3F32; break;
 		case 0x15d: inst.type = ShaderInstructionType::VSadU32; break;
 		case 0x169:
 			inst.type    = ShaderInstructionType::VMulLoU32;
@@ -1229,12 +1290,30 @@ KYTY_SHADER_PARSER(shader_parse_vop3)
 			inst.format  = ShaderInstructionFormat::SVdstSVsrc0SVsrc1;
 			inst.src_num = 2;
 			break;
-		default: printf("%s", dst->DbgDump().C_Str()); EXIT("unknown vop3 opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 "\n", opcode, pc);
+		case 0x1aa:
+			inst.type    = ShaderInstructionType::VRcpF32;
+			inst.format  = ShaderInstructionFormat::SVdstSVsrc0;
+			inst.src_num = 1;
+			break;
+		default:
+			printf("%s", dst->DbgDump().C_Str());
+			EXIT("unknown vop3 opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 " (hash0 = 0x%08" PRIx32 ")\n", opcode, pc, dst->GetHash0());
 	}
 
 	if (inst.dst2.type == ShaderOperandType::Unknown)
 	{
-		EXIT_NOT_IMPLEMENTED(abs != 0);
+		if ((abs & 0x1u) != 0)
+		{
+			inst.src[0].absolute = true;
+		}
+		if ((abs & 0x2u) != 0)
+		{
+			inst.src[1].absolute = true;
+		}
+		if ((abs & 0x4u) != 0)
+		{
+			inst.src[2].absolute = true;
+		}
 
 		inst.dst.clamp = (clamp != 0);
 	}
@@ -1304,6 +1383,7 @@ KYTY_SHADER_PARSER(shader_parse_exp)
 			case 0x21: inst.format = ShaderInstructionFormat::Param1Vsrc0Vsrc1Vsrc2Vsrc3; break;
 			case 0x22: inst.format = ShaderInstructionFormat::Param2Vsrc0Vsrc1Vsrc2Vsrc3; break;
 			case 0x23: inst.format = ShaderInstructionFormat::Param3Vsrc0Vsrc1Vsrc2Vsrc3; break;
+			case 0x24: inst.format = ShaderInstructionFormat::Param4Vsrc0Vsrc1Vsrc2Vsrc3; break;
 			default: break;
 		}
 	}
@@ -1311,7 +1391,9 @@ KYTY_SHADER_PARSER(shader_parse_exp)
 	if (inst.format == ShaderInstructionFormat::Unknown)
 	{
 		printf("%s", dst->DbgDump().C_Str());
-		EXIT("unknown exp target: 0x%02" PRIx32 " at addr 0x%08" PRIx32 "\n", target, pc);
+		EXIT("%s\n"
+		     "unknown exp target: 0x%02" PRIx32 " at addr 0x%08" PRIx32 " (hash0 = 0x%08" PRIx32 ")\n",
+		     dst->DbgDump().C_Str(), target, pc, dst->GetHash0());
 	}
 
 	dst->GetInstructions().Add(inst);
@@ -1639,16 +1721,66 @@ KYTY_SHADER_PARSER(shader_parse_mimg)
 					inst.dst.size = 1;
 					break;
 				}
+				case 0x3:
+				{
+					inst.format   = ShaderInstructionFormat::Vdata2Vaddr3StSsDmask3;
+					inst.dst.size = 2;
+					break;
+				}
+				case 0x5:
+				{
+					inst.format   = ShaderInstructionFormat::Vdata2Vaddr3StSsDmask5;
+					inst.dst.size = 2;
+					break;
+				}
 				case 0x7:
 				{
 					inst.format   = ShaderInstructionFormat::Vdata3Vaddr3StSsDmask7;
 					inst.dst.size = 3;
 					break;
 				}
+				case 0x8:
+				{
+					inst.format   = ShaderInstructionFormat::Vdata1Vaddr3StSsDmask8;
+					inst.dst.size = 1;
+					break;
+				}
 				case 0xf:
 				{
 					inst.format   = ShaderInstructionFormat::Vdata4Vaddr3StSsDmaskF;
 					inst.dst.size = 4;
+					break;
+				}
+				default:;
+			}
+			break;
+		case 0x27:
+			inst.type        = ShaderInstructionType::ImageSampleLz;
+			inst.src[0].size = 3;
+			inst.src[1].size = 8;
+			inst.src[2].size = 4;
+			switch (dmask) // NOLINT
+			{
+				case 0x7:
+				{
+					inst.format   = ShaderInstructionFormat::Vdata3Vaddr3StSsDmask7;
+					inst.dst.size = 3;
+					break;
+				}
+				default:;
+			}
+			break;
+		case 0x37:
+			inst.type        = ShaderInstructionType::ImageSampleLzO;
+			inst.src[0].size = 4;
+			inst.src[1].size = 8;
+			inst.src[2].size = 4;
+			switch (dmask) // NOLINT
+			{
+				case 0x7:
+				{
+					inst.format   = ShaderInstructionFormat::Vdata3Vaddr4StSsDmask7;
+					inst.dst.size = 3;
 					break;
 				}
 				default:;
@@ -1695,8 +1827,13 @@ KYTY_SHADER_PARSER(shader_parse_mtbuf)
 	EXIT_NOT_IMPLEMENTED(glc == 1);
 	EXIT_NOT_IMPLEMENTED(slc == 1);
 	EXIT_NOT_IMPLEMENTED(tfe == 1);
-	EXIT_NOT_IMPLEMENTED(dfmt != 14);
-	EXIT_NOT_IMPLEMENTED(nfmt != 7);
+	// EXIT_NOT_IMPLEMENTED(dfmt != 14);
+	// EXIT_NOT_IMPLEMENTED(nfmt != 7);
+
+	if ((dfmt != 14 && dfmt != 4) || nfmt != 7)
+	{
+		EXIT("unknown format: dfmt = %d, nfmt = %d at addr 0x%08" PRIx32 " (hash0 = 0x%08" PRIx32 ")\n", dfmt, nfmt, pc, dst->GetHash0());
+	}
 
 	uint32_t size = 2;
 
@@ -1716,14 +1853,22 @@ KYTY_SHADER_PARSER(shader_parse_mtbuf)
 
 	inst.src[1].size = 4;
 
-	switch (opcode) // NOLINT
+	switch (opcode)
 	{
+		case 0x00:
+			inst.type   = ShaderInstructionType::TBufferLoadFormatX;
+			inst.format = ShaderInstructionFormat::Vdata1VaddrSvSoffsIdxenFloat1;
+			EXIT_NOT_IMPLEMENTED(offen == 1);
+			EXIT_NOT_IMPLEMENTED(!(dfmt == 4 && nfmt == 7));
+			break;
+
 		case 0x03:
 			inst.type   = ShaderInstructionType::TBufferLoadFormatXyzw;
 			inst.format = (offen == 1 ? ShaderInstructionFormat::Vdata4Vaddr2SvSoffsOffenIdxenFloat4
 			                          : ShaderInstructionFormat::Vdata4VaddrSvSoffsIdxenFloat4);
 			inst.src[0].size += static_cast<int>(offen);
 			inst.dst.size = 4;
+			EXIT_NOT_IMPLEMENTED(!(dfmt == 14 && nfmt == 7));
 			break;
 		default: printf("%s", dst->DbgDump().C_Str()); EXIT("unknown mtbuf opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 "\n", opcode, pc);
 	}
@@ -2026,21 +2171,24 @@ static bool SpirvToGlsl(const uint32_t* /*src_binary*/, size_t /*src_binary_size
 	return true;
 }
 
-static bool SpirvRun(const String& src, Vector<uint32_t>* dst)
+static bool SpirvRun(const String& src, Vector<uint32_t>* dst, String* err_msg)
 {
 	EXIT_IF(dst == nullptr);
+	EXIT_IF(err_msg == nullptr);
 
 	spvtools::SpirvTools core(SPV_ENV_VULKAN_1_2);
 	spvtools::Optimizer  opt(SPV_ENV_VULKAN_1_2);
 
 	spv_position_t error_position {};
+	String         error_msg;
 
-	auto print_msg_to_stderr = [&error_position](spv_message_level_t /* level */, const char* /*source*/,
-	                                             [[maybe_unused]] const spv_position_t& position, const char* m)
+	auto print_msg_to_stderr = [&error_position, &error_msg](spv_message_level_t /* level */, const char* /*source*/,
+	                                                         [[maybe_unused]] const spv_position_t& position, const char* m)
 	{
 		// printf("%s\n", source);
-		printf(FG_BRIGHT_RED "error: %d: %d (%d) %s\n" FG_DEFAULT, static_cast<int>(position.line), static_cast<int>(position.column),
-		       static_cast<int>(position.index), m);
+		error_msg = String::FromPrintf("%d: %d (%d) %s", static_cast<int>(position.line), static_cast<int>(position.column),
+		                               static_cast<int>(position.index), m);
+		printf(FG_BRIGHT_RED "error: %s\n" FG_DEFAULT, error_msg.C_Str());
 		error_position = position;
 	};
 	core.SetMessageConsumer(print_msg_to_stderr);
@@ -2054,6 +2202,7 @@ static bool SpirvRun(const String& src, Vector<uint32_t>* dst)
 	if (!core.Assemble(src_utf8.GetDataConst(), src_utf8.Size(), &spirv))
 	{
 		printf("Assemble failed at:\n%s\n", src.Mid(src.FindIndex(U'\n', error_position.index - 100), 200).C_Str());
+		*err_msg = String::FromPrintf("Assemble failed at:\n%s\n", src.Mid(src.FindIndex(U'\n', error_position.index - 100), 200).C_Str());
 		return false;
 	}
 
@@ -2063,6 +2212,7 @@ static bool SpirvRun(const String& src, Vector<uint32_t>* dst)
 		SpirvDisassemble(spirv.data(), spirv.size(), &disassembly);
 		printf("%s\n", disassembly.C_Str());
 		printf("Validate failed\n");
+		*err_msg = String::FromPrintf("%s\n\nValidate failed:\n%s\n", Log::RemoveColors(disassembly).C_Str(), error_msg.C_Str());
 		return false;
 	}
 
@@ -2077,6 +2227,7 @@ static bool SpirvRun(const String& src, Vector<uint32_t>* dst)
 	if (optimize && !opt.Run(spirv.data(), spirv.size(), &spirv))
 	{
 		printf("Optimize failed\n");
+		*err_msg = String::FromPrintf("Optimize failed\n");
 		return false;
 	}
 
@@ -2946,7 +3097,7 @@ class ShaderLogHelper
 public:
 	explicit ShaderLogHelper(const char* type)
 	{
-		static int id = 0;
+		static std::atomic_int id = 0;
 
 		switch (Config::GetShaderLogDirection())
 		{
@@ -2989,11 +3140,17 @@ public:
 			if (m_console)
 			{
 				printf("--------- Original Shader ---------\n");
+				printf("crc32 = %08" PRIx32 "\n", code.GetCrc32());
+				printf("hash0 = %08" PRIx32 "\n", code.GetHash0());
+				printf("---------\n");
 				printf("%s", code.DbgDump().C_Str());
 				printf("---------\n");
 			} else if (!m_file.IsInvalid())
 			{
 				m_file.Printf("--------- Original Shader ---------\n");
+				m_file.Printf("crc32 = %08" PRIx32 "\n", code.GetCrc32());
+				m_file.Printf("hash0 = %08" PRIx32 "\n", code.GetHash0());
+				m_file.Printf("---------\n");
 				m_file.Printf("%s", code.DbgDump().C_Str());
 				m_file.Printf("---------\n");
 			}
@@ -3115,6 +3272,8 @@ ShaderCode ShaderParseVS(const HW::VertexShaderInfo* regs)
 
 		bi_print("ShaderParseVS():ShaderBinaryInfo", *header);
 
+		code.SetCrc32(header->crc32);
+		code.SetHash0(header->hash0);
 		shader_parse(0, src, nullptr, &code);
 
 		if (g_debug_printfs != nullptr)
@@ -3156,9 +3315,9 @@ Vector<uint32_t> ShaderRecompileVS(const ShaderCode& code, const ShaderVertexInp
 
 	log.DumpRecompiledShader(source);
 
-	if (!SpirvRun(source, &ret))
+	if (String err_msg; !SpirvRun(source, &ret, &err_msg))
 	{
-		EXIT("SpirvRun() failed\n");
+		EXIT("SpirvRun() failed:\n%s\n", err_msg.C_Str());
 	}
 
 	log.DumpOptimizedShader(ret);
@@ -3194,6 +3353,8 @@ ShaderCode ShaderParsePS(const HW::PixelShaderInfo* regs)
 
 		bi_print("ShaderParsePS():ShaderBinaryInfo", *header);
 
+		code.SetCrc32(header->crc32);
+		code.SetHash0(header->hash0);
 		shader_parse(0, src, nullptr, &code);
 
 		if (g_debug_printfs != nullptr)
@@ -3240,9 +3401,9 @@ Vector<uint32_t> ShaderRecompilePS(const ShaderCode& code, const ShaderPixelInpu
 
 	log.DumpRecompiledShader(source);
 
-	if (!SpirvRun(source, &ret))
+	if (String err_msg; !SpirvRun(source, &ret, &err_msg))
 	{
-		EXIT("SpirvRun() failed\n");
+		EXIT("SpirvRun() failed:\n%s\n", err_msg.C_Str());
 	}
 
 	log.DumpOptimizedShader(ret);
@@ -3272,6 +3433,8 @@ ShaderCode ShaderParseCS(const HW::ComputeShaderInfo* regs)
 	ShaderCode code;
 	code.SetType(ShaderType::Compute);
 
+	code.SetCrc32(header->crc32);
+	code.SetHash0(header->hash0);
 	shader_parse(0, src, nullptr, &code);
 
 	if (g_debug_printfs != nullptr)
@@ -3306,9 +3469,9 @@ Vector<uint32_t> ShaderRecompileCS(const ShaderCode& code, const ShaderComputeIn
 
 	log.DumpRecompiledShader(source);
 
-	if (!SpirvRun(source, &ret))
+	if (String err_msg; !SpirvRun(source, &ret, &err_msg))
 	{
-		EXIT("SpirvRun() failed\n");
+		EXIT("SpirvRun() failed:\n%s\n", err_msg.C_Str());
 	}
 
 	log.DumpOptimizedShader(ret);
@@ -3553,9 +3716,10 @@ ShaderId ShaderGetIdVS(const HW::VertexShaderInfo* regs, const ShaderVertexInput
 
 	ret.ids.Expand(64);
 
+	ret.hash0 = header->hash0;
+	ret.crc32 = header->crc32;
+
 	ret.ids.Add(header->length);
-	ret.ids.Add(header->hash0);
-	ret.ids.Add(header->crc32);
 	ret.ids.Add(static_cast<uint32_t>(input_info->fetch));
 	ret.ids.Add(input_info->resources_num);
 	ret.ids.Add(input_info->export_count);
@@ -3619,9 +3783,10 @@ ShaderId ShaderGetIdPS(const HW::PixelShaderInfo* regs, const ShaderPixelInputIn
 
 	ret.ids.Expand(64);
 
+	ret.hash0 = header->hash0;
+	ret.crc32 = header->crc32;
+
 	ret.ids.Add(header->length);
-	ret.ids.Add(header->hash0);
-	ret.ids.Add(header->crc32);
 	ret.ids.Add(input_info->input_num);
 	ret.ids.Add(static_cast<uint32_t>(input_info->ps_pos_xy));
 	ret.ids.Add(static_cast<uint32_t>(input_info->ps_pixel_kill_enable));
@@ -3651,9 +3816,10 @@ ShaderId ShaderGetIdCS(const HW::ComputeShaderInfo* regs, const ShaderComputeInp
 	ShaderId ret;
 	ret.ids.Expand(64);
 
+	ret.hash0 = header->hash0;
+	ret.crc32 = header->crc32;
+
 	ret.ids.Add(header->length);
-	ret.ids.Add(header->hash0);
-	ret.ids.Add(header->crc32);
 
 	ret.ids.Add(input_info->workgroup_register);
 	ret.ids.Add(input_info->thread_ids_num);

@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -32,6 +32,12 @@ struct SDL_Cursor
     struct SDL_Cursor *next;
     void *driverdata;
 };
+
+typedef struct
+{
+    SDL_MouseID mouseID;
+    Uint32 buttonstate;
+} SDL_MouseInputSource;
 
 typedef struct
 {
@@ -82,7 +88,6 @@ typedef struct
     int last_x, last_y;         /* the last reported x and y coordinates */
     float accumulated_wheel_x;
     float accumulated_wheel_y;
-    Uint32 buttonstate;
     SDL_bool has_position;
     SDL_bool relative_mode;
     SDL_bool relative_mode_warp;
@@ -93,6 +98,18 @@ typedef struct
     Uint32 double_click_time;
     int double_click_radius;
     SDL_bool touch_mouse_events;
+    SDL_bool mouse_touch_events;
+    SDL_bool was_touch_mouse_events; /* Was a touch-mouse event pending? */
+#if defined(__vita__)
+    Uint8 vita_touch_mouse_device;
+#endif
+    SDL_bool auto_capture;
+    SDL_bool capture_desired;
+    SDL_Window *capture_window;
+
+    /* Data for input source state */
+    int num_sources;
+    SDL_MouseInputSource *sources;
 
     /* Data for double-click tracking */
     int num_clickstates;
@@ -119,6 +136,9 @@ extern void SDL_SetDefaultCursor(SDL_Cursor * cursor);
 
 /* Set the mouse focus window */
 extern void SDL_SetMouseFocus(SDL_Window * window);
+
+/* Update the mouse capture window */
+extern int SDL_UpdateMouseCapture(SDL_bool force_release);
 
 /* Send a mouse motion event */
 extern int SDL_SendMouseMotion(SDL_Window * window, SDL_MouseID mouseID, int relative, int x, int y);

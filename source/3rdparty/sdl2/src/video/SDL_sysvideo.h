@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -26,6 +26,7 @@
 #include "SDL_messagebox.h"
 #include "SDL_shape.h"
 #include "SDL_thread.h"
+#include "SDL_metal.h"
 
 #include "SDL_vulkan_internal.h"
 
@@ -82,6 +83,7 @@ struct SDL_Window
     int max_w, max_h;
     Uint32 flags;
     Uint32 last_fullscreen_flags;
+    Uint32 display_index;
 
     /* Stored position and size for windowed mode */
     SDL_Rect windowed;
@@ -100,6 +102,8 @@ struct SDL_Window
     SDL_bool is_hiding;
     SDL_bool is_destroying;
     SDL_bool is_dropping;       /* drag/drop in progress, expecting SDL_SendDropComplete(). */
+
+    SDL_Rect mouse_rect;
 
     SDL_WindowShaper *shaper;
 
@@ -228,15 +232,20 @@ struct SDL_VideoDevice
     void (*RestoreWindow) (_THIS, SDL_Window * window);
     void (*SetWindowBordered) (_THIS, SDL_Window * window, SDL_bool bordered);
     void (*SetWindowResizable) (_THIS, SDL_Window * window, SDL_bool resizable);
+    void (*SetWindowAlwaysOnTop) (_THIS, SDL_Window * window, SDL_bool on_top);
     void (*SetWindowFullscreen) (_THIS, SDL_Window * window, SDL_VideoDisplay * display, SDL_bool fullscreen);
     int (*SetWindowGammaRamp) (_THIS, SDL_Window * window, const Uint16 * ramp);
     int (*GetWindowGammaRamp) (_THIS, SDL_Window * window, Uint16 * ramp);
-    void (*SetWindowGrab) (_THIS, SDL_Window * window, SDL_bool grabbed);
+    void* (*GetWindowICCProfile) (_THIS, SDL_Window * window, size_t* size);
+    void (*SetWindowMouseRect)(_THIS, SDL_Window * window);
+    void (*SetWindowMouseGrab) (_THIS, SDL_Window * window, SDL_bool grabbed);
+    void (*SetWindowKeyboardGrab) (_THIS, SDL_Window * window, SDL_bool grabbed);
     void (*DestroyWindow) (_THIS, SDL_Window * window);
     int (*CreateWindowFramebuffer) (_THIS, SDL_Window * window, Uint32 * format, void ** pixels, int *pitch);
     int (*UpdateWindowFramebuffer) (_THIS, SDL_Window * window, const SDL_Rect * rects, int numrects);
     void (*DestroyWindowFramebuffer) (_THIS, SDL_Window * window);
     void (*OnWindowEnter) (_THIS, SDL_Window * window);
+    int (*FlashWindow) (_THIS, SDL_Window * window, SDL_FlashOperation operation);
 
     /* * * */
     /*
@@ -276,8 +285,19 @@ struct SDL_VideoDevice
 
     /* * * */
     /*
+     * Metal support
+     */
+    SDL_MetalView (*Metal_CreateView) (_THIS, SDL_Window * window);
+    void (*Metal_DestroyView) (_THIS, SDL_MetalView view);
+    void *(*Metal_GetLayer) (_THIS, SDL_MetalView view);
+    void (*Metal_GetDrawableSize) (_THIS, SDL_Window * window, int *w, int *h);
+
+    /* * * */
+    /*
      * Event manager functions
      */
+    int (*WaitEventTimeout) (_THIS, int timeout);
+    void (*SendWakeupEvent) (_THIS, SDL_Window *window);
     void (*PumpEvents) (_THIS);
 
     /* Suspend the screensaver */
@@ -287,6 +307,8 @@ struct SDL_VideoDevice
     void (*StartTextInput) (_THIS);
     void (*StopTextInput) (_THIS);
     void (*SetTextInputRect) (_THIS, SDL_Rect *rect);
+    void (*ClearComposition) (_THIS);
+    SDL_bool (*IsTextInputShown) (_THIS);
 
     /* Screen keyboard */
     SDL_bool (*HasScreenKeyboardSupport) (_THIS);
@@ -310,8 +332,11 @@ struct SDL_VideoDevice
 
     /* * * */
     /* Data common to all drivers */
+    SDL_bool checked_texture_framebuffer;
     SDL_bool is_dummy;
     SDL_bool suspend_screensaver;
+    SDL_Window *wakeup_window;
+    SDL_mutex *wakeup_lock; /* Initialized only if WaitEventTimeout/SendWakeupEvent are supported */
     int num_displays;
     SDL_VideoDisplay *displays;
     SDL_Window *windows;
@@ -319,6 +344,8 @@ struct SDL_VideoDevice
     Uint8 window_magic;
     Uint32 next_object_id;
     char *clipboard_text;
+    SDL_bool setting_display_mode;
+    SDL_bool disable_display_mode_switching;
 
     /* * * */
     /* Data used by the GL drivers */
@@ -365,6 +392,11 @@ struct SDL_VideoDevice
     SDL_TLSID current_glwin_tls;
     SDL_TLSID current_glctx_tls;
 
+    /* Flag that stores whether it's allowed to call SDL_GL_MakeCurrent()
+     * with a NULL window, but a non-NULL context. (Not allowed in most cases,
+     * except on EGL under some circumstances.) */
+    SDL_bool gl_allow_no_surface;
+
     /* * * */
     /* Data used by the Vulkan drivers */
     struct
@@ -398,14 +430,12 @@ typedef struct VideoBootStrap
 {
     const char *name;
     const char *desc;
-    int (*available) (void);
     SDL_VideoDevice *(*create) (int devindex);
 } VideoBootStrap;
 
 /* Not all of these are available in a given build. Use #ifdefs, etc. */
 extern VideoBootStrap COCOA_bootstrap;
 extern VideoBootStrap X11_bootstrap;
-extern VideoBootStrap MIR_bootstrap;
 extern VideoBootStrap DirectFB_bootstrap;
 extern VideoBootStrap WINDOWS_bootstrap;
 extern VideoBootStrap WINRT_bootstrap;
@@ -414,23 +444,34 @@ extern VideoBootStrap PND_bootstrap;
 extern VideoBootStrap UIKIT_bootstrap;
 extern VideoBootStrap Android_bootstrap;
 extern VideoBootStrap PSP_bootstrap;
+extern VideoBootStrap VITA_bootstrap;
+extern VideoBootStrap RISCOS_bootstrap;
 extern VideoBootStrap RPI_bootstrap;
 extern VideoBootStrap KMSDRM_bootstrap;
+extern VideoBootStrap KMSDRM_LEGACY_bootstrap;
 extern VideoBootStrap DUMMY_bootstrap;
 extern VideoBootStrap Wayland_bootstrap;
 extern VideoBootStrap NACL_bootstrap;
 extern VideoBootStrap VIVANTE_bootstrap;
 extern VideoBootStrap Emscripten_bootstrap;
 extern VideoBootStrap QNX_bootstrap;
+extern VideoBootStrap OFFSCREEN_bootstrap;
+extern VideoBootStrap OS2DIVE_bootstrap;
+extern VideoBootStrap OS2VMAN_bootstrap;
 
 extern SDL_VideoDevice *SDL_GetVideoDevice(void);
 extern int SDL_AddBasicVideoDisplay(const SDL_DisplayMode * desktop_mode);
-extern int SDL_AddVideoDisplay(const SDL_VideoDisplay * display);
+extern int SDL_AddVideoDisplay(const SDL_VideoDisplay * display, SDL_bool send_event);
+extern void SDL_DelVideoDisplay(int index);
 extern SDL_bool SDL_AddDisplayMode(SDL_VideoDisplay *display, const SDL_DisplayMode * mode);
+extern void SDL_SetCurrentDisplayMode(SDL_VideoDisplay *display, const SDL_DisplayMode * mode);
+extern void SDL_SetDesktopDisplayMode(SDL_VideoDisplay *display, const SDL_DisplayMode * mode);
+extern void SDL_ResetDisplayModes(int displayIndex);
 extern int SDL_GetIndexOfDisplay(SDL_VideoDisplay *display);
 extern SDL_VideoDisplay *SDL_GetDisplay(int displayIndex);
 extern SDL_VideoDisplay *SDL_GetDisplayForWindow(SDL_Window *window);
 extern void *SDL_GetDisplayDriverData( int displayIndex );
+extern SDL_bool SDL_IsVideoContextExternal(void);
 
 extern void SDL_GL_DeduceMaxSupportedESProfile(int* major, int* minor);
 
@@ -439,6 +480,7 @@ extern SDL_bool SDL_HasWindows(void);
 
 extern void SDL_OnWindowShown(SDL_Window * window);
 extern void SDL_OnWindowHidden(SDL_Window * window);
+extern void SDL_OnWindowMoved(SDL_Window * window);
 extern void SDL_OnWindowResized(SDL_Window * window);
 extern void SDL_OnWindowMinimized(SDL_Window * window);
 extern void SDL_OnWindowRestored(SDL_Window * window);
@@ -452,13 +494,6 @@ extern SDL_Window * SDL_GetFocusWindow(void);
 extern SDL_bool SDL_ShouldAllowTopmost(void);
 
 extern float SDL_ComputeDiagonalDPI(int hpix, int vpix, float hinches, float vinches);
-
-extern void SDL_OnApplicationWillTerminate(void);
-extern void SDL_OnApplicationDidReceiveMemoryWarning(void);
-extern void SDL_OnApplicationWillResignActive(void);
-extern void SDL_OnApplicationDidEnterBackground(void);
-extern void SDL_OnApplicationWillEnterForeground(void);
-extern void SDL_OnApplicationDidBecomeActive(void);
 
 extern void SDL_ToggleDragAndDropSupport(void);
 

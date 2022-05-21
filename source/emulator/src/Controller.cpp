@@ -560,6 +560,25 @@ int KYTY_SYSV_ABI PadSetVibration(int handle, const PadVibrationParam* param)
 	return OK;
 }
 
+int KYTY_SYSV_ABI PadResetLightBar(int handle)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(handle != 1);
+
+	return OK;
+}
+
+int KYTY_SYSV_ABI PadSetLightBar(int handle, const PadLightBarParam* param)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(handle != 1);
+	EXIT_NOT_IMPLEMENTED(param == nullptr);
+
+	return OK;
+}
+
 } // namespace Kyty::Libs::Controller
 
 #endif // KYTY_EMU_ENABLED

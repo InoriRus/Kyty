@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -257,7 +257,12 @@ IBus_GetDBusAddressFilename(void)
     }
     
     if (!*host) {
-        host = "unix";
+        const char *session = SDL_getenv("XDG_SESSION_TYPE");
+        if (session != NULL && SDL_strcmp(session, "wayland") == 0) {
+            host = "unix-wayland";
+        } else {
+            host = "unix";
+        }
     }
         
     SDL_memset(config_dir, 0, sizeof(config_dir));
@@ -479,7 +484,7 @@ IBus_SimpleMessage(const char *method)
 {   
     SDL_DBusContext *dbus = SDL_DBus_GetContext();
     
-    if (IBus_CheckConnection(dbus)) {
+    if ((input_ctx_path != NULL) && (IBus_CheckConnection(dbus))) {
         SDL_DBus_CallVoidMethodOnConnection(ibus_conn, IBUS_SERVICE, input_ctx_path, IBUS_INPUT_INTERFACE, method, DBUS_TYPE_INVALID);
     }
 }
@@ -498,15 +503,20 @@ SDL_IBus_Reset(void)
 }
 
 SDL_bool
-SDL_IBus_ProcessKeyEvent(Uint32 keysym, Uint32 keycode)
+SDL_IBus_ProcessKeyEvent(Uint32 keysym, Uint32 keycode, Uint8 state)
 { 
     Uint32 result = 0;
     SDL_DBusContext *dbus = SDL_DBus_GetContext();
-    
+
+
     if (IBus_CheckConnection(dbus)) {
         Uint32 mods = IBus_ModState();
+        Uint32 ibus_keycode = keycode - 8;
+        if (state == SDL_RELEASED) {
+            mods |= (1 << 30); // IBUS_RELEASE_MASK
+        }
         if (!SDL_DBus_CallMethodOnConnection(ibus_conn, IBUS_SERVICE, input_ctx_path, IBUS_INPUT_INTERFACE, "ProcessKeyEvent",
-                DBUS_TYPE_UINT32, &keysym, DBUS_TYPE_UINT32, &keycode, DBUS_TYPE_UINT32, &mods, DBUS_TYPE_INVALID,
+                DBUS_TYPE_UINT32, &keysym, DBUS_TYPE_UINT32, &ibus_keycode, DBUS_TYPE_UINT32, &mods, DBUS_TYPE_INVALID,
                 DBUS_TYPE_BOOLEAN, &result, DBUS_TYPE_INVALID)) {
             result = 0;
         }

@@ -33,7 +33,8 @@ public:
 	CommandBuffer() { Allocate(); }
 	virtual ~CommandBuffer() { Free(); }
 
-	void SetParent(CommandProcessor* parent) { m_parent = parent; }
+	void              SetParent(CommandProcessor* parent) { m_parent = parent; }
+	CommandProcessor* GetParent() { return m_parent; }
 
 	KYTY_CLASS_NO_COPY(CommandBuffer);
 
@@ -56,7 +57,7 @@ public:
 
 	void SetQueue(int queue) { m_queue = queue; }
 
-	void CommandProcessorWait();
+	// void CommandProcessorWait();
 
 private:
 	VulkanCommandPool* m_pool    = nullptr;
@@ -89,13 +90,15 @@ void GraphicsRenderWriteAtEndOfPipeWithInterruptWriteBack64(uint64_t submit_id, 
                                                             uint64_t value);
 void GraphicsRenderWriteAtEndOfPipeWithInterrupt64(uint64_t submit_id, CommandBuffer* buffer, uint64_t* dst_gpu_addr, uint64_t value);
 void GraphicsRenderWriteAtEndOfPipeWithInterrupt32(uint64_t submit_id, CommandBuffer* buffer, uint32_t* dst_gpu_addr, uint32_t value);
-void GraphicsRenderWriteBack();
+void GraphicsRenderWriteBack(CommandProcessor* cp);
 void GraphicsRenderDispatchDirect(uint64_t submit_id, CommandBuffer* buffer, HW::HardwareContext* ctx, uint32_t thread_group_x,
                                   uint32_t thread_group_y, uint32_t thread_group_z, uint32_t mode);
 void GraphicsRenderMemoryBarrier(CommandBuffer* buffer);
 void GraphicsRenderRenderTextureBarrier(CommandBuffer* buffer, uint64_t vaddr, uint64_t size);
 void GraphicsRenderDepthStencilBarrier(CommandBuffer* buffer, uint64_t vaddr, uint64_t size);
 void GraphicsRenderMemoryFree(uint64_t vaddr, uint64_t size);
+void GraphicsRenderDeleteIndexBuffers();
+void GraphicsRenderMemoryFlush(uint64_t vaddr, uint64_t size);
 
 void DeleteFramebuffer(VideoOutVulkanImage* image);
 void DeleteFramebuffer(DepthStencilVulkanImage* image);

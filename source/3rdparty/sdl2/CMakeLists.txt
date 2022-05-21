@@ -20,23 +20,30 @@ file(GLOB sdl2_src
   src/timer/*.c
   src/sensor/*.c
   src/sensor/dummy/*.c
+  src/sensor/windows/*.c
+  src/locale/*.c
+  src/locale/dummy/*.c
+  src/locale/windows/*.c
+  src/misc/*.c
+  src/misc/dummy/*.c
+  src/misc/windows/*.c
   src/video/*.c
   src/video/windows/*.c
+  src/video/offscreen/*.c
   src/video/dummy/*.c
   src/video/yuv2rgb/*.c
   src/core/windows/*.c
   src/timer/windows/*.c
   src/loadso/windows/*.c
   src/filesystem/windows/*.c
-  src/thread/windows/SDL_sysmutex.c
-  src/thread/windows/SDL_syssem.c
-  src/thread/windows/SDL_systhread.c
-  src/thread/windows/SDL_systls.c
+  src/thread/windows/*.c
   src/thread/generic/SDL_syscond.c
   src/hidapi/windows/*.c
+  src/hidapi/*.c
   src/joystick/dummy/*.c
   src/joystick/windows/*.c
   src/joystick/hidapi/*.c
+  src/joystick/virtual/*.c
   src/joystick/*.c
   src/haptic/dummy/*.c
   src/haptic/windows/*.c
@@ -59,11 +66,20 @@ file(GLOB sdl2_src
   src/render/*/*.h
   src/stdlib/*.h
   src/thread/*.h
+  src/thread/windows/*.h
   src/timer/*.h
   src/sensor/*.h
   src/sensor/dummy/*.h
+  src/sensor/windows/*.h
+  src/locale/*.h
+  src/locale/dummy/*.h
+  src/locale/windows/*.h
+  src/misc/*.h
+  src/misc/dummy/*.h
+  src/misc/windows/*.h
   src/video/*.h
   src/video/windows/*.h
+  src/video/offscreen/*.h
   src/video/dummy/*.h
   src/video/yuv2rgb/*.h
   src/core/windows/*.h
@@ -71,6 +87,7 @@ file(GLOB sdl2_src
   src/loadso/windows/*.h
   src/filesystem/windows/*.h
   src/joystick/dummy/*.h
+  src/joystick/virtual/*.h
   src/joystick/*.h
   src/haptic/dummy/*.h
   src/haptic/*.h
@@ -80,16 +97,17 @@ file(GLOB sdl2_src
 
 if (MINGW)
 	if (CLANG)
-		set_source_files_properties(${sdl2_src} PROPERTIES COMPILE_FLAGS "-Wno-pragma-pack -Wno-shadow -Wno-unknown-pragmas -Wno-unused-local-typedefs -DHAVE_LIBC -DUSING_GENERATED_CONFIG_H -D_FLOAT_H___")
+		set_source_files_properties(${sdl2_src} PROPERTIES COMPILE_FLAGS "-Wno-unused-function -Wno-pragma-pack -Wno-shadow -Wno-unknown-pragmas -Wno-unused-local-typedefs -DHAVE_LIBC -DUSING_GENERATED_CONFIG_H -D_FLOAT_H___")
 	else()
-		set_source_files_properties(${sdl2_src} PROPERTIES COMPILE_FLAGS "-Wno-shadow -Wno-unused-but-set-variable -Wno-unknown-pragmas -Wno-unused-local-typedefs -Wno-maybe-uninitialized -DHAVE_LIBC -DUSING_GENERATED_CONFIG_H")
+		set_source_files_properties(${sdl2_src} PROPERTIES COMPILE_FLAGS "-Wno-unused-function -Wno-shadow -Wno-unused-but-set-variable -Wno-unknown-pragmas -Wno-unused-local-typedefs -Wno-maybe-uninitialized -DHAVE_LIBC -DUSING_GENERATED_CONFIG_H")
 	endif()
 endif()
 
 if (MSVC)
 	if (CLANG)	
-		set_source_files_properties(${sdl2_src} PROPERTIES COMPILE_FLAGS "-Wno-implicit-function-declaration -Wno-pragma-pack -Wno-shadow -Wno-unknown-pragmas -Wno-unused-local-typedefs -DHAVE_LIBC -DUSING_GENERATED_CONFIG_H -D_FLOAT_H___")
-		set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/src/cpuinfo/SDL_cpuinfo.c" PROPERTIES COMPILE_FLAGS "/FI intrin.h -Wno-implicit-function-declaration -Wno-pragma-pack -Wno-shadow -Wno-unknown-pragmas -Wno-unused-local-typedefs -DHAVE_LIBC -DUSING_GENERATED_CONFIG_H -D_FLOAT_H___")
+		set_source_files_properties(${sdl2_src} PROPERTIES COMPILE_FLAGS "-Wno-unused-function -Wno-implicit-function-declaration -Wno-pragma-pack -Wno-shadow -Wno-unknown-pragmas -Wno-unused-local-typedefs -DHAVE_LIBC -DUSING_GENERATED_CONFIG_H -D_FLOAT_H___")
+		#set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/src/cpuinfo/SDL_cpuinfo.c" PROPERTIES COMPILE_FLAGS "/FI intrin.h -Wno-implicit-function-declaration -Wno-pragma-pack -Wno-shadow -Wno-unknown-pragmas -Wno-unused-local-typedefs -DHAVE_LIBC -DUSING_GENERATED_CONFIG_H -D_FLOAT_H___")
+		set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/src/audio/SDL_audiocvt.c" PROPERTIES COMPILE_FLAGS "/FI pmmintrin.h -msse3 -Wno-implicit-function-declaration -Wno-pragma-pack -Wno-shadow -Wno-unknown-pragmas -Wno-unused-local-typedefs -DHAVE_LIBC -DUSING_GENERATED_CONFIG_H -D_FLOAT_H___")
 	else()
 		set_source_files_properties(${sdl2_src} PROPERTIES COMPILE_FLAGS "-DHAVE_LIBC -D_CRT_SECURE_NO_WARNINGS /wd4996 -DUSING_GENERATED_CONFIG_H")
 	endif()

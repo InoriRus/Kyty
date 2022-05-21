@@ -22,9 +22,12 @@ struct Config
 	String                 command_buffer_dump_folder  = U"_Buffers";
 	Log::Direction         printf_direction            = Log::Direction::Console;
 	String                 printf_output_file          = U"_kyty.txt";
+	String                 printf_output_folder        = U"_Logs";
 	ProfilerDirection      profiler_direction          = ProfilerDirection::None;
 	String                 profiler_output_file        = U"_profile.prof";
 	bool                   spirv_debug_printf_enabled  = false;
+	bool                   pipeline_dump_enabled       = false;
+	String                 pipeline_dump_folder        = U"_Pipelines";
 };
 
 static Config* g_config = nullptr;
@@ -92,9 +95,12 @@ void Load(const Scripts::ScriptVar& cfg)
 	LoadStr(g_config->command_buffer_dump_folder, cfg, U"CommandBufferDumpFolder");
 	LoadEnum(g_config->printf_direction, cfg, U"PrintfDirection");
 	LoadStr(g_config->printf_output_file, cfg, U"PrintfOutputFile");
+	LoadStr(g_config->printf_output_folder, cfg, U"PrintfOutputFolder");
 	LoadEnum(g_config->profiler_direction, cfg, U"ProfilerDirection");
 	LoadStr(g_config->profiler_output_file, cfg, U"ProfilerOutputFile");
 	LoadBool(g_config->spirv_debug_printf_enabled, cfg, U"SpirvDebugPrintfEnabled");
+	LoadBool(g_config->pipeline_dump_enabled, cfg, U"PipelineDumpEnabled");
+	LoadStr(g_config->pipeline_dump_folder, cfg, U"PipelineDumpFolder");
 }
 
 uint32_t GetScreenWidth()
@@ -157,6 +163,11 @@ String GetPrintfOutputFile()
 	return g_config->printf_output_file;
 }
 
+String GetPrintfOutputFolder()
+{
+	return g_config->printf_output_folder;
+}
+
 ProfilerDirection GetProfilerDirection()
 {
 	return g_config->profiler_direction;
@@ -170,6 +181,16 @@ String GetProfilerOutputFile()
 bool SpirvDebugPrintfEnabled()
 {
 	return g_config->spirv_debug_printf_enabled;
+}
+
+bool PipelineDumpEnabled()
+{
+	return g_config->pipeline_dump_enabled;
+}
+
+String GetPipelineDumpFolder()
+{
+	return g_config->pipeline_dump_folder;
 }
 
 } // namespace Kyty::Config

@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -35,6 +35,8 @@ extern "C" {
 /* *INDENT-ON* */
 #endif
 
+struct SDL_ShapeTree;
+
 typedef struct {
     struct SDL_ShapeTree *upleft,*upright,*downleft,*downright;
 } SDL_QuadTreeChildren;
@@ -46,7 +48,7 @@ typedef union {
 
 typedef enum { QuadShape,TransparentShape,OpaqueShape } SDL_ShapeKind;
 
-typedef struct {
+typedef struct SDL_ShapeTree {
     SDL_ShapeKind kind;
     SDL_ShapeUnion data;
 } SDL_ShapeTree;

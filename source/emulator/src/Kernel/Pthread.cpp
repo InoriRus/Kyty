@@ -650,6 +650,8 @@ int KYTY_SYSV_ABI PthreadMutexattrDestroy(PthreadMutexattr* attr)
 {
 	// PRINT_NAME();
 
+	EXIT_NOT_IMPLEMENTED(attr == nullptr || *attr == nullptr);
+
 	int result = pthread_mutexattr_destroy(&(*attr)->p);
 
 	delete *attr;
@@ -757,12 +759,10 @@ int KYTY_SYSV_ABI PthreadMutexDestroy(PthreadMutex* mutex)
 {
 	PRINT_NAME();
 
-	if (mutex == nullptr)
+	if (mutex == nullptr || *mutex == nullptr)
 	{
 		return KERNEL_ERROR_EINVAL;
 	}
-
-	EXIT_NOT_IMPLEMENTED(*mutex == nullptr);
 
 	int result = pthread_mutex_destroy(&(*mutex)->p);
 
@@ -906,6 +906,8 @@ int KYTY_SYSV_ABI PthreadAttrInit(PthreadAttr* attr)
 int KYTY_SYSV_ABI PthreadAttrDestroy(PthreadAttr* attr)
 {
 	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(attr == nullptr || *attr == nullptr);
 
 	int result = pthread_attr_destroy(&(*attr)->p);
 
@@ -1584,6 +1586,8 @@ int KYTY_SYSV_ABI PthreadRwlockattrDestroy(PthreadRwlockattr* attr)
 		return KERNEL_ERROR_EINVAL;
 	}
 
+	EXIT_NOT_IMPLEMENTED(*attr == nullptr);
+
 	int result = pthread_rwlockattr_destroy(&(*attr)->p);
 
 	delete *attr;
@@ -1650,6 +1654,8 @@ int KYTY_SYSV_ABI PthreadCondattrDestroy(PthreadCondattr* attr)
 	{
 		return KERNEL_ERROR_EINVAL;
 	}
+
+	EXIT_NOT_IMPLEMENTED(*attr == nullptr);
 
 	int result = pthread_condattr_destroy(&(*attr)->p);
 
@@ -2627,6 +2633,13 @@ int KYTY_SYSV_ABI pthread_setspecific(LibKernel::PthreadKey key, void* value)
 	PRINT_NAME();
 
 	return POSIX_PTHREAD_CALL(LibKernel::PthreadSetspecific(key, value));
+}
+
+void* KYTY_SYSV_ABI pthread_getspecific(LibKernel::PthreadKey key)
+{
+	PRINT_NAME();
+
+	return (LibKernel::PthreadGetspecific(key));
 }
 
 int KYTY_SYSV_ABI pthread_mutex_destroy(LibKernel::PthreadMutex* mutex)

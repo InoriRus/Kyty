@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -27,6 +27,12 @@
 #include "SDL_endian.h"
 #include "SDL_surface.h"
 
+/* pixman ARM blitters are 32 bit only : */
+#if defined(__aarch64__)||defined(_M_ARM64)
+#undef SDL_ARM_SIMD_BLITTERS
+#undef SDL_ARM_NEON_BLITTERS
+#endif
+
 /* Table to do pixel byte expansion */
 extern Uint8* SDL_expand_byte[9];
 
@@ -36,6 +42,7 @@ extern Uint8* SDL_expand_byte[9];
 #define SDL_COPY_BLEND              0x00000010
 #define SDL_COPY_ADD                0x00000020
 #define SDL_COPY_MOD                0x00000040
+#define SDL_COPY_MUL                0x00000080
 #define SDL_COPY_COLORKEY           0x00000100
 #define SDL_COPY_NEAREST            0x00000200
 #define SDL_COPY_RLE_DESIRED        0x00001000
@@ -262,18 +269,18 @@ do {                                                                    \
 {                                                                       \
     switch (bpp) {                                                      \
         case 1: {                                                       \
-            Uint8 _Pixel;                                               \
+            Uint8 _pixel;                                               \
                                                                         \
-            PIXEL_FROM_RGB(_Pixel, fmt, r, g, b);                       \
-            *((Uint8 *)(buf)) = _Pixel;                                 \
+            PIXEL_FROM_RGB(_pixel, fmt, r, g, b);                       \
+            *((Uint8 *)(buf)) = _pixel;                                 \
         }                                                               \
         break;                                                          \
                                                                         \
         case 2: {                                                       \
-            Uint16 _Pixel;                                              \
+            Uint16 _pixel;                                              \
                                                                         \
-            PIXEL_FROM_RGB(_Pixel, fmt, r, g, b);                       \
-            *((Uint16 *)(buf)) = _Pixel;                                \
+            PIXEL_FROM_RGB(_pixel, fmt, r, g, b);                       \
+            *((Uint16 *)(buf)) = _pixel;                                \
         }                                                               \
         break;                                                          \
                                                                         \
@@ -291,10 +298,10 @@ do {                                                                    \
         break;                                                          \
                                                                         \
         case 4: {                                                       \
-            Uint32 _Pixel;                                              \
+            Uint32 _pixel;                                              \
                                                                         \
-            PIXEL_FROM_RGB(_Pixel, fmt, r, g, b);                       \
-            *((Uint32 *)(buf)) = _Pixel;                                \
+            PIXEL_FROM_RGB(_pixel, fmt, r, g, b);                       \
+            *((Uint32 *)(buf)) = _pixel;                                \
         }                                                               \
         break;                                                          \
     }                                                                   \
@@ -472,14 +479,14 @@ do {                                                                    \
 #define DUFFS_LOOP8(pixel_copy_increment, width)                        \
 { int n = (width+7)/8;                                                  \
     switch (width & 7) {                                                \
-    case 0: do {    pixel_copy_increment; /* fallthrough */             \
-    case 7:     pixel_copy_increment;     /* fallthrough */             \
-    case 6:     pixel_copy_increment;     /* fallthrough */             \
-    case 5:     pixel_copy_increment;     /* fallthrough */             \
-    case 4:     pixel_copy_increment;     /* fallthrough */             \
-    case 3:     pixel_copy_increment;     /* fallthrough */             \
-    case 2:     pixel_copy_increment;     /* fallthrough */             \
-    case 1:     pixel_copy_increment;     /* fallthrough */             \
+    case 0: do {    pixel_copy_increment; SDL_FALLTHROUGH;              \
+    case 7:     pixel_copy_increment;     SDL_FALLTHROUGH;              \
+    case 6:     pixel_copy_increment;     SDL_FALLTHROUGH;              \
+    case 5:     pixel_copy_increment;     SDL_FALLTHROUGH;              \
+    case 4:     pixel_copy_increment;     SDL_FALLTHROUGH;              \
+    case 3:     pixel_copy_increment;     SDL_FALLTHROUGH;              \
+    case 2:     pixel_copy_increment;     SDL_FALLTHROUGH;              \
+    case 1:     pixel_copy_increment;                                   \
         } while ( --n > 0 );                                            \
     }                                                                   \
 }
@@ -488,10 +495,10 @@ do {                                                                    \
 #define DUFFS_LOOP4(pixel_copy_increment, width)                        \
 { int n = (width+3)/4;                                                  \
     switch (width & 3) {                                                \
-    case 0: do {    pixel_copy_increment;   /* fallthrough */           \
-    case 3:     pixel_copy_increment;       /* fallthrough */           \
-    case 2:     pixel_copy_increment;       /* fallthrough */           \
-    case 1:     pixel_copy_increment;       /* fallthrough */           \
+    case 0: do {    pixel_copy_increment;   SDL_FALLTHROUGH;            \
+    case 3:     pixel_copy_increment;       SDL_FALLTHROUGH;            \
+    case 2:     pixel_copy_increment;       SDL_FALLTHROUGH;            \
+    case 1:     pixel_copy_increment;                                   \
         } while (--n > 0);                                              \
     }                                                                   \
 }

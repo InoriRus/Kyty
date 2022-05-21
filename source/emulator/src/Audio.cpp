@@ -65,6 +65,7 @@ public:
 	KYTY_CLASS_NO_COPY(Audio);
 
 	Id       AudioOutOpen(int type, uint32_t samples_num, uint32_t freq, Format format);
+	bool     AudioOutClose(Id handle);
 	bool     AudioOutValid(Id handle);
 	bool     AudioOutSetVolume(Id handle, uint32_t bitflag, const int* volume);
 	uint32_t AudioOutOutputs(OutputParam* params, uint32_t num);
@@ -159,6 +160,19 @@ Audio::Id Audio::AudioOutOpen(int type, uint32_t samples_num, uint32_t freq, For
 	return Id::Invalid();
 }
 
+bool Audio::AudioOutClose(Id handle)
+{
+	Core::LockGuard lock(m_mutex);
+
+	if (AudioOutValid(handle))
+	{
+		m_out_ports[handle.GetId()].used = false;
+		return true;
+	}
+
+	return false;
+}
+
 bool Audio::AudioOutValid(Id handle)
 {
 	Core::LockGuard lock(m_mutex);
@@ -211,7 +225,7 @@ uint32_t Audio::AudioOutOutputs(OutputParam* params, uint32_t num)
 
 	const auto& first_port = m_out_ports[params[0].handle.GetId()];
 
-	uint64_t block_time   = (1000000 * first_port.samples_num) / first_port.freq;
+	uint64_t block_time   = (params->data != nullptr ? (1000000 * first_port.samples_num) / first_port.freq : 0);
 	uint64_t current_time = LibKernel::KernelGetProcessTime();
 
 	uint64_t max_wait_time = 0;
@@ -354,6 +368,18 @@ int KYTY_SYSV_ABI AudioOutOpen(int user_id, int type, int index, uint32_t len, u
 	return id.ToInt();
 }
 
+int KYTY_SYSV_ABI AudioOutClose(int handle)
+{
+	PRINT_NAME();
+
+	if (!g_audio->AudioOutClose(Audio::Id(handle)))
+	{
+		return AUDIO_OUT_ERROR_INVALID_PORT;
+	}
+
+	return OK;
+}
+
 int KYTY_SYSV_ABI AudioOutSetVolume(int handle, uint32_t flag, int* vol)
 {
 	PRINT_NAME();
@@ -399,6 +425,29 @@ int KYTY_SYSV_ABI AudioOutOutputs(AudioOutOutputParam* param, uint32_t num)
 	}
 
 	return static_cast<int>(g_audio->AudioOutOutputs(params, num));
+}
+
+int KYTY_SYSV_ABI AudioOutOutput(int handle, const void* ptr)
+{
+	PRINT_NAME();
+
+	printf("\t handle = %d\n", handle);
+
+	// EXIT_NOT_IMPLEMENTED(ptr == nullptr);
+
+	Audio::OutputParam params[1];
+
+	EXIT_IF(g_audio == nullptr);
+
+	params[0].handle = Audio::Id(handle);
+	params[0].data   = ptr;
+
+	if (!g_audio->AudioOutValid(params[0].handle))
+	{
+		return AUDIO_OUT_ERROR_INVALID_PORT;
+	}
+
+	return static_cast<int>(g_audio->AudioOutOutputs(params, 1));
 }
 
 } // namespace AudioOut
@@ -497,7 +546,427 @@ int KYTY_SYSV_ABI AjmInitialize(int64_t reserved, uint32_t* context)
 	return OK;
 }
 
+int KYTY_SYSV_ABI AjmModuleRegister(uint32_t context, uint32_t codec, int64_t reserved)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(context != 1);
+	EXIT_NOT_IMPLEMENTED(reserved != 0);
+
+	printf("\t codec = %u\n", codec);
+
+	switch (codec)
+	{
+		case 1: printf("\t %s\n", "ATRAC9 decoder"); break;
+		case 2: printf("\t %s\n", "MPEG4-AAC decoder"); break;
+		case 0: printf("\t %s\n", "MP3 decoder"); break;
+		case 4: printf("\t %s\n", "CELP8 encoder"); break;
+		case 3: printf("\t %s\n", "CELP8 decoder"); break;
+		case 13: printf("\t %s\n", "CELP16 encoder"); break;
+		case 12: printf("\t %s\n", "CELP16 decoder"); break;
+		default: EXIT("unknown codec\n");
+	}
+
+	return OK;
+}
+
 } // namespace Ajm
+
+namespace AvPlayer {
+
+LIB_NAME("AvPlayer", "AvPlayer");
+
+using AvPlayerAllocate          = KYTY_SYSV_ABI void* (*)(void*, uint32_t, uint32_t);
+using AvPlayerDeallocate        = KYTY_SYSV_ABI void (*)(void*, void*);
+using AvPlayerAllocateTexture   = KYTY_SYSV_ABI void* (*)(void*, uint32_t, uint32_t);
+using AvPlayerDeallocateTexture = KYTY_SYSV_ABI void (*)(void*, void*);
+using AvPlayerOpenFile          = KYTY_SYSV_ABI int (*)(void*, const char*);
+using AvPlayerCloseFile         = KYTY_SYSV_ABI int (*)(void*);
+using AvPlayerReadOffsetFile    = KYTY_SYSV_ABI int (*)(void*, uint8_t*, uint64_t, uint32_t);
+using AvPlayerSizeFile          = KYTY_SYSV_ABI uint64_t (*)(void*);
+using AvPlayerEventCallback     = KYTY_SYSV_ABI void (*)(void*, int32_t, int32_t, void*);
+
+struct AvPlayerMemAllocator
+{
+	void*                     object_pointer     = nullptr;
+	AvPlayerAllocate          allocate           = nullptr;
+	AvPlayerDeallocate        deallocate         = nullptr;
+	AvPlayerAllocateTexture   allocate_texture   = nullptr;
+	AvPlayerDeallocateTexture deallocate_texture = nullptr;
+};
+
+struct AvPlayerFileReplacement
+{
+	void*                  object_pointer = nullptr;
+	AvPlayerOpenFile       open           = nullptr;
+	AvPlayerCloseFile      close          = nullptr;
+	AvPlayerReadOffsetFile read_offset    = nullptr;
+	AvPlayerSizeFile       size           = nullptr;
+};
+
+struct AvPlayerEventReplacement
+{
+	void*                 object_pointer = nullptr;
+	AvPlayerEventCallback event_callback = nullptr;
+};
+
+enum AvPlayerDebuglevels
+{
+	AvplayerDbgNone,
+	AvplayerDbgInfo,
+	AvplayerDbgWarnings,
+	AvplayerDbgAll
+};
+
+struct AvPlayerInitData
+{
+	AvPlayerMemAllocator     memory_replacement;
+	AvPlayerFileReplacement  file_replacement;
+	AvPlayerEventReplacement event_replacement;
+	AvPlayerDebuglevels      debug_level                   = AvPlayerDebuglevels::AvplayerDbgNone;
+	uint32_t                 base_priority                 = 0;
+	int32_t                  num_output_video_framebuffers = 0;
+	Bool                     auto_start                    = 0;
+	uint8_t                  reserved[3]                   = {};
+	const char*              default_language              = nullptr;
+};
+
+struct AvPlayerAudioEx
+{
+	uint16_t channel_count;
+	uint8_t  reserved[2];
+	uint32_t sample_rate;
+	uint32_t size;
+	uint8_t  language_code[4];
+	uint8_t  reserved1[64];
+};
+
+struct AvPlayerVideoEx
+{
+	uint32_t width;
+	uint32_t height;
+	float    aspect_ratio;
+	uint8_t  language_code[4];
+	uint32_t framerate;
+	uint32_t crop_left_offset;
+	uint32_t crop_right_offset;
+	uint32_t crop_top_offset;
+	uint32_t crop_bottom_offset;
+	uint32_t pitch;
+	uint8_t  luma_bit_depth;
+	uint8_t  chroma_bit_depth;
+	Bool     video_full_tange_flag;
+	uint8_t  reserved1[37];
+};
+
+struct AvPlayerTimedTextEx
+{
+	uint8_t language_code[4];
+	uint8_t reserved[12];
+	uint8_t reserved1[64];
+};
+
+union AvPlayerStreamDetailsEx
+{
+	AvPlayerAudioEx     audio;
+	AvPlayerVideoEx     video;
+	AvPlayerTimedTextEx subs;
+	uint8_t             reserved1[80];
+};
+
+struct AvPlayerFrameInfoEx
+{
+	void*                   data;
+	uint8_t                 reserved[4];
+	uint64_t                time_stamp;
+	AvPlayerStreamDetailsEx details;
+};
+
+struct AvPlayerInternal
+{
+	String               filename;
+	bool                 loop = false;
+	AvPlayerMemAllocator mem;
+	Core::Mutex          mutex;
+	void*                fake_frame        = nullptr;
+	uint32_t             fake_width        = 0;
+	uint32_t             fake_height       = 0;
+	float                fake_frame_rate   = 0.0f;
+	uint32_t             fake_frame_num    = 0;
+	uint32_t             fake_obtained_num = 0;
+};
+
+static void rgb_to_yuv(float r, float g, float b, uint8_t* y, uint8_t* u, uint8_t* v)
+{
+	int yf = static_cast<int>(16.0f + 65.481f * r + 128.553f * g + 24.966f * b);
+	int uf = static_cast<int>(128.0f + -37.797f * r + -74.203f * g + 112.0f * b);
+	int vf = static_cast<int>(128.0f + 112.0f * r + -93.786f * g + -18.214f * b);
+	*y     = (yf < 0 ? 0 : (yf > 255 ? 255 : yf));
+	*u     = (uf < 0 ? 0 : (uf > 255 ? 255 : uf));
+	*v     = (vf < 0 ? 0 : (vf > 255 ? 255 : vf));
+}
+
+static void draw_fake_frame(uint32_t width, uint32_t height, void* data, float l)
+{
+	constexpr int STRIPS_NUM = 5;
+
+	uint32_t luma_width        = width;
+	uint32_t luma_height       = height;
+	uint32_t chroma_width      = luma_width / 2;
+	uint32_t chroma_height     = luma_height / 2;
+	auto*    buffer            = static_cast<uint8_t*>(data);
+	auto*    luma              = buffer;
+	auto*    chroma            = buffer + luma_width * luma_height;
+	uint32_t luma_strip_size   = luma_height / STRIPS_NUM;
+	uint32_t chroma_strip_size = chroma_height / STRIPS_NUM;
+
+	uint8_t color[STRIPS_NUM][3] = {};
+
+	rgb_to_yuv(l, 0, 0, &color[0][0], &color[0][1], &color[0][2]);
+	rgb_to_yuv(0, l, 0, &color[1][0], &color[1][1], &color[1][2]);
+	rgb_to_yuv(0, 0, l, &color[2][0], &color[2][1], &color[2][2]);
+	rgb_to_yuv(0, 0, 0, &color[3][0], &color[3][1], &color[3][2]);
+	rgb_to_yuv(l, l, l, &color[4][0], &color[4][1], &color[4][2]);
+
+	for (uint32_t y = 0; y < luma_strip_size; y++)
+	{
+		for (uint32_t x = 0; x < luma_width; x++)
+		{
+			for (int si = 0; si < STRIPS_NUM; si++)
+			{
+				luma[(y + luma_strip_size * si) * luma_width + x] = color[si][0];
+			}
+		}
+	}
+	for (uint32_t y = 0; y < chroma_strip_size; y++)
+	{
+		for (uint32_t x = 0; x < chroma_width; x++)
+		{
+			for (int si = 0; si < STRIPS_NUM; si++)
+			{
+				chroma[(y + chroma_strip_size * si) * chroma_width * 2 + x * 2 + 0] = color[si][1];
+				chroma[(y + chroma_strip_size * si) * chroma_width * 2 + x * 2 + 1] = color[si][2];
+			}
+		}
+	}
+}
+
+static void create_fake_video(AvPlayerInternal* r)
+{
+	uint32_t luma_width    = 1920;
+	uint32_t luma_height   = 1080;
+	uint32_t chroma_width  = luma_width / 2;
+	uint32_t chroma_height = luma_height / 2;
+	uint32_t size          = luma_width * luma_height + chroma_width * chroma_height * 2;
+	auto*    buffer        = static_cast<uint8_t*>(r->mem.allocate_texture(r->mem.object_pointer, 256, size));
+
+	r->fake_frame        = buffer;
+	r->fake_width        = luma_width;
+	r->fake_height       = luma_height;
+	r->fake_frame_rate   = 59.94f;
+	r->fake_frame_num    = 90;
+	r->fake_obtained_num = 0;
+}
+
+static void delete_fake_video(AvPlayerInternal* r)
+{
+	r->mem.deallocate_texture(r->mem.object_pointer, r->fake_frame);
+	r->fake_frame        = nullptr;
+	r->fake_width        = 0;
+	r->fake_height       = 0;
+	r->fake_frame_rate   = 0.0f;
+	r->fake_frame_num    = 0;
+	r->fake_obtained_num = 0;
+}
+
+static bool get_fake_video(AvPlayerInternal* r, AvPlayerFrameInfoEx* info)
+{
+	if (r->fake_obtained_num < r->fake_frame_num)
+	{
+		info->data       = r->fake_frame;
+		info->time_stamp = static_cast<uint64_t>(1000.0f * (static_cast<float>(r->fake_obtained_num) / r->fake_frame_rate));
+
+		info->details.video.width                 = r->fake_width;
+		info->details.video.height                = r->fake_height;
+		info->details.video.aspect_ratio          = static_cast<float>(r->fake_width) / static_cast<float>(r->fake_height);
+		info->details.video.language_code[0]      = 'e';
+		info->details.video.language_code[1]      = 'n';
+		info->details.video.language_code[2]      = 'g';
+		info->details.video.language_code[3]      = '\0';
+		info->details.video.framerate             = 0;
+		info->details.video.crop_left_offset      = 0;
+		info->details.video.crop_right_offset     = 0;
+		info->details.video.crop_top_offset       = 0;
+		info->details.video.crop_bottom_offset    = 0;
+		info->details.video.pitch                 = r->fake_width;
+		info->details.video.luma_bit_depth        = 8;
+		info->details.video.chroma_bit_depth      = 8;
+		info->details.video.video_full_tange_flag = 0;
+
+		float pos   = static_cast<float>(r->fake_obtained_num) / static_cast<float>(r->fake_frame_num);
+		float level = 1.0f;
+
+		if (pos < 0.2f)
+		{
+			level = pos * pos * ((1.0f / 0.2f) * (1.0f / 0.2f));
+		} else if (pos > 0.5f)
+		{
+			level = 1.0f - (1.0f - pos * (1.0f / 0.5f)) * (1.0f - pos * (1.0f / 0.5f));
+		}
+
+		draw_fake_frame(r->fake_width, r->fake_height, r->fake_frame, level * 0.7f);
+
+		r->fake_obtained_num++;
+		return true;
+	}
+	return false;
+}
+
+static bool fake_is_playing(AvPlayerInternal* r)
+{
+	return r->fake_obtained_num < r->fake_frame_num;
+}
+
+AvPlayerInternal* KYTY_SYSV_ABI AvPlayerInit(AvPlayerInitData* init)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(init == nullptr);
+
+	printf("\t memory_replacement.object_pointer     = %016" PRIx64 "\n",
+	       reinterpret_cast<uint64_t>(init->memory_replacement.object_pointer));
+	printf("\t memory_replacement.allocate           = %016" PRIx64 "\n", reinterpret_cast<uint64_t>(init->memory_replacement.allocate));
+	printf("\t memory_replacement.deallocate         = %016" PRIx64 "\n", reinterpret_cast<uint64_t>(init->memory_replacement.deallocate));
+	printf("\t memory_replacement.allocate_texture   = %016" PRIx64 "\n",
+	       reinterpret_cast<uint64_t>(init->memory_replacement.allocate_texture));
+	printf("\t memory_replacement.deallocate_texture = %016" PRIx64 "\n",
+	       reinterpret_cast<uint64_t>(init->memory_replacement.deallocate_texture));
+	printf("\t file_replacement.object_pointer       = %016" PRIx64 "\n",
+	       reinterpret_cast<uint64_t>(init->file_replacement.object_pointer));
+	printf("\t file_replacement.open                 = %016" PRIx64 "\n", reinterpret_cast<uint64_t>(init->file_replacement.open));
+	printf("\t file_replacement.close                = %016" PRIx64 "\n", reinterpret_cast<uint64_t>(init->file_replacement.close));
+	printf("\t file_replacement.read_offset          = %016" PRIx64 "\n", reinterpret_cast<uint64_t>(init->file_replacement.read_offset));
+	printf("\t file_replacement.size                 = %016" PRIx64 "\n", reinterpret_cast<uint64_t>(init->file_replacement.size));
+	printf("\t event_replacement.object_pointer      = %016" PRIx64 "\n",
+	       reinterpret_cast<uint64_t>(init->event_replacement.object_pointer));
+	printf("\t event_replacement.event_callback      = %016" PRIx64 "\n",
+	       reinterpret_cast<uint64_t>(init->event_replacement.event_callback));
+	printf("\t debug_level                           = %s\n", Core::EnumName(init->debug_level).C_Str());
+	printf("\t num_output_video_framebuffers         = %d\n", init->num_output_video_framebuffers);
+	printf("\t base_priority                         = %u\n", init->base_priority);
+	printf("\t auto_start                            = %u\n", init->auto_start);
+	printf("\t default_language                      = %s\n", init->default_language == nullptr ? "(null)" : init->default_language);
+
+	auto* r = new AvPlayerInternal;
+
+	EXIT_NOT_IMPLEMENTED(init->auto_start != 0);
+	EXIT_NOT_IMPLEMENTED(init->file_replacement.object_pointer != nullptr);
+	EXIT_NOT_IMPLEMENTED(init->file_replacement.open != nullptr);
+	EXIT_NOT_IMPLEMENTED(init->file_replacement.close != nullptr);
+	EXIT_NOT_IMPLEMENTED(init->file_replacement.read_offset != nullptr);
+	EXIT_NOT_IMPLEMENTED(init->file_replacement.size != nullptr);
+	EXIT_NOT_IMPLEMENTED(init->event_replacement.object_pointer != nullptr);
+	EXIT_NOT_IMPLEMENTED(init->event_replacement.event_callback != nullptr);
+
+	r->mem = init->memory_replacement;
+
+	create_fake_video(r);
+
+	return r;
+}
+
+int KYTY_SYSV_ABI AvPlayerAddSource(AvPlayerInternal* h, const char* filename)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(h == nullptr);
+
+	printf("\t filename = %s\n", filename);
+
+	Core::LockGuard lock(h->mutex);
+
+	h->filename = filename;
+
+	return 0;
+}
+
+int KYTY_SYSV_ABI AvPlayerSetLooping(AvPlayerInternal* h, Bool loop)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(h == nullptr);
+
+	printf("\t loop = %u\n", loop);
+
+	Core::LockGuard lock(h->mutex);
+
+	h->loop = (loop != 0);
+
+	return 0;
+}
+
+Bool KYTY_SYSV_ABI AvPlayerGetVideoDataEx(AvPlayerInternal* h, AvPlayerFrameInfoEx* video_info)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(h == nullptr);
+	EXIT_NOT_IMPLEMENTED(video_info == nullptr);
+
+	Core::LockGuard lock(h->mutex);
+
+	EXIT_NOT_IMPLEMENTED(h->loop);
+
+	if (get_fake_video(h, video_info))
+	{
+		return 1; // true
+	}
+
+	return 0; // false
+}
+
+Bool KYTY_SYSV_ABI AvPlayerGetAudioData(AvPlayerInternal* h, AvPlayerFrameInfo* audio_info)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(h == nullptr);
+	EXIT_NOT_IMPLEMENTED(audio_info == nullptr);
+
+	return 0; // false
+}
+
+Bool KYTY_SYSV_ABI AvPlayerIsActive(AvPlayerInternal* h)
+{
+	PRINT_NAME();
+
+	if (h != nullptr)
+	{
+		Core::LockGuard lock(h->mutex);
+
+		EXIT_NOT_IMPLEMENTED(h->loop);
+
+		if (fake_is_playing(h))
+		{
+			return 1; // true
+		}
+	}
+
+	return 0; // false
+}
+
+int KYTY_SYSV_ABI AvPlayerClose(AvPlayerInternal* h)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(h == nullptr);
+
+	delete_fake_video(h);
+
+	delete h;
+
+	return 0;
+}
+
+} // namespace AvPlayer
 
 } // namespace Kyty::Libs::Audio
 

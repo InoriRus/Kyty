@@ -11,6 +11,7 @@
 namespace Kyty::Libs::Graphics {
 
 class CommandBuffer;
+class CommandProcessor;
 struct GraphicContext;
 struct VulkanMemory;
 struct VulkanBuffer;
@@ -60,10 +61,11 @@ public:
 	                                VulkanMemory* mem);
 	using create_from_objects_func_t = void* (*)(GraphicContext* ctx, CommandBuffer* buffer, const uint64_t* params,
 	                                             GpuMemoryScenario scenario, const Vector<GpuMemoryObject>& objects, VulkanMemory* mem);
-	using write_back_func_t          = void (*)(GraphicContext* ctx, void* obj, const uint64_t* vaddr, const uint64_t* size, int vaddr_num);
-	using delete_func_t              = void (*)(GraphicContext* ctx, void* obj, VulkanMemory* mem);
-	using update_func_t = void (*)(GraphicContext* ctx, const uint64_t* params, void* obj, const uint64_t* vaddr, const uint64_t* size,
-	                               int vaddr_num);
+	using write_back_func_t = void (*)(GraphicContext* ctx, const uint64_t* params, void* obj, const uint64_t* vaddr, const uint64_t* size,
+	                                   int vaddr_num);
+	using delete_func_t     = void (*)(GraphicContext* ctx, void* obj, VulkanMemory* mem);
+	using update_func_t     = void (*)(GraphicContext* ctx, const uint64_t* params, void* obj, const uint64_t* vaddr, const uint64_t* size,
+                                   int vaddr_num);
 
 	static constexpr int PARAMS_MAX = 8;
 
@@ -95,11 +97,12 @@ void* GpuMemoryCreateObject(uint64_t submit_id, GraphicContext* ctx, CommandBuff
                             const GpuObject& info);
 void* GpuMemoryCreateObject(uint64_t submit_id, GraphicContext* ctx, CommandBuffer* buffer, const uint64_t* vaddr, const uint64_t* size,
                             int vaddr_num, const GpuObject& info);
-void  GpuMemoryResetHash(GraphicContext* ctx, const uint64_t* vaddr, const uint64_t* size, int vaddr_num, GpuMemoryObjectType type);
+void  GpuMemoryResetHash(const uint64_t* vaddr, const uint64_t* size, int vaddr_num, GpuMemoryObjectType type);
 void  GpuMemoryDbgDump();
-void  GpuMemoryFlush(GraphicContext* ctx);
+void  GpuMemoryFlush(GraphicContext* ctx, uint64_t vaddr, uint64_t size);
+void  GpuMemoryFlushAll(GraphicContext* ctx);
 void  GpuMemoryFrameDone();
-void  GpuMemoryWriteBack(GraphicContext* ctx);
+void  GpuMemoryWriteBack(GraphicContext* ctx, CommandProcessor* cp);
 bool  GpuMemoryCheckAccessViolation(uint64_t vaddr, uint64_t size);
 bool  GpuMemoryWatcherEnabled();
 

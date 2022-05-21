@@ -196,9 +196,9 @@ void MainDialogPrivate::FindInterpreter()
 	bool  con_emu = console.exists();
 
 	m_ui->radioButton_Cmd->setEnabled(true);
-	m_ui->radioButton_Cmd->setChecked(!con_emu);
+	m_ui->radioButton_Cmd->setChecked(true);
 	m_ui->radioButton_ConEmu->setEnabled(con_emu);
-	m_ui->radioButton_ConEmu->setChecked(con_emu);
+	m_ui->radioButton_ConEmu->setChecked(false);
 
 	Update();
 }

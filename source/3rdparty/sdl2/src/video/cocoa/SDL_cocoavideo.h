@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -112,6 +112,11 @@ typedef struct SDL_VideoData
 
 /* Utility functions */
 extern NSImage * Cocoa_CreateImage(SDL_Surface * surface);
+
+/* Fix build with the 10.11 SDK */
+#if MAC_OS_X_VERSION_MAX_ALLOWED < 101200
+#define NSEventSubtypeMouseEvent NSMouseEventSubtype
+#endif
 
 #endif /* SDL_cocoavideo_h_ */
 

@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -45,17 +45,6 @@ typedef enum
     SDL_UDEV_DEVICEADDED = 1,
     SDL_UDEV_DEVICEREMOVED
 } SDL_UDEV_deviceevent;
-
-/* A device can be any combination of these classes */
-typedef enum
-{
-    SDL_UDEV_DEVICE_UNKNOWN     = 0x0000,
-    SDL_UDEV_DEVICE_MOUSE       = 0x0001,
-    SDL_UDEV_DEVICE_KEYBOARD    = 0x0002,
-    SDL_UDEV_DEVICE_JOYSTICK    = 0x0004,
-    SDL_UDEV_DEVICE_SOUND       = 0x0008,
-    SDL_UDEV_DEVICE_TOUCHSCREEN = 0x0010
-} SDL_UDEV_deviceclass;
 
 typedef void (*SDL_UDEV_Callback)(SDL_UDEV_deviceevent udev_type, int udev_class, const char *devpath);
 
@@ -112,6 +101,7 @@ extern void SDL_UDEV_UnloadLibrary(void);
 extern int SDL_UDEV_LoadLibrary(void);
 extern void SDL_UDEV_Poll(void);
 extern void SDL_UDEV_Scan(void);
+extern SDL_bool SDL_UDEV_GetProductInfo(const char *device_path, Uint16 *vendor, Uint16 *product, Uint16 *version);
 extern int SDL_UDEV_AddCallback(SDL_UDEV_Callback cb);
 extern void SDL_UDEV_DelCallback(SDL_UDEV_Callback cb);
 extern const SDL_UDEV_Symbols *SDL_UDEV_GetUdevSyms(void);

@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -18,19 +18,18 @@
      misrepresented as being the original software.
   3. This notice may not be removed or altered from any source distribution.
 */
-
-
 #include "../../SDL_internal.h"
 
 #if SDL_VIDEO_DRIVER_EMSCRIPTEN
 
 #include <emscripten/emscripten.h>
 #include <emscripten/html5.h>
+#include <emscripten/threading.h>
 
 #include "SDL_emscriptenmouse.h"
+#include "SDL_emscriptenvideo.h"
 
 #include "../../events/SDL_mouse_c.h"
-#include "SDL_assert.h"
 
 static SDL_Cursor*
 Emscripten_CreateCursorFromString(const char* cursor_str, SDL_bool is_custom)
@@ -64,19 +63,10 @@ Emscripten_CreateDefaultCursor()
     return Emscripten_CreateCursorFromString("default", SDL_FALSE);
 }
 
-static SDL_Cursor*
-Emscripten_CreateCursor(SDL_Surface* surface, int hot_x, int hot_y)
+static const char*
+Emscripten_GetCursorUrl(int w, int h, int hot_x, int hot_y, void* pixels)
 {
-    const char *cursor_url = NULL;
-    SDL_Surface *conv_surf;
-
-    conv_surf = SDL_ConvertSurfaceFormat(surface, SDL_PIXELFORMAT_ABGR8888, 0);
-
-    if (!conv_surf) {
-        return NULL;
-    }
-
-    cursor_url = (const char *)EM_ASM_INT({
+    return (const char *)EM_ASM_INT({
         var w = $0;
         var h = $1;
         var hot_x = $2;
@@ -124,7 +114,40 @@ Emscripten_CreateCursor(SDL_Surface* surface, int hot_x, int hot_y)
         stringToUTF8(url, urlBuf, url.length + 1);
 
         return urlBuf;
-    }, surface->w, surface->h, hot_x, hot_y, conv_surf->pixels);
+    }, w, h, hot_x, hot_y, pixels);
+}
+
+static SDL_Cursor*
+Emscripten_CreateCursor(SDL_Surface* surface, int hot_x, int hot_y)
+{
+    const char *cursor_url = NULL;
+    SDL_Surface *conv_surf;
+
+    conv_surf = SDL_ConvertSurfaceFormat(surface, SDL_PIXELFORMAT_ABGR8888, 0);
+
+    if (!conv_surf) {
+        return NULL;
+    }
+
+    if (emscripten_is_main_runtime_thread()) {
+        cursor_url = Emscripten_GetCursorUrl(
+            surface->w,
+            surface->h,
+            hot_x,
+            hot_y,
+            conv_surf->pixels
+        );
+    } else {
+        cursor_url = (const char *)emscripten_sync_run_in_main_runtime_thread(
+            EM_FUNC_SIG_IIIIIII,
+            Emscripten_GetCursorUrl,
+            surface->w,
+            surface->h,
+            hot_x,
+            hot_y,
+            conv_surf->pixels
+        );
+    }
 
     SDL_FreeSurface(conv_surf);
 
@@ -208,16 +231,15 @@ Emscripten_ShowCursor(SDL_Cursor* cursor)
             curdata = (Emscripten_CursorData *) cursor->driverdata;
 
             if(curdata->system_cursor) {
-                EM_ASM_INT({
+                MAIN_THREAD_EM_ASM({
                     if (Module['canvas']) {
-                        Module['canvas'].style['cursor'] = Module['Pointer_stringify']($0);
+                        Module['canvas'].style['cursor'] = UTF8ToString($0);
                     }
-                    return 0;
                 }, curdata->system_cursor);
             }
         }
         else {
-            EM_ASM(
+            MAIN_THREAD_EM_ASM(
                 if (Module['canvas']) {
                     Module['canvas'].style['cursor'] = 'none';
                 }
@@ -236,9 +258,19 @@ Emscripten_WarpMouse(SDL_Window* window, int x, int y)
 static int
 Emscripten_SetRelativeMouseMode(SDL_bool enabled)
 {
+    SDL_Window *window;
+    SDL_WindowData *window_data;
+
     /* TODO: pointer lock isn't actually enabled yet */
     if(enabled) {
-        if(emscripten_request_pointerlock(NULL, 1) >= EMSCRIPTEN_RESULT_SUCCESS) {
+        window = SDL_GetMouseFocus();
+        if (window == NULL) {
+            return -1;
+        }
+
+        window_data = (SDL_WindowData *) window->driverdata;
+
+        if(emscripten_request_pointerlock(window_data->canvas_id, 1) >= EMSCRIPTEN_RESULT_SUCCESS) {
             return 0;
         }
     } else {

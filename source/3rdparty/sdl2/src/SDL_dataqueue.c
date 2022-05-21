@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -18,11 +18,10 @@
      misrepresented as being the original software.
   3. This notice may not be removed or altered from any source distribution.
 */
-
 #include "./SDL_internal.h"
+
 #include "SDL.h"
 #include "./SDL_dataqueue.h"
-#include "SDL_assert.h"
 
 typedef struct SDL_DataQueuePacket
 {
@@ -122,7 +121,7 @@ SDL_ClearDataQueue(SDL_DataQueue *queue, const size_t slack)
     queue->queued_bytes = 0;
     queue->pool = packet;
 
-    /* Optionally keep some slack in the pool to reduce malloc pressure. */
+    /* Optionally keep some slack in the pool to reduce memory allocation pressure. */
     for (i = 0; packet && (i < slackpackets); i++) {
         prev = packet;
         packet = packet->next;

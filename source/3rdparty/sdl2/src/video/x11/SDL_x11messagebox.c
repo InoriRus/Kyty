@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -26,7 +26,6 @@
 #include "SDL.h"
 #include "SDL_x11video.h"
 #include "SDL_x11dyn.h"
-#include "SDL_assert.h"
 #include "SDL_x11messagebox.h"
 
 #include <X11/keysym.h>
@@ -246,7 +245,7 @@ X11_MessageBoxInitPositions( SDL_MessageBoxDataX11 *data )
     const SDL_MessageBoxData *messageboxdata = data->messageboxdata;
 
     /* Go over text and break linefeeds into separate lines. */
-    if ( messageboxdata->message && messageboxdata->message[ 0 ] ) {
+    if ( messageboxdata->message[0] ) {
         const char *text = messageboxdata->message;
         const int linecount = CountLinesOfText(text);
         TextLineData *plinedata = (TextLineData *) SDL_malloc(sizeof (TextLineData) * linecount);
@@ -334,7 +333,11 @@ X11_MessageBoxInitPositions( SDL_MessageBoxDataX11 *data )
         data->dialog_height = IntMax( data->dialog_height, ybuttons + 2 * button_height );
 
         /* Location for first button. */
-        x = ( data->dialog_width - width_of_buttons ) / 2;
+        if ( messageboxdata->flags & SDL_MESSAGEBOX_BUTTONS_RIGHT_TO_LEFT ) {
+            x = data->dialog_width - ( data->dialog_width - width_of_buttons ) / 2 - ( button_width + button_spacing );
+        } else {
+            x = ( data->dialog_width - width_of_buttons ) / 2;
+        }
         y = ybuttons + ( data->dialog_height - ybuttons - button_height ) / 2;
 
         for ( i = 0; i < data->numbuttons; i++ ) {
@@ -349,7 +352,11 @@ X11_MessageBoxInitPositions( SDL_MessageBoxDataX11 *data )
             data->buttonpos[ i ].y = y + ( button_height - button_text_height - 1 ) / 2 + button_text_height;
 
             /* Scoot over for next button. */
-            x += button_width + button_spacing;
+            if ( messageboxdata->flags & SDL_MESSAGEBOX_BUTTONS_RIGHT_TO_LEFT ) {
+                x -= button_width + button_spacing;
+            } else {
+                x += button_width + button_spacing;
+            }
         }
     }
 
@@ -397,11 +404,10 @@ X11_MessageBoxCreateWindow( SDL_MessageBoxDataX11 *data )
     int x, y;
     XSizeHints *sizehints;
     XSetWindowAttributes wnd_attr;
-    Atom _NET_WM_WINDOW_TYPE, _NET_WM_WINDOW_TYPE_DIALOG, _NET_WM_NAME;
+    Atom _NET_WM_WINDOW_TYPE, _NET_WM_WINDOW_TYPE_DIALOG;
     Display *display = data->display;
     SDL_WindowData *windowdata = NULL;
     const SDL_MessageBoxData *messageboxdata = data->messageboxdata;
-    char *title_locale = NULL;
 
     if ( messageboxdata->window ) {
         SDL_DisplayData *displaydata =
@@ -428,36 +434,24 @@ X11_MessageBoxCreateWindow( SDL_MessageBoxDataX11 *data )
     }
 
     if ( windowdata ) {
+        Atom _NET_WM_STATE = X11_XInternAtom(display, "_NET_WM_STATE", False);
+        Atom stateatoms[16];
+        size_t statecount = 0;
+        /* Set some message-boxy window states when attached to a parent window... */
+        /* we skip the taskbar since this will pop to the front when the parent window is clicked in the taskbar, etc */
+        stateatoms[statecount++] = X11_XInternAtom(display, "_NET_WM_STATE_SKIP_TASKBAR", False);
+        stateatoms[statecount++] = X11_XInternAtom(display, "_NET_WM_STATE_SKIP_PAGER", False);
+        stateatoms[statecount++] = X11_XInternAtom(display, "_NET_WM_STATE_FOCUSED", False);
+        stateatoms[statecount++] = X11_XInternAtom(display, "_NET_WM_STATE_MODAL", False);
+        SDL_assert(statecount <= SDL_arraysize(stateatoms));
+        X11_XChangeProperty(display, data->window, _NET_WM_STATE, XA_ATOM, 32,
+                            PropModeReplace, (unsigned char *)stateatoms, statecount);
+
         /* http://tronche.com/gui/x/icccm/sec-4.html#WM_TRANSIENT_FOR */
         X11_XSetTransientForHint( display, data->window, windowdata->xwindow );
     }
 
-    X11_XStoreName( display, data->window, messageboxdata->title );
-    _NET_WM_NAME = X11_XInternAtom(display, "_NET_WM_NAME", False);
-
-    title_locale = SDL_iconv_utf8_locale(messageboxdata->title);
-    if (title_locale) {
-        XTextProperty titleprop;
-        Status status = X11_XStringListToTextProperty(&title_locale, 1, &titleprop);
-        SDL_free(title_locale);
-        if (status) {
-            X11_XSetTextProperty(display, data->window, &titleprop, XA_WM_NAME);
-            X11_XFree(titleprop.value);
-        }
-    }
-
-#ifdef X_HAVE_UTF8_STRING
-    if (SDL_X11_HAVE_UTF8) {
-        XTextProperty titleprop;
-        Status status = X11_Xutf8TextListToTextProperty(display, (char **) &messageboxdata->title, 1,
-                                            XUTF8StringStyle, &titleprop);
-        if (status == Success) {
-            X11_XSetTextProperty(display, data->window, &titleprop,
-                                 _NET_WM_NAME);
-            X11_XFree(titleprop.value);
-        }
-    }
-#endif
+    SDL_X11_SetWindowTitle(display, data->window, (char*)messageboxdata->title);
 
     /* Let the window manager know this is a dialog box */
     _NET_WM_WINDOW_TYPE = X11_XInternAtom(display, "_NET_WM_WINDOW_TYPE", False);
@@ -836,10 +830,11 @@ X11_ShowMessageBox(const SDL_MessageBoxData *messageboxdata, int *buttonid)
         int exitcode = 0;
         close(fds[0]);
         status = X11_ShowMessageBoxImpl(messageboxdata, buttonid);
-        if (write(fds[1], &status, sizeof (int)) != sizeof (int))
+        if (write(fds[1], &status, sizeof (int)) != sizeof (int)) {
             exitcode = 1;
-        else if (write(fds[1], buttonid, sizeof (int)) != sizeof (int))
+        } else if (write(fds[1], buttonid, sizeof (int)) != sizeof (int)) {
             exitcode = 1;
+        }
         close(fds[1]);
         _exit(exitcode);  /* don't run atexit() stuff, static destructors, etc. */
     } else {  /* we're the parent */
@@ -852,13 +847,12 @@ X11_ShowMessageBox(const SDL_MessageBoxData *messageboxdata, int *buttonid)
         SDL_assert(rc == pid);  /* not sure what to do if this fails. */
 
         if ((rc == -1) || (!WIFEXITED(status)) || (WEXITSTATUS(status) != 0)) {
-            return SDL_SetError("msgbox child process failed");
+            status = SDL_SetError("msgbox child process failed");
+        } else if ( (read(fds[0], &status, sizeof (int)) != sizeof (int)) ||
+                    (read(fds[0], buttonid, sizeof (int)) != sizeof (int)) ) {
+            status = SDL_SetError("read from msgbox child process failed");
+            *buttonid = 0;
         }
-
-        if (read(fds[0], &status, sizeof (int)) != sizeof (int))
-            status = -1;
-        else if (read(fds[0], buttonid, sizeof (int)) != sizeof (int))
-            status = -1;
         close(fds[0]);
 
         return status;

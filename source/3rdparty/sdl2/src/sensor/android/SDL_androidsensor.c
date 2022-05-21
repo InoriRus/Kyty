@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -18,6 +18,7 @@
      misrepresented as being the original software.
   3. This notice may not be removed or altered from any source distribution.
 */
+#include "../../SDL_internal.h"
 
 #include "SDL_config.h"
 
@@ -130,6 +131,7 @@ static int
 SDL_ANDROID_SensorOpen(SDL_Sensor *sensor, int device_index)
 {
     struct sensor_hwdata *hwdata;
+    int delay_us, min_delay_us;
 
     hwdata = (struct sensor_hwdata *)SDL_calloc(1, sizeof(*hwdata));
     if (hwdata == NULL) {
@@ -149,7 +151,14 @@ SDL_ANDROID_SensorOpen(SDL_Sensor *sensor, int device_index)
         return SDL_SetError("Couldn't enable sensor");
     }
 
-    /* FIXME: What rate should we set for this sensor? 60 FPS? Let's try the default rate for now... */
+    /* Use 60 Hz update rate if possible */
+    /* FIXME: Maybe add a hint for this? */
+    delay_us = 1000000 / 60;
+    min_delay_us = ASensor_getMinDelay(hwdata->asensor);
+    if (delay_us < min_delay_us) {
+        delay_us = min_delay_us;
+    }
+    ASensorEventQueue_setEventRate(hwdata->eventqueue, hwdata->asensor, delay_us);
 
     sensor->hwdata = hwdata;
     return 0;

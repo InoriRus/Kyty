@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -58,6 +58,11 @@ DUMMY_JoystickGetDevicePlayerIndex(int device_index)
     return -1;
 }
 
+static void
+DUMMY_JoystickSetDevicePlayerIndex(int device_index, int player_index)
+{
+}
+
 static SDL_JoystickGUID
 DUMMY_JoystickGetDeviceGUID(int device_index)
 {
@@ -73,30 +78,66 @@ DUMMY_JoystickGetDeviceInstanceID(int device_index)
 }
 
 static int
-DUMMY_JoystickOpen(SDL_Joystick * joystick, int device_index)
+DUMMY_JoystickOpen(SDL_Joystick *joystick, int device_index)
 {
     return SDL_SetError("Logic error: No joysticks available");
 }
 
 static int
-DUMMY_JoystickRumble(SDL_Joystick * joystick, Uint16 low_frequency_rumble, Uint16 high_frequency_rumble, Uint32 duration_ms)
+DUMMY_JoystickRumble(SDL_Joystick *joystick, Uint16 low_frequency_rumble, Uint16 high_frequency_rumble)
+{
+    return SDL_Unsupported();
+}
+
+static int
+DUMMY_JoystickRumbleTriggers(SDL_Joystick *joystick, Uint16 left_rumble, Uint16 right_rumble)
+{
+    return SDL_Unsupported();
+}
+
+static Uint32
+DUMMY_JoystickGetCapabilities(SDL_Joystick *joystick)
+{
+    return 0;
+}
+
+static int
+DUMMY_JoystickSetLED(SDL_Joystick *joystick, Uint8 red, Uint8 green, Uint8 blue)
+{
+    return SDL_Unsupported();
+}
+
+static int
+DUMMY_JoystickSendEffect(SDL_Joystick *joystick, const void *data, int size)
+{
+    return SDL_Unsupported();
+}
+
+static int
+DUMMY_JoystickSetSensorsEnabled(SDL_Joystick *joystick, SDL_bool enabled)
 {
     return SDL_Unsupported();
 }
 
 static void
-DUMMY_JoystickUpdate(SDL_Joystick * joystick)
+DUMMY_JoystickUpdate(SDL_Joystick *joystick)
 {
 }
 
 static void
-DUMMY_JoystickClose(SDL_Joystick * joystick)
+DUMMY_JoystickClose(SDL_Joystick *joystick)
 {
 }
 
 static void
 DUMMY_JoystickQuit(void)
 {
+}
+
+static SDL_bool
+DUMMY_JoystickGetGamepadMapping(int device_index, SDL_GamepadMapping *out)
+{
+    return SDL_FALSE;
 }
 
 SDL_JoystickDriver SDL_DUMMY_JoystickDriver =
@@ -106,13 +147,20 @@ SDL_JoystickDriver SDL_DUMMY_JoystickDriver =
     DUMMY_JoystickDetect,
     DUMMY_JoystickGetDeviceName,
     DUMMY_JoystickGetDevicePlayerIndex,
+    DUMMY_JoystickSetDevicePlayerIndex,
     DUMMY_JoystickGetDeviceGUID,
     DUMMY_JoystickGetDeviceInstanceID,
     DUMMY_JoystickOpen,
     DUMMY_JoystickRumble,
+    DUMMY_JoystickRumbleTriggers,
+    DUMMY_JoystickGetCapabilities,
+    DUMMY_JoystickSetLED,
+    DUMMY_JoystickSendEffect,
+    DUMMY_JoystickSetSensorsEnabled,
     DUMMY_JoystickUpdate,
     DUMMY_JoystickClose,
     DUMMY_JoystickQuit,
+    DUMMY_JoystickGetGamepadMapping
 };
 
 #endif /* SDL_JOYSTICK_DUMMY || SDL_JOYSTICK_DISABLED */

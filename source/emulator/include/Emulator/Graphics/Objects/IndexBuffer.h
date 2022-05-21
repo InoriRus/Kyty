@@ -10,6 +10,11 @@
 
 namespace Kyty::Libs::Graphics {
 
+struct GraphicContext;
+
+void IndexBufferInit();
+void IndexBufferDeleteAll(GraphicContext* ctx);
+
 class IndexBufferGpuObject: public GpuObject
 {
 public:

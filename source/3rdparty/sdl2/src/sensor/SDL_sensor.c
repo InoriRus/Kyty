@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -26,7 +26,6 @@
 #include "SDL_atomic.h"
 #include "SDL_events.h"
 #include "SDL_syssensor.h"
-#include "SDL_assert.h"
 
 #if !SDL_EVENTS_DISABLED
 #include "../events/SDL_events_c.h"
@@ -39,8 +38,14 @@ static SDL_SensorDriver *SDL_sensor_drivers[] = {
 #ifdef SDL_SENSOR_COREMOTION
     &SDL_COREMOTION_SensorDriver,
 #endif
+#ifdef SDL_SENSOR_WINDOWS
+    &SDL_WINDOWS_SensorDriver,
+#endif
 #if defined(SDL_SENSOR_DUMMY) || defined(SDL_SENSOR_DISABLED)
     &SDL_DUMMY_SensorDriver
+#endif
+#if defined(SDL_SENSOR_VITA)
+    &SDL_VITA_SensorDriver
 #endif
 };
 static SDL_Sensor *SDL_sensors = NULL;
@@ -48,7 +53,7 @@ static SDL_bool SDL_updating_sensor = SDL_FALSE;
 static SDL_mutex *SDL_sensor_lock = NULL; /* This needs to support recursive locks */
 static SDL_atomic_t SDL_next_sensor_instance_id;
 
-static void
+void
 SDL_LockSensors(void)
 {
     if (SDL_sensor_lock) {
@@ -56,7 +61,7 @@ SDL_LockSensors(void)
     }
 }
 
-static void
+void
 SDL_UnlockSensors(void)
 {
     if (SDL_sensor_lock) {
@@ -174,7 +179,7 @@ SDL_SensorGetDeviceType(int device_index)
     return type;
 }
 
-SDL_SensorType
+int
 SDL_SensorGetDeviceNonPortableType(int device_index)
 {
     SDL_SensorDriver *driver;
@@ -486,7 +491,7 @@ SDL_PrivateSensorUpdate(SDL_Sensor *sensor, float *data, int num_values)
     /* Post the event, if desired */
     posted = 0;
 #if !SDL_EVENTS_DISABLED
-    if (SDL_GetEventState(SDL_JOYAXISMOTION) == SDL_ENABLE) {
+    if (SDL_GetEventState(SDL_SENSORUPDATE) == SDL_ENABLE) {
         SDL_Event event;
         event.type = SDL_SENSORUPDATE;
         event.sensor.which = sensor->instance_id;
@@ -503,7 +508,11 @@ void
 SDL_SensorUpdate(void)
 {
     int i;
-    SDL_Sensor *sensor;
+    SDL_Sensor *sensor, *next;
+
+    if (!SDL_WasInit(SDL_INIT_SENSOR)) {
+        return;
+    }
 
     SDL_LockSensors();
 
@@ -527,7 +536,8 @@ SDL_SensorUpdate(void)
     SDL_updating_sensor = SDL_FALSE;
 
     /* If any sensors were closed while updating, free them here */
-    for (sensor = SDL_sensors; sensor; sensor = sensor->next) {
+    for (sensor = SDL_sensors; sensor; sensor = next) {
+        next = sensor->next;
         if (sensor->ref_count <= 0) {
             SDL_SensorClose(sensor);
         }

@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -158,9 +158,9 @@ SDL_COREMOTION_SensorUpdate(SDL_Sensor *sensor)
             if (accelerometerData) {
                 CMAcceleration acceleration = accelerometerData.acceleration;
                 float data[3];
-                data[0] = acceleration.x * SDL_STANDARD_GRAVITY;
-                data[1] = acceleration.y * SDL_STANDARD_GRAVITY;
-                data[2] = acceleration.z * SDL_STANDARD_GRAVITY;
+                data[0] = -acceleration.x * SDL_STANDARD_GRAVITY;
+                data[1] = -acceleration.y * SDL_STANDARD_GRAVITY;
+                data[2] = -acceleration.z * SDL_STANDARD_GRAVITY;
                 if (SDL_memcmp(data, sensor->hwdata->data, sizeof(data)) != 0) {
                     SDL_PrivateSensorUpdate(sensor, data, SDL_arraysize(data));
                     SDL_memcpy(sensor->hwdata->data, data, sizeof(data));

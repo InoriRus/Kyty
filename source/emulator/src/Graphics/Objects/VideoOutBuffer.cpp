@@ -8,7 +8,7 @@
 #include "Emulator/Graphics/Utils.h"
 #include "Emulator/Profiler.h"
 
-#include <vulkan/vulkan_core.h>
+// IWYU pragma: no_forward_declare VkImageView_T
 
 #ifdef KYTY_EMU_ENABLED
 
@@ -56,11 +56,12 @@ static void update_func(GraphicContext* ctx, const uint64_t* params, void* obj, 
 		EXIT_NOT_IMPLEMENTED(width != pitch);
 		auto* temp_buf = new uint8_t[*size];
 		TileConvertTiledToLinear(temp_buf, reinterpret_cast<void*>(*vaddr), TileMode::VideoOutTiled, width, height, neo);
-		UtilFillImage(ctx, vk_obj, temp_buf, *size, pitch);
+		UtilFillImage(ctx, vk_obj, temp_buf, *size, pitch, static_cast<uint64_t>(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL));
 		delete[] temp_buf;
 	} else
 	{
-		UtilFillImage(ctx, vk_obj, reinterpret_cast<void*>(*vaddr), *size, pitch);
+		UtilFillImage(ctx, vk_obj, reinterpret_cast<void*>(*vaddr), *size, pitch,
+		              static_cast<uint64_t>(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL));
 	}
 }
 
@@ -87,8 +88,12 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 	vk_obj->extent.height = height;
 	vk_obj->format        = VK_FORMAT_B8G8R8A8_SRGB;
 	vk_obj->image         = nullptr;
-	vk_obj->image_view    = nullptr;
 	vk_obj->layout        = VK_IMAGE_LAYOUT_UNDEFINED;
+
+	for (auto& view: vk_obj->image_view)
+	{
+		view = nullptr;
+	}
 
 	VkImageCreateInfo image_info {};
 	image_info.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -151,9 +156,9 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 	create_info.subresourceRange.layerCount     = 1;
 	create_info.subresourceRange.levelCount     = 1;
 
-	vkCreateImageView(ctx->device, &create_info, nullptr, &vk_obj->image_view);
+	vkCreateImageView(ctx->device, &create_info, nullptr, &vk_obj->image_view[VulkanImage::VIEW_DEFAULT]);
 
-	EXIT_NOT_IMPLEMENTED(vk_obj->image_view == nullptr);
+	EXIT_NOT_IMPLEMENTED(vk_obj->image_view[VulkanImage::VIEW_DEFAULT] == nullptr);
 
 	return vk_obj;
 }
@@ -172,7 +177,7 @@ static void delete_func(GraphicContext* ctx, void* obj, VulkanMemory* mem)
 		DeleteFramebuffer(vk_obj);
 	}
 
-	vkDestroyImageView(ctx->device, vk_obj->image_view, nullptr);
+	vkDestroyImageView(ctx->device, vk_obj->image_view[VulkanImage::VIEW_DEFAULT], nullptr);
 
 	vkDestroyImage(ctx->device, vk_obj->image, nullptr);
 

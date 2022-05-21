@@ -8,8 +8,6 @@
 #include "Emulator/Graphics/Objects/GpuMemory.h"
 #include "Emulator/Profiler.h"
 
-#include "vulkan/vulkan_core.h"
-
 #ifdef KYTY_EMU_ENABLED
 
 namespace Kyty::Libs::Graphics {
@@ -19,7 +17,7 @@ static void set_image_layout(VkCommandBuffer buffer, VulkanImage* dst_image, uin
 {
 	EXIT_IF(buffer == nullptr);
 
-	EXIT_IF(dst_image->layout != old_image_layout);
+	EXIT_IF(old_image_layout != VK_IMAGE_LAYOUT_UNDEFINED && dst_image->layout != old_image_layout);
 
 	VkImageMemoryBarrier image_memory_barrier {};
 	image_memory_barrier.sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -86,7 +84,7 @@ static void set_image_layout(VkCommandBuffer buffer, VulkanImage* dst_image, uin
 	dst_image->layout = new_image_layout;
 }
 
-void UtilBufferToImage(CommandBuffer* buffer, VulkanBuffer* src_buffer, uint32_t src_pitch, VulkanImage* dst_image)
+void UtilBufferToImage(CommandBuffer* buffer, VulkanBuffer* src_buffer, uint32_t src_pitch, VulkanImage* dst_image, uint64_t dst_layout)
 {
 	EXIT_IF(src_buffer == nullptr);
 	EXIT_IF(src_buffer->buffer == nullptr);
@@ -114,7 +112,37 @@ void UtilBufferToImage(CommandBuffer* buffer, VulkanBuffer* src_buffer, uint32_t
 	vkCmdCopyBufferToImage(vk_buffer, src_buffer->buffer, dst_image->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
 	set_image_layout(vk_buffer, dst_image, 0, 1, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-	                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	                 static_cast<VkImageLayout>(dst_layout));
+}
+
+void UtilImageToBuffer(CommandBuffer* buffer, VulkanImage* src_image, VulkanBuffer* dst_buffer, uint32_t dst_pitch, uint64_t src_layout)
+{
+	EXIT_IF(dst_buffer == nullptr);
+	EXIT_IF(dst_buffer->buffer == nullptr);
+	EXIT_IF(src_image == nullptr);
+	EXIT_IF(src_image->image == nullptr);
+
+	auto* vk_buffer = buffer->GetPool()->buffers[buffer->GetIndex()];
+
+	set_image_layout(vk_buffer, src_image, 0, 1, VK_IMAGE_ASPECT_COLOR_BIT, src_image->layout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+
+	VkBufferImageCopy region {};
+	region.bufferOffset      = 0;
+	region.bufferRowLength   = (dst_pitch != src_image->extent.width ? dst_pitch : 0);
+	region.bufferImageHeight = 0;
+
+	region.imageSubresource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+	region.imageSubresource.mipLevel       = 0;
+	region.imageSubresource.baseArrayLayer = 0;
+	region.imageSubresource.layerCount     = 1;
+
+	region.imageOffset = {0, 0, 0};
+	region.imageExtent = {src_image->extent.width, src_image->extent.height, 1};
+
+	vkCmdCopyImageToBuffer(vk_buffer, src_image->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst_buffer->buffer, 1, &region);
+
+	set_image_layout(vk_buffer, src_image, 0, 1, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+	                 static_cast<VkImageLayout>(src_layout));
 }
 
 void UtilBufferToImage(CommandBuffer* buffer, VulkanBuffer* src_buffer, VulkanImage* dst_image, const Vector<BufferImageCopy>& regions,
@@ -207,7 +235,7 @@ void UtilBlitImage(CommandBuffer* buffer, VulkanImage* src_image, VulkanSwapchai
 
 	auto* vk_buffer = buffer->GetPool()->buffers[buffer->GetIndex()];
 
-	VulkanImage swapchain_image {};
+	VulkanImage swapchain_image(VulkanImageType::Unknown);
 
 	swapchain_image.image  = dst_swapchain->swapchain_images[dst_swapchain->current_index];
 	swapchain_image.layout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -286,12 +314,14 @@ void VulkanDeleteBuffer(GraphicContext* gctx, VulkanBuffer* buffer)
 	buffer->buffer = nullptr;
 }
 
-void UtilFillImage(GraphicContext* ctx, VulkanImage* image, const void* src_data, uint64_t size, uint32_t src_pitch)
+void UtilFillImage(GraphicContext* ctx, VulkanImage* dst_image, const void* src_data, uint64_t size, uint32_t src_pitch,
+                   uint64_t dst_layout)
 {
 	KYTY_PROFILER_FUNCTION();
 
 	EXIT_IF(ctx == nullptr);
-	EXIT_IF(image == nullptr);
+	EXIT_IF(dst_image == nullptr);
+	EXIT_IF(src_data == nullptr);
 
 	VulkanBuffer staging_buffer {};
 	staging_buffer.usage           = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
@@ -309,10 +339,42 @@ void UtilFillImage(GraphicContext* ctx, VulkanImage* image, const void* src_data
 	EXIT_NOT_IMPLEMENTED(buffer.IsInvalid());
 
 	buffer.Begin();
-	UtilBufferToImage(&buffer, &staging_buffer, src_pitch, image);
+	UtilBufferToImage(&buffer, &staging_buffer, src_pitch, dst_image, dst_layout);
 	buffer.End();
 	buffer.Execute();
 	buffer.WaitForFence();
+
+	VulkanDeleteBuffer(ctx, &staging_buffer);
+}
+
+void UtilFillBuffer(GraphicContext* ctx, void* dst_data, uint64_t size, uint32_t dst_pitch, VulkanImage* src_image, uint64_t src_layout)
+{
+	KYTY_PROFILER_FUNCTION();
+
+	EXIT_IF(ctx == nullptr);
+	EXIT_IF(src_image == nullptr);
+	EXIT_IF(dst_data == nullptr);
+
+	VulkanBuffer staging_buffer {};
+	staging_buffer.usage           = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+	staging_buffer.memory.property = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+	VulkanCreateBuffer(ctx, size, &staging_buffer);
+
+	CommandBuffer buffer;
+	buffer.SetQueue(GraphicContext::QUEUE_UTIL);
+
+	EXIT_NOT_IMPLEMENTED(buffer.IsInvalid());
+
+	buffer.Begin();
+	UtilImageToBuffer(&buffer, src_image, &staging_buffer, dst_pitch, src_layout);
+	buffer.End();
+	buffer.Execute();
+	buffer.WaitForFence();
+
+	void* data = nullptr;
+	VulkanMapMemory(ctx, &staging_buffer.memory, &data);
+	std::memcpy(dst_data, data, size);
+	VulkanUnmapMemory(ctx, &staging_buffer.memory);
 
 	VulkanDeleteBuffer(ctx, &staging_buffer);
 }

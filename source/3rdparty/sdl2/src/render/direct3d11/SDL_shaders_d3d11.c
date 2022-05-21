@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -1886,9 +1886,10 @@ static struct
 {
     const void *shader_data;
     SIZE_T shader_size;
-} D3D11_shaders[] = {
+} D3D11_shaders[NUM_SHADERS] = {
     { D3D11_PixelShader_Colors, sizeof(D3D11_PixelShader_Colors) },
     { D3D11_PixelShader_Textures, sizeof(D3D11_PixelShader_Textures) },
+#if SDL_HAVE_YUV
     { D3D11_PixelShader_YUV_JPEG, sizeof(D3D11_PixelShader_YUV_JPEG) },
     { D3D11_PixelShader_YUV_BT601, sizeof(D3D11_PixelShader_YUV_BT601) },
     { D3D11_PixelShader_YUV_BT709, sizeof(D3D11_PixelShader_YUV_BT709) },
@@ -1898,6 +1899,7 @@ static struct
     { D3D11_PixelShader_NV21_JPEG, sizeof(D3D11_PixelShader_NV21_JPEG) },
     { D3D11_PixelShader_NV21_BT601, sizeof(D3D11_PixelShader_NV21_BT601) },
     { D3D11_PixelShader_NV21_BT709, sizeof(D3D11_PixelShader_NV21_BT709) },
+#endif
 };
 
 int D3D11_CreateVertexShader(ID3D11Device1 *d3dDevice, ID3D11VertexShader **vertexShader, ID3D11InputLayout **inputLayout)
@@ -1905,9 +1907,9 @@ int D3D11_CreateVertexShader(ID3D11Device1 *d3dDevice, ID3D11VertexShader **vert
     /* Declare how the input layout for SDL's vertex shader will be setup: */
     const D3D11_INPUT_ELEMENT_DESC vertexDesc[] = 
     {
-        { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-        { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-        { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 20, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 8, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        { "COLOR", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0 },
     };
     HRESULT result;
 

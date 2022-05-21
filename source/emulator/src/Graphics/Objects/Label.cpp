@@ -6,13 +6,14 @@
 
 #include "Emulator/Graphics/GraphicContext.h"
 #include "Emulator/Graphics/GraphicsRender.h"
+#include "Emulator/Graphics/GraphicsRun.h"
 #include "Emulator/Profiler.h"
-
-#include <vulkan/vulkan_core.h>
 
 #ifdef KYTY_EMU_ENABLED
 
 namespace Kyty::Libs::Graphics {
+
+class CommandProcessor;
 
 enum LabelStatus
 {
@@ -24,22 +25,22 @@ enum LabelStatus
 
 struct LabelCallbacks
 {
-	uint64_t*                  dst_gpu_addr64 = nullptr;
-	uint64_t                   value64        = 0;
-	uint32_t*                  dst_gpu_addr32 = nullptr;
-	uint32_t                   value32        = 0;
-	LabelGpuObject::callback_t callback_1     = nullptr;
-	LabelGpuObject::callback_t callback_2     = nullptr;
-	uint64_t                   args[4]        = {};
+	uint64_t*                  dst_gpu_addr64       = nullptr;
+	uint64_t                   value64              = 0;
+	uint32_t*                  dst_gpu_addr32       = nullptr;
+	uint32_t                   value32              = 0;
+	LabelGpuObject::callback_t callback_1           = nullptr;
+	LabelGpuObject::callback_t callback_2           = nullptr;
+	uint64_t                   args[LABEL_ARGS_MAX] = {};
 };
 
 struct Label
 {
-	VkDevice       device = nullptr;
-	VkEvent        event  = nullptr;
-	LabelStatus    status = LabelStatus::New;
-	LabelCallbacks callbacks;
-	CommandBuffer* buffer = nullptr;
+	VkDevice          device = nullptr;
+	VkEvent           event  = nullptr;
+	LabelStatus       status = LabelStatus::New;
+	LabelCallbacks    callbacks;
+	CommandProcessor* cp = nullptr;
 };
 
 class LabelManager
@@ -179,11 +180,12 @@ Label* LabelManager::Create64(GraphicContext* ctx, uint64_t* dst_gpu_addr, uint6
 	label->device                   = ctx->device;
 	label->callbacks.callback_1     = callback_1;
 	label->callbacks.callback_2     = callback_2;
-	label->callbacks.args[0]        = args[0];
-	label->callbacks.args[1]        = args[1];
-	label->callbacks.args[2]        = args[2];
-	label->callbacks.args[3]        = args[3];
-	label->buffer                   = nullptr;
+	label->cp                       = nullptr;
+
+	for (int i = 0; i < LABEL_ARGS_MAX; i++)
+	{
+		label->callbacks.args[i] = args[i];
+	}
 
 	VkEventCreateInfo create_info {};
 	create_info.sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO;
@@ -218,10 +220,12 @@ Label* LabelManager::Create32(GraphicContext* ctx, uint32_t* dst_gpu_addr, uint3
 	label->device                   = ctx->device;
 	label->callbacks.callback_1     = callback_1;
 	label->callbacks.callback_2     = callback_2;
-	label->callbacks.args[0]        = args[0];
-	label->callbacks.args[1]        = args[1];
-	label->callbacks.args[2]        = args[2];
-	label->callbacks.args[3]        = args[3];
+	label->cp                       = nullptr;
+
+	for (int i = 0; i < LABEL_ARGS_MAX; i++)
+	{
+		label->callbacks.args[i] = args[i];
+	}
 
 	VkEventCreateInfo create_info {};
 	create_info.sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO;
@@ -268,10 +272,10 @@ void LabelManager::Destroy(Label* label)
 	EXIT_IF(label == nullptr);
 	EXIT_IF(label->event == nullptr);
 	EXIT_IF(label->device == nullptr);
-	EXIT_IF(label->buffer == nullptr);
+	EXIT_IF(label->cp == nullptr);
 
 	// All submitted commands that refer to event must have completed execution
-	label->buffer->CommandProcessorWait();
+	GraphicsRunCommandProcessorWait(label->cp);
 
 	vkDestroyEvent(label->device, label->event, nullptr);
 
@@ -306,7 +310,7 @@ void LabelManager::Set(CommandBuffer* buffer, Label* label)
 
 	EXIT_IF(label->event == nullptr);
 
-	label->buffer = buffer;
+	label->cp = buffer->GetParent();
 
 	auto* vk_buffer = buffer->GetPool()->buffers[buffer->GetIndex()];
 

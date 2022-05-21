@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -25,7 +25,7 @@
 #include "SDL_events.h"
 #include "SDL_events_c.h"
 #include "SDL_mouse_c.h"
-
+#include "SDL_hints.h"
 
 static int SDLCALL
 RemovePendingSizeChangedAndResizedEvents(void * userdata, SDL_Event *event)
@@ -84,7 +84,7 @@ SDL_SendWindowEvent(SDL_Window * window, Uint8 windowevent, int data1,
         if (window->flags & SDL_WINDOW_SHOWN) {
             return 0;
         }
-        window->flags &= ~SDL_WINDOW_HIDDEN;
+        window->flags &= ~(SDL_WINDOW_HIDDEN | SDL_WINDOW_MINIMIZED);
         window->flags |= SDL_WINDOW_SHOWN;
         SDL_OnWindowShown(window);
         break;
@@ -110,6 +110,7 @@ SDL_SendWindowEvent(SDL_Window * window, Uint8 windowevent, int data1,
         }
         window->x = data1;
         window->y = data2;
+        SDL_OnWindowMoved(window);
         break;
     case SDL_WINDOWEVENT_RESIZED:
         if (!(window->flags & SDL_WINDOW_FULLSCREEN)) {
@@ -200,8 +201,9 @@ SDL_SendWindowEvent(SDL_Window * window, Uint8 windowevent, int data1,
 
     if (windowevent == SDL_WINDOWEVENT_CLOSE) {
         if ( !window->prev && !window->next ) {
-            /* This is the last window in the list so send the SDL_QUIT event */
-            SDL_SendQuit();
+            if (SDL_GetHintBoolean(SDL_HINT_QUIT_ON_LAST_WINDOW_CLOSE, SDL_TRUE)) {
+                SDL_SendQuit();  /* This is the last window in the list so send the SDL_QUIT event */
+            }
         }
     }
 

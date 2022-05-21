@@ -44,6 +44,7 @@ enum class Axis
 struct PadControllerInformation;
 struct PadData;
 struct PadVibrationParam;
+struct PadLightBarParam;
 
 inline int controller_get_axis(int min, int max, int value)
 {
@@ -63,6 +64,8 @@ int KYTY_SYSV_ABI PadGetControllerInformation(int handle, PadControllerInformati
 int KYTY_SYSV_ABI PadReadState(int handle, PadData* data);
 int KYTY_SYSV_ABI PadRead(int handle, PadData* data, int num);
 int KYTY_SYSV_ABI PadSetVibration(int handle, const PadVibrationParam* param);
+int KYTY_SYSV_ABI PadResetLightBar(int handle);
+int KYTY_SYSV_ABI PadSetLightBar(int handle, const PadLightBarParam* param);
 
 } // namespace Kyty::Libs::Controller
 

@@ -31,6 +31,7 @@ enum class ShaderType
 enum class ShaderInstructionType
 {
 	Unknown,
+
 	BufferLoadDword,
 	BufferLoadFormatX,
 	BufferLoadFormatXy,
@@ -44,6 +45,8 @@ enum class ShaderInstructionType
 	Exp,
 	ImageLoad,
 	ImageSample,
+	ImageSampleLz,
+	ImageSampleLzO,
 	ImageStore,
 	ImageStoreMip,
 	SAddcU32,
@@ -61,6 +64,7 @@ enum class ShaderInstructionType
 	SBufferLoadDwordx8,
 	SCbranchExecz,
 	SCbranchScc0,
+	SCbranchVccz,
 	SCmpEqI32,
 	SCmpEqU32,
 	SCmpGeI32,
@@ -94,7 +98,9 @@ enum class ShaderInstructionType
 	SWqmB64,
 	SXnorB64,
 	SXorB64,
+	TBufferLoadFormatX,
 	TBufferLoadFormatXyzw,
+	VAddF32,
 	VAddI32,
 	VAndB32,
 	VAshrI32,
@@ -138,9 +144,11 @@ enum class ShaderInstructionType
 	VCmpUF32,
 	VCmpxEqU32,
 	VCmpxGeU32,
+	VCmpxGtF32,
 	VCmpxGtU32,
-	VCmpxNeU32,
+	VCmpxLtF32,
 	VCmpxNeqF32,
+	VCmpxNeU32,
 	VCndmaskB32,
 	VCosF32,
 	VCvtF32F16,
@@ -154,9 +162,11 @@ enum class ShaderInstructionType
 	VCvtU32F32,
 	VExpF32,
 	VFloorF32,
+	VFmaF32,
 	VFractF32,
 	VInterpP1F32,
 	VInterpP2F32,
+	VLogF32,
 	VLshlB32,
 	VLshlrevB32,
 	VLshrB32,
@@ -166,9 +176,12 @@ enum class ShaderInstructionType
 	VMadF32,
 	VMadmkF32,
 	VMadU32U24,
+	VMax3F32,
 	VMaxF32,
 	VMbcntHiU32B32,
 	VMbcntLoU32B32,
+	VMed3F32,
+	VMin3F32,
 	VMinF32,
 	VMovB32,
 	VMulF32,
@@ -182,6 +195,7 @@ enum class ShaderInstructionType
 	VRndneF32,
 	VRsqF32,
 	VSadU32,
+	VSinF32,
 	VSqrtF32,
 	VSubF32,
 	VSubI32,
@@ -225,6 +239,7 @@ enum FormatByte : uint64_t
 	Attr,   // attr%u.%u <- inst.src[1].constant.u, inst.src[2].constant.u
 	Idxen,  // idxen
 	Offen,  // offen
+	Float1, // format:float1
 	Float4, // format:float4
 	Pos0,   // pos0
 	Done,   // done
@@ -232,6 +247,7 @@ enum FormatByte : uint64_t
 	Param1, // param1
 	Param2, // param2
 	Param3, // param3
+	Param4, // param4
 	Mrt0,   // mrt_color0
 	Off,    // off
 	Compr,  // compr
@@ -240,6 +256,9 @@ enum FormatByte : uint64_t
 	DmaskF, // dmask:0xf
 	Dmask7, // dmask:0x7
 	Dmask1, // dmask:0x1
+	Dmask8, // dmask:0x8
+	Dmask3, // dmask:0x3
+	Dmask5, // dmask:0x5
 	Gds,    // gds
 };
 
@@ -266,37 +285,43 @@ enum Format : uint64_t
 	Param1Vsrc0Vsrc1Vsrc2Vsrc3          = FormatDefine({Param1, S0, S1, S2, S3}),
 	Param2Vsrc0Vsrc1Vsrc2Vsrc3          = FormatDefine({Param2, S0, S1, S2, S3}),
 	Param3Vsrc0Vsrc1Vsrc2Vsrc3          = FormatDefine({Param3, S0, S1, S2, S3}),
+	Param4Vsrc0Vsrc1Vsrc2Vsrc3          = FormatDefine({Param4, S0, S1, S2, S3}),
 	Pos0Vsrc0Vsrc1Vsrc2Vsrc3Done        = FormatDefine({Pos0, S0, S1, S2, S3, Done}),
 	Saddr                               = FormatDefine({S0A2}),
-	Sdst4SbaseSoffset                   = FormatDefine({DA4, S0A2, S1}),
-	Sdst8SbaseSoffset                   = FormatDefine({DA8, S0A2, S1}),
-	SdstSvSoffset                       = FormatDefine({D, S0A4, S1}),
-	Sdst2SvSoffset                      = FormatDefine({DA2, S0A4, S1}),
-	Sdst4SvSoffset                      = FormatDefine({DA4, S0A4, S1}),
-	Sdst8SvSoffset                      = FormatDefine({DA8, S0A4, S1}),
 	Sdst16SvSoffset                     = FormatDefine({DA16, S0A4, S1}),
-	SVdstSVsrc0                         = FormatDefine({D, S0}),
-	SVdstSVsrc0SVsrc1                   = FormatDefine({D, S0, S1}),
 	Sdst2Ssrc02                         = FormatDefine({DA2, S0A2}),
 	Sdst2Ssrc02Ssrc12                   = FormatDefine({DA2, S0A2, S1A2}),
+	Sdst2SvSoffset                      = FormatDefine({DA2, S0A4, S1}),
+	Sdst4SbaseSoffset                   = FormatDefine({DA4, S0A2, S1}),
+	Sdst4SvSoffset                      = FormatDefine({DA4, S0A4, S1}),
+	Sdst8SbaseSoffset                   = FormatDefine({DA8, S0A2, S1}),
+	Sdst8SvSoffset                      = FormatDefine({DA8, S0A4, S1}),
+	SdstSvSoffset                       = FormatDefine({D, S0A4, S1}),
 	SmaskVsrc0Vsrc1                     = FormatDefine({DA2, S0, S1}),
 	Ssrc0Ssrc1                          = FormatDefine({S0, S1}),
+	SVdstSVsrc0                         = FormatDefine({D, S0}),
+	SVdstSVsrc0SVsrc1                   = FormatDefine({D, S0, S1}),
+	Vdata1Vaddr3StSsDmask1              = FormatDefine({D, S0A3, S1A8, S2A4, Dmask1}),
+	Vdata1Vaddr3StSsDmask8              = FormatDefine({D, S0A3, S1A8, S2A4, Dmask8}),
 	Vdata1VaddrSvSoffsIdxen             = FormatDefine({D, S0, S1A4, S2, Idxen}),
+	Vdata1VaddrSvSoffsIdxenFloat1       = FormatDefine({D, S0, S1A4, S2, Idxen, Float1}),
+	Vdata2Vaddr3StSsDmask3              = FormatDefine({DA2, S0A3, S1A8, S2A4, Dmask3}),
+	Vdata2Vaddr3StSsDmask5              = FormatDefine({DA2, S0A3, S1A8, S2A4, Dmask5}),
 	Vdata2VaddrSvSoffsIdxen             = FormatDefine({DA2, S0, S1A4, S2, Idxen}),
+	Vdata3Vaddr3StSsDmask7              = FormatDefine({DA3, S0A3, S1A8, S2A4, Dmask7}),
+	Vdata3Vaddr4StSsDmask7              = FormatDefine({DA3, S0A4, S1A8, S2A4, Dmask7}),
 	Vdata3VaddrSvSoffsIdxen             = FormatDefine({DA3, S0, S1A4, S2, Idxen}),
+	Vdata4Vaddr2SvSoffsOffenIdxenFloat4 = FormatDefine({DA4, S0A2, S1A4, S2, Offen, Idxen, Float4}),
+	Vdata4Vaddr3StDmaskF                = FormatDefine({DA4, S0A3, S1A8, DmaskF}),
+	Vdata4Vaddr3StSsDmaskF              = FormatDefine({DA4, S0A3, S1A8, S2A4, DmaskF}),
+	Vdata4Vaddr4StDmaskF                = FormatDefine({DA4, S0A4, S1A8, DmaskF}),
 	Vdata4VaddrSvSoffsIdxen             = FormatDefine({DA4, S0, S1A4, S2, Idxen}),
 	Vdata4VaddrSvSoffsIdxenFloat4       = FormatDefine({DA4, S0, S1A4, S2, Idxen, Float4}),
-	Vdata4Vaddr2SvSoffsOffenIdxenFloat4 = FormatDefine({DA4, S0A2, S1A4, S2, Offen, Idxen, Float4}),
-	Vdata1Vaddr3StSsDmask1              = FormatDefine({D, S0A3, S1A8, S2A4, Dmask1}),
-	Vdata3Vaddr3StSsDmask7              = FormatDefine({DA3, S0A3, S1A8, S2A4, Dmask7}),
-	Vdata4Vaddr3StSsDmaskF              = FormatDefine({DA4, S0A3, S1A8, S2A4, DmaskF}),
-	Vdata4Vaddr3StDmaskF                = FormatDefine({DA4, S0A3, S1A8, DmaskF}),
-	Vdata4Vaddr4StDmaskF                = FormatDefine({DA4, S0A4, S1A8, DmaskF}),
+	VdstGds                             = FormatDefine({D, Gds}),
+	VdstSdst2Vsrc0Vsrc1                 = FormatDefine({D, D2A2, S0, S1}),
 	VdstVsrc0Vsrc1Smask2                = FormatDefine({D, S0, S1, S2A2}),
 	VdstVsrc0Vsrc1Vsrc2                 = FormatDefine({D, S0, S1, S2}),
 	VdstVsrcAttrChan                    = FormatDefine({D, S0, Attr}),
-	VdstSdst2Vsrc0Vsrc1                 = FormatDefine({D, D2A2, S0, S1}),
-	VdstGds                             = FormatDefine({D, Gds}),
 };
 
 } // namespace ShaderInstructionFormat
@@ -332,6 +357,7 @@ struct ShaderOperand
 	int               register_id = 0;
 	int               size        = 0;
 	float             multiplier  = 1.0f;
+	bool              absolute    = false;
 	bool              negate      = false;
 	bool              clamp       = false;
 
@@ -363,6 +389,14 @@ public:
 	[[nodiscard]] uint32_t GetSrc() const { return m_src; }
 
 	[[nodiscard]] String ToString() const { return String::FromPrintf("label_%04" PRIx32 "_%04" PRIx32, m_dst, m_src); }
+
+	void Disable()
+	{
+		m_dst = 0;
+		m_src = 0;
+	}
+
+	[[nodiscard]] bool IsDisabled() const { return m_dst == 0 && m_src == 0; }
 
 private:
 	uint32_t m_dst;
@@ -420,10 +454,18 @@ public:
 	[[nodiscard]] uint32_t GetPsEmbeddedId() const { return m_ps_embedded_id; }
 	void                   SetPsEmbeddedId(uint32_t embedded_id) { m_ps_embedded_id = embedded_id; }
 
-	[[nodiscard]] bool IsDiscardBlock(uint32_t pc) const;
-	[[nodiscard]] bool IsDiscardInstruction(uint32_t index) const;
+	[[nodiscard]] bool                      IsDiscardBlock(uint32_t pc) const;
+	[[nodiscard]] bool                      IsDiscardInstruction(uint32_t index) const;
+	[[nodiscard]] Vector<ShaderInstruction> GetDiscardBlock(uint32_t pc) const;
+
+	[[nodiscard]] uint32_t GetCrc32() const { return m_crc32; }
+	void                   SetCrc32(uint32_t c) { this->m_crc32 = c; }
+	[[nodiscard]] uint32_t GetHash0() const { return m_hash0; }
+	void                   SetHash0(uint32_t h) { this->m_hash0 = h; }
 
 private:
+	uint32_t                  m_hash0 = 0;
+	uint32_t                  m_crc32 = 0;
 	Vector<ShaderInstruction> m_instructions;
 	Vector<ShaderLabel>       m_labels;
 	ShaderType                m_type = ShaderType::Unknown;
@@ -436,11 +478,23 @@ private:
 
 struct ShaderId
 {
+	uint32_t         hash0 = 0;
+	uint32_t         crc32 = 0;
 	Vector<uint32_t> ids;
 
-	bool operator==(const ShaderId& other) const { return ids == other.ids; }
+	bool operator==(const ShaderId& other) const { return hash0 == other.hash0 && crc32 == other.crc32 && ids == other.ids; }
 	bool operator!=(const ShaderId& other) const { return !(*this == other); }
 };
+
+constexpr uint32_t DstSel(uint32_t x, uint32_t y = 0, uint32_t z = 0, uint32_t w = 0)
+{
+	return x | (y << 3u) | (z << 6u) | (w << 9u);
+}
+
+inline uint8_t GetDstSel(uint32_t swizzle, uint32_t channel)
+{
+	return (swizzle >> (channel * 3u)) & 0x7u;
+}
 
 struct ShaderBufferResource
 {
@@ -462,6 +516,9 @@ struct ShaderBufferResource
 	[[nodiscard]] uint8_t  DstSelY() const { return (fields[3] >> 3u) & 0x7u; }
 	[[nodiscard]] uint8_t  DstSelZ() const { return (fields[3] >> 6u) & 0x7u; }
 	[[nodiscard]] uint8_t  DstSelW() const { return (fields[3] >> 9u) & 0x7u; }
+	[[nodiscard]] uint32_t DstSelXY() const { return (fields[3] >> 0u) & 0x3Fu; }
+	[[nodiscard]] uint32_t DstSelXYZ() const { return (fields[3] >> 0u) & 0x1FFu; }
+	[[nodiscard]] uint32_t DstSelXYZW() const { return (fields[3] >> 0u) & 0xFFFu; }
 	[[nodiscard]] uint8_t  Nfmt() const { return (fields[3] >> 12u) & 0x7u; }
 	[[nodiscard]] uint8_t  Dfmt() const { return (fields[3] >> 15u) & 0xFu; }
 	[[nodiscard]] bool     AddTid() const { return ((fields[3] >> 23u) & 0x1u) == 1; }
@@ -496,6 +553,9 @@ struct ShaderTextureResource
 	[[nodiscard]] uint8_t  DstSelY() const { return (fields[3] >> 3u) & 0x7u; }
 	[[nodiscard]] uint8_t  DstSelZ() const { return (fields[3] >> 6u) & 0x7u; }
 	[[nodiscard]] uint8_t  DstSelW() const { return (fields[3] >> 9u) & 0x7u; }
+	[[nodiscard]] uint32_t DstSelXY() const { return (fields[3] >> 0u) & 0x3Fu; }
+	[[nodiscard]] uint32_t DstSelXYZ() const { return (fields[3] >> 0u) & 0x1FFu; }
+	[[nodiscard]] uint32_t DstSelXYZW() const { return (fields[3] >> 0u) & 0xFFFu; }
 	[[nodiscard]] uint8_t  BaseLevel() const { return (fields[3] >> 12u) & 0xFu; }
 	[[nodiscard]] uint8_t  LastLevel() const { return (fields[3] >> 16u) & 0xFu; }
 	[[nodiscard]] uint8_t  TilingIdx() const { return (fields[3] >> 20u) & 0x1Fu; }

@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -68,8 +68,9 @@ DSP_CloseDevice(_THIS)
 
 
 static int
-DSP_OpenDevice(_THIS, void *handle, const char *devname, int iscapture)
+DSP_OpenDevice(_THIS, const char *devname)
 {
+    SDL_bool iscapture = this->iscapture;
     const int flags = ((iscapture) ? OPEN_FLAGS_INPUT : OPEN_FLAGS_OUTPUT);
     int format;
     int value;
@@ -103,7 +104,7 @@ DSP_OpenDevice(_THIS, void *handle, const char *devname, int iscapture)
     SDL_zerop(this->hidden);
 
     /* Open the audio device */
-    this->hidden->audio_fd = open(devname, flags, 0);
+    this->hidden->audio_fd = open(devname, flags | O_CLOEXEC, 0);
     if (this->hidden->audio_fd < 0) {
         return SDL_SetError("Couldn't open %s: %s", devname, strerror(errno));
     }
@@ -292,9 +293,25 @@ DSP_FlushCapture(_THIS)
     }
 }
 
+static SDL_bool InitTimeDevicesExist = SDL_FALSE;
 static int
+look_for_devices_test(int fd)
+{
+    InitTimeDevicesExist = SDL_TRUE;  /* note that _something_ exists. */
+    /* Don't add to the device list, we're just seeing if any devices exist. */
+    return 0;
+}
+
+static SDL_bool
 DSP_Init(SDL_AudioDriverImpl * impl)
 {
+    InitTimeDevicesExist = SDL_FALSE;
+    SDL_EnumUnixAudioDevices(0, look_for_devices_test);
+    if (!InitTimeDevicesExist) {
+        SDL_SetError("dsp: No such audio device");
+        return SDL_FALSE;  /* maybe try a different backend. */
+    }
+
     /* Set the function pointers */
     impl->DetectDevices = DSP_DetectDevices;
     impl->OpenDevice = DSP_OpenDevice;
@@ -304,15 +321,15 @@ DSP_Init(SDL_AudioDriverImpl * impl)
     impl->CaptureFromDevice = DSP_CaptureFromDevice;
     impl->FlushCapture = DSP_FlushCapture;
 
-    impl->AllowsArbitraryDeviceNames = 1;
+    impl->AllowsArbitraryDeviceNames = SDL_TRUE;
     impl->HasCaptureSupport = SDL_TRUE;
 
-    return 1;   /* this audio target is available. */
+    return SDL_TRUE;   /* this audio target is available. */
 }
 
 
 AudioBootStrap DSP_bootstrap = {
-    "dsp", "OSS /dev/dsp standard audio", DSP_Init, 0
+    "dsp", "OSS /dev/dsp standard audio", DSP_Init, SDL_FALSE
 };
 
 #endif /* SDL_AUDIO_DRIVER_OSS */

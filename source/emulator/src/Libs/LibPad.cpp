@@ -20,6 +20,8 @@ LIB_DEFINE(InitPad_1)
 	LIB_FUNC("YndgXqQVV7c", Controller::PadReadState);
 	LIB_FUNC("q1cHNfGycLI", Controller::PadRead);
 	LIB_FUNC("yFVnOdGxvZY", Controller::PadSetVibration);
+	LIB_FUNC("DscD1i9HX1w", Controller::PadResetLightBar);
+	LIB_FUNC("RR4novUEENY", Controller::PadSetLightBar);
 }
 
 } // namespace Kyty::Libs

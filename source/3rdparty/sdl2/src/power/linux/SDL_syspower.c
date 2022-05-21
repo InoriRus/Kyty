@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -44,14 +44,17 @@ static const char *sys_class_power_supply_path = "/sys/class/power_supply";
 static int
 open_power_file(const char *base, const char *node, const char *key)
 {
-    const size_t pathlen = strlen(base) + strlen(node) + strlen(key) + 3;
-    char *path = (char *) alloca(pathlen);
+    int fd;
+    const size_t pathlen = SDL_strlen(base) + SDL_strlen(node) + SDL_strlen(key) + 3;
+    char *path = SDL_stack_alloc(char, pathlen);
     if (path == NULL) {
         return -1;  /* oh well. */
     }
 
-    snprintf(path, pathlen, "%s/%s/%s", base, node, key);
-    return open(path, O_RDONLY);
+    SDL_snprintf(path, pathlen, "%s/%s/%s", base, node, key);
+    fd = open(path, O_RDONLY | O_CLOEXEC);
+    SDL_stack_free(path);
+    return fd;
 }
 
 
@@ -99,7 +102,7 @@ make_proc_acpi_key_val(char **_ptr, char **_key, char **_val)
 
     *(ptr++) = '\0';  /* terminate the key. */
 
-    while ((*ptr == ' ') && (*ptr != '\0')) {
+    while (*ptr == ' ') {
         ptr++;  /* skip whitespace. */
     }
 
@@ -146,20 +149,20 @@ check_proc_acpi_battery(const char * node, SDL_bool * have_battery,
 
     ptr = &state[0];
     while (make_proc_acpi_key_val(&ptr, &key, &val)) {
-        if (strcmp(key, "present") == 0) {
-            if (strcmp(val, "yes") == 0) {
+        if (SDL_strcmp(key, "present") == 0) {
+            if (SDL_strcmp(val, "yes") == 0) {
                 *have_battery = SDL_TRUE;
             }
-        } else if (strcmp(key, "charging state") == 0) {
+        } else if (SDL_strcmp(key, "charging state") == 0) {
             /* !!! FIXME: what exactly _does_ charging/discharging mean? */
-            if (strcmp(val, "charging/discharging") == 0) {
+            if (SDL_strcmp(val, "charging/discharging") == 0) {
                 charge = SDL_TRUE;
-            } else if (strcmp(val, "charging") == 0) {
+            } else if (SDL_strcmp(val, "charging") == 0) {
                 charge = SDL_TRUE;
             }
-        } else if (strcmp(key, "remaining capacity") == 0) {
+        } else if (SDL_strcmp(key, "remaining capacity") == 0) {
             char *endptr = NULL;
-            const int cvt = (int) strtol(val, &endptr, 10);
+            const int cvt = (int) SDL_strtol(val, &endptr, 10);
             if (*endptr == ' ') {
                 remaining = cvt;
             }
@@ -168,9 +171,9 @@ check_proc_acpi_battery(const char * node, SDL_bool * have_battery,
 
     ptr = &info[0];
     while (make_proc_acpi_key_val(&ptr, &key, &val)) {
-        if (strcmp(key, "design capacity") == 0) {
+        if (SDL_strcmp(key, "design capacity") == 0) {
             char *endptr = NULL;
-            const int cvt = (int) strtol(val, &endptr, 10);
+            const int cvt = (int) SDL_strtol(val, &endptr, 10);
             if (*endptr == ' ') {
                 maximum = cvt;
             }
@@ -225,8 +228,8 @@ check_proc_acpi_ac_adapter(const char * node, SDL_bool * have_ac)
 
     ptr = &state[0];
     while (make_proc_acpi_key_val(&ptr, &key, &val)) {
-        if (strcmp(key, "state") == 0) {
-            if (strcmp(val, "on-line") == 0) {
+        if (SDL_strcmp(key, "state") == 0) {
+            if (SDL_strcmp(val, "on-line") == 0) {
                 *have_ac = SDL_TRUE;
             }
         }
@@ -289,7 +292,7 @@ static SDL_bool
 next_string(char **_ptr, char **_str)
 {
     char *ptr = *_ptr;
-    char *str = *_str;
+    char *str;
 
     while (*ptr == ' ') {       /* skip any spaces... */
         ptr++;
@@ -315,7 +318,7 @@ static SDL_bool
 int_string(char *str, int *val)
 {
     char *endptr = NULL;
-    *val = (int) strtol(str, &endptr, 0);
+    *val = (int) SDL_strtol(str, &endptr, 0);
     return ((*str != '\0') && (*endptr == '\0'));
 }
 
@@ -330,7 +333,7 @@ SDL_GetPowerInfo_Linux_proc_apm(SDL_PowerState * state,
     int battery_flag = 0;
     int battery_percent = 0;
     int battery_time = 0;
-    const int fd = open(proc_apm_path, O_RDONLY);
+    const int fd = open(proc_apm_path, O_RDONLY | O_CLOEXEC);
     char buf[128];
     char *ptr = &buf[0];
     char *str = NULL;
@@ -377,8 +380,8 @@ SDL_GetPowerInfo_Linux_proc_apm(SDL_PowerState * state,
     if (!next_string(&ptr, &str)) {     /* remaining battery life percent */
         return SDL_FALSE;
     }
-    if (str[strlen(str) - 1] == '%') {
-        str[strlen(str) - 1] = '\0';
+    if (str[SDL_strlen(str) - 1] == '%') {
+        str[SDL_strlen(str) - 1] = '\0';
     }
     if (!int_string(str, &battery_percent)) {
         return SDL_FALSE;
@@ -392,7 +395,7 @@ SDL_GetPowerInfo_Linux_proc_apm(SDL_PowerState * state,
 
     if (!next_string(&ptr, &str)) {     /* remaining battery life time units */
         return SDL_FALSE;
-    } else if (strcmp(str, "min") == 0) {
+    } else if (SDL_strcmp(str, "min") == 0) {
         battery_time *= 60;
     }
 
@@ -451,6 +454,8 @@ SDL_GetPowerInfo_Linux_sys_class_power_supply(SDL_PowerState *state, int *second
         SDL_PowerState st;
         int secs;
         int pct;
+        int energy;
+        int power;
 
         if ((SDL_strcmp(name, ".") == 0) || (SDL_strcmp(name, "..") == 0)) {
             continue;  /* skip these, of course. */
@@ -492,11 +497,16 @@ SDL_GetPowerInfo_Linux_sys_class_power_supply(SDL_PowerState *state, int *second
             pct = (pct > 100) ? 100 : pct; /* clamp between 0%, 100% */
         }
 
-        if (!read_power_file(base, name, "time_to_empty_now", str, sizeof (str))) {
-            secs = -1;
-        } else {
+        if (read_power_file(base, name, "time_to_empty_now", str, sizeof (str))) {
             secs = SDL_atoi(str);
             secs = (secs <= 0) ? -1 : secs;  /* 0 == unknown */
+        } else if (st == SDL_POWERSTATE_ON_BATTERY) {
+            /* energy is Watt*hours and power is Watts */
+            energy = (read_power_file(base, name, "energy_now", str, sizeof (str))) ? SDL_atoi(str) : -1;
+            power = (read_power_file(base, name, "power_now", str, sizeof (str))) ? SDL_atoi(str) : -1;
+            secs = (energy >= 0 && power > 0) ? (3600LL * energy) / power : -1;
+        } else {
+            secs = -1;
         }
 
         /*
@@ -551,20 +561,30 @@ check_upower_device(DBusConnection *conn, const char *path, SDL_PowerState *stat
         return;
     } else if (!ui32) {
         return;  /* we don't care about random devices with batteries, like wireless controllers, etc */
-    } else if (!SDL_DBus_QueryPropertyOnConnection(conn, UPOWER_DBUS_NODE, path, UPOWER_DEVICE_DBUS_INTERFACE, "IsPresent", DBUS_TYPE_BOOLEAN, &ui32)) {
+    }
+
+    if (!SDL_DBus_QueryPropertyOnConnection(conn, UPOWER_DBUS_NODE, path, UPOWER_DEVICE_DBUS_INTERFACE, "IsPresent", DBUS_TYPE_BOOLEAN, &ui32)) {
         return;
-    } else if (!ui32) {
+    }
+    if (!ui32) {
         st = SDL_POWERSTATE_NO_BATTERY;
-    } else if (!SDL_DBus_QueryPropertyOnConnection(conn, UPOWER_DBUS_NODE, path, UPOWER_DEVICE_DBUS_INTERFACE, "State", DBUS_TYPE_UINT32, &ui32)) {
-        st = SDL_POWERSTATE_UNKNOWN;  /* uh oh */
-    } else if (ui32 == 1) {  /* 1 == charging */
-        st = SDL_POWERSTATE_CHARGING;
-    } else if ((ui32 == 2) || (ui32 == 3)) {  /* 2 == discharging, 3 == empty. */
-        st = SDL_POWERSTATE_ON_BATTERY;
-    } else if (ui32 == 4) {   /* 4 == full */
-        st = SDL_POWERSTATE_CHARGED;
     } else {
-        st = SDL_POWERSTATE_UNKNOWN;  /* uh oh */
+        /* Get updated information on the battery status
+         * This can occasionally fail, and we'll just return slightly stale data in that case
+         */
+        SDL_DBus_CallMethodOnConnection(conn, UPOWER_DBUS_NODE, path, UPOWER_DEVICE_DBUS_INTERFACE, "Refresh", DBUS_TYPE_INVALID, DBUS_TYPE_INVALID);
+
+        if (!SDL_DBus_QueryPropertyOnConnection(conn, UPOWER_DBUS_NODE, path, UPOWER_DEVICE_DBUS_INTERFACE, "State", DBUS_TYPE_UINT32, &ui32)) {
+            st = SDL_POWERSTATE_UNKNOWN;  /* uh oh */
+        } else if (ui32 == 1) {  /* 1 == charging */
+            st = SDL_POWERSTATE_CHARGING;
+        } else if ((ui32 == 2) || (ui32 == 3)) {  /* 2 == discharging, 3 == empty. */
+            st = SDL_POWERSTATE_ON_BATTERY;
+        } else if (ui32 == 4) {   /* 4 == full */
+            st = SDL_POWERSTATE_CHARGED;
+        } else {
+            st = SDL_POWERSTATE_UNKNOWN;  /* uh oh */
+        }
     }
 
     if (!SDL_DBus_QueryPropertyOnConnection(conn, UPOWER_DBUS_NODE, path, UPOWER_DEVICE_DBUS_INTERFACE, "Percentage", DBUS_TYPE_DOUBLE, &d)) {

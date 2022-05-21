@@ -37,7 +37,6 @@
 #include <string>
 #include <vulkan/vk_enum_string_helper.h>
 #include <vulkan/vk_platform.h>
-#include <vulkan/vulkan_core.h>
 
 // IWYU pragma: no_include <intrin.h>
 
@@ -1370,6 +1369,18 @@ static VkPhysicalDevice VulkanFindPhysicalDevice(VkInstance instance, VkSurfaceK
 			skip_device = true;
 		}
 
+		if (device_features2.features.samplerAnisotropy != VK_TRUE)
+		{
+			printf("samplerAnisotropy is not supported\n");
+			skip_device = true;
+		}
+
+		//		if (device_features2.features.shaderImageGatherExtended != VK_TRUE)
+		//		{
+		//			printf("shaderImageGatherExtended is not supported\n");
+		//			skip_device = true;
+		//		}
+
 		if (!skip_device)
 		{
 			uint32_t extensions_count = 0;
@@ -1457,6 +1468,13 @@ static VkPhysicalDevice VulkanFindPhysicalDevice(VkInstance instance, VkSurfaceK
 		    !CheckFormat(device, VK_FORMAT_R8_UNORM, true, VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT))
 		{
 			printf("Format VK_FORMAT_R8_UNORM cannot be used as texture\n");
+			skip_device = true;
+		}
+
+		if (!skip_device &&
+		    !CheckFormat(device, VK_FORMAT_R8G8_UNORM, true, VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT))
+		{
+			printf("Format VK_FORMAT_R8G8_UNORM cannot be used as texture\n");
 			skip_device = true;
 		}
 
@@ -1568,6 +1586,8 @@ static VkDevice VulkanCreateDevice(VkPhysicalDevice physical_device, VkSurfaceKH
 
 	VkPhysicalDeviceFeatures device_features {};
 	device_features.fragmentStoresAndAtomics = VK_TRUE;
+	device_features.samplerAnisotropy        = VK_TRUE;
+	// device_features.shaderImageGatherExtended = VK_TRUE;
 
 	VkPhysicalDeviceColorWriteEnableFeaturesEXT color_write_ext {};
 	color_write_ext.sType            = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COLOR_WRITE_ENABLE_FEATURES_EXT;

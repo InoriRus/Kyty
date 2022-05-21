@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2018 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -98,8 +98,10 @@ typedef struct _SDL_SensorDriver
 /* The available sensor drivers */
 extern SDL_SensorDriver SDL_ANDROID_SensorDriver;
 extern SDL_SensorDriver SDL_COREMOTION_SensorDriver;
+extern SDL_SensorDriver SDL_WINDOWS_SensorDriver;
 extern SDL_SensorDriver SDL_DUMMY_SensorDriver;
+extern SDL_SensorDriver SDL_VITA_SensorDriver;
 
-#endif /* SDL_syssensor_c_h_ */
+#endif /* SDL_syssensor_h_ */
 
 /* vi: set ts=4 sw=4 expandtab: */
