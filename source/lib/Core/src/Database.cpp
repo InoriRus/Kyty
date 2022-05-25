@@ -28,7 +28,7 @@ using Math::Rand;
 
 struct StatementPrivate
 {
-	explicit StatementPrivate(ConnectionPrivate* p): p_stmt(nullptr), m_p(p), text(nullptr) {}
+	explicit StatementPrivate(ConnectionPrivate* p): m_p(p) {}
 
 	void                           Prepare(const char* sql_text);
 	[[nodiscard]] Statement::State Step() const;
@@ -46,9 +46,9 @@ struct StatementPrivate
 
 	void DbgTest() const;
 
-	sqlite3_stmt*      p_stmt;
-	ConnectionPrivate* m_p;
-	const char*        text;
+	sqlite3_stmt*      p_stmt = nullptr;
+	ConnectionPrivate* m_p    = nullptr;
+	const char*        text   = nullptr;
 };
 
 struct ConnectionPrivate

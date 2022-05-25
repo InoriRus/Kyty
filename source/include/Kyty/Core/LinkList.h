@@ -27,7 +27,7 @@ using ListIndex = struct
 	     index                 = (list).Prev(index)) /* NOLINT(bugprone-macro-parentheses) */
 
 template <typename T>
-class ListNode
+class ListNode final
 {
 	/*private:*/
 
@@ -35,7 +35,7 @@ class ListNode
 
 	explicit ListNode(const T& v): m_value(v), m_next(this), m_prev(this) {}
 
-	virtual ~ListNode() { Remove(); }
+	/*virtual*/ ~ListNode() { Remove(); }
 
 	void Remove()
 	{
@@ -263,7 +263,10 @@ public:
 		if (this != &list)
 		{
 			Clear();
-			FOR_LIST(index, list) { add(list[index]); }
+			FOR_LIST(index, list)
+			{
+				add(list[index]);
+			}
 		}
 		return *this;
 	}

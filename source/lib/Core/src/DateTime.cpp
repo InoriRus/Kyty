@@ -389,7 +389,7 @@ Date Date::FromMacros(const String& date)
 
 	if (lst.Size() != 3)
 	{
-		return Date();
+		return {};
 	}
 
 	static const char* month_str[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
@@ -406,7 +406,7 @@ Date Date::FromMacros(const String& date)
 
 	if (month < 0)
 	{
-		return Date();
+		return {};
 	}
 
 	return Date(lst.At(2).ToInt32(), month, lst.At(1).ToInt32());
@@ -673,7 +673,7 @@ Time Time::operator+(int secs) const
 
 	if (IsInvalid())
 	{
-		return Time();
+		return {};
 	}
 
 	int r = m_ms + ms_secs;
@@ -698,7 +698,7 @@ Time Time::operator-(int secs) const
 
 	if (IsInvalid())
 	{
-		return Time();
+		return {};
 	}
 
 	int r = m_ms - ms_secs;
@@ -768,7 +768,7 @@ DateTime DateTime::FromSystem()
 
 	if (t.is_invalid)
 	{
-		return DateTime();
+		return {};
 	}
 
 	return DateTime(Date(t.Year, t.Month, t.Day), Time(t.Hour, t.Minute, t.Second, t.Milliseconds));
@@ -781,7 +781,7 @@ DateTime DateTime::FromSystemUTC()
 
 	if (t.is_invalid)
 	{
-		return DateTime();
+		return {};
 	}
 
 	return DateTime(Date(t.Year, t.Month, t.Day), Time(t.Hour, t.Minute, t.Second, t.Milliseconds));
@@ -848,26 +848,29 @@ uint64_t DateTime::DistanceMs(const DateTime& other) const
 	jd_t j1 = other.m_date.JulianDay();
 	jd_t j2 = m_date.JulianDay();
 
-	return int64_t(j2 - j1 - 1) * int64_t(TIME_MS_IN_DAY) + (int64_t(TIME_MS_IN_DAY) - int64_t(other.m_time.MsecTotal())) +
-	       int64_t(m_time.MsecTotal());
+	return static_cast<int64_t>(j2 - j1 - 1) * static_cast<int64_t>(TIME_MS_IN_DAY) +
+	       (static_cast<int64_t>(TIME_MS_IN_DAY) - static_cast<int64_t>(other.m_time.MsecTotal())) +
+	       static_cast<int64_t>(m_time.MsecTotal());
 }
 
 DateTime DateTime::FromSQLiteJulian(double jd)
 {
 	double i = NAN;
 	double f = modf(jd + 0.5, &i);
-	return DateTime(Date(jd_t(i)), Time(int(f * double(TIME_MS_IN_DAY))));
+	return DateTime(Date(static_cast<jd_t>(i)), Time(static_cast<int>(f * static_cast<double>(TIME_MS_IN_DAY))));
 }
 
 double DateTime::ToSQLiteJulian() const
 {
-	return -0.5 + double(GetDate().JulianDay()) + double(GetTime().MsecTotal()) / double(TIME_MS_IN_DAY);
+	return -0.5 + static_cast<double>(GetDate().JulianDay()) +
+	       static_cast<double>(GetTime().MsecTotal()) / static_cast<double>(TIME_MS_IN_DAY);
 }
 
 int64_t DateTime::ToSQLiteJulianInt64() const
 {
-	return -(static_cast<int64_t>(TIME_MS_IN_DAY)) / 2 + int64_t(GetDate().JulianDay()) * (static_cast<int64_t>(TIME_MS_IN_DAY)) +
-	       int64_t(GetTime().MsecTotal());
+	return -(static_cast<int64_t>(TIME_MS_IN_DAY)) / 2 +
+	       static_cast<int64_t>(GetDate().JulianDay()) * (static_cast<int64_t>(TIME_MS_IN_DAY)) +
+	       static_cast<int64_t>(GetTime().MsecTotal());
 }
 
 DateTime DateTime::FromUnix(double seconds)

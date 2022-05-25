@@ -13,7 +13,7 @@ struct ConnectionPrivate;
 
 void Init();
 
-class Statement
+class Statement final
 {
 public:
 	enum class State
@@ -79,7 +79,7 @@ public:
 	friend class Connection;
 
 protected:
-	virtual ~Statement();
+	~Statement();
 	explicit Statement(ConnectionPrivate* c);
 
 private:

@@ -5,9 +5,9 @@ file(GLOB sqlite_src
 
 if (MINGW)
 	if (CLANG)
-		set_source_files_properties(${sqlite_src} PROPERTIES COMPILE_FLAGS "-Wno-unused-function -Wno-unknown-pragmas -Wno-unused-variable -Wno-sometimes-uninitialized")
+		set_source_files_properties(${sqlite_src} PROPERTIES COMPILE_FLAGS "-Wno-unused-but-set-variable -Wno-unused-function -Wno-unknown-pragmas -Wno-unused-variable -Wno-sometimes-uninitialized")
 	else()
-		set_source_files_properties(${sqlite_src} PROPERTIES COMPILE_FLAGS "-Wno-return-local-addr -Wno-unused-but-set-variable -Wno-unused-function -Wno-unknown-pragmas -Wno-unused-variable -Wno-maybe-uninitialized -Wno-array-bounds")
+		set_source_files_properties(${sqlite_src} PROPERTIES COMPILE_FLAGS "-Wno-misleading-indentation -Wno-return-local-addr -Wno-unused-but-set-variable -Wno-unused-function -Wno-unknown-pragmas -Wno-unused-variable -Wno-maybe-uninitialized -Wno-array-bounds")
 	endif()
 endif()
 

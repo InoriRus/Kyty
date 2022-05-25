@@ -55,7 +55,7 @@ public:
 
 	private:
 		Id() = default;
-		static Id Invalid() { return Id(); }
+		static Id Invalid() { return {}; }
 		static Id Create(int net_id, Type type)
 		{
 			Id r;
@@ -1226,7 +1226,10 @@ int KYTY_SYSV_ABI NpGetNpId(int user_id, NpId* np_id)
 
 	EXIT_NOT_IMPLEMENTED(np_id == nullptr);
 
-	snprintf(np_id->handle.data, 16, "Kyty");
+	int s = snprintf(np_id->handle.data, 16, "Kyty");
+
+	EXIT_NOT_IMPLEMENTED(s >= 16);
+
 	np_id->handle.term = 0;
 
 	return OK;
@@ -1240,7 +1243,10 @@ int KYTY_SYSV_ABI NpGetOnlineId(int user_id, NpOnlineId* online_id)
 
 	EXIT_NOT_IMPLEMENTED(online_id == nullptr);
 
-	snprintf(online_id->data, 16, "Kyty");
+	int s = snprintf(online_id->data, 16, "Kyty");
+
+	EXIT_NOT_IMPLEMENTED(s >= 16);
+
 	online_id->term = 0;
 
 	return OK;

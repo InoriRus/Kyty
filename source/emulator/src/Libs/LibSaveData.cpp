@@ -173,7 +173,9 @@ int KYTY_SYSV_ABI SaveDataMount(const SaveDataMount* mount, SaveDataMountResult*
 		mount_result->mount_status = 1;
 	}
 
-	snprintf(mount_result->mount_point.data, 16, "%s", mount_point.C_Str());
+	int s = snprintf(mount_result->mount_point.data, 16, "%s", mount_point.C_Str());
+
+	EXIT_NOT_IMPLEMENTED(s >= 16);
 
 	mount_result->required_blocks = 0;
 
@@ -234,7 +236,9 @@ int KYTY_SYSV_ABI SaveDataMount2(const SaveDataMount2* mount, SaveDataMountResul
 		mount_result->mount_status = 1;
 	}
 
-	snprintf(mount_result->mount_point.data, 16, "%s", mount_point.C_Str());
+	int s = snprintf(mount_result->mount_point.data, 16, "%s", mount_point.C_Str());
+
+	EXIT_NOT_IMPLEMENTED(s >= 16);
 
 	mount_result->required_blocks = 0;
 

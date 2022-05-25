@@ -45,7 +45,7 @@ static void ChangeColor(QListWidgetItem* item)
 }
 
 ConfigurationEditDialog::ConfigurationEditDialog(Kyty::Configuration* info, ConfigurationListWidget* parent)
-    : QDialog(parent, Qt::WindowCloseButtonHint), m_ui(new Ui::ConfigurationEditDialog), m_parent(parent)
+    : QDialog(parent, Qt::WindowCloseButtonHint), m_ui(new Ui::ConfigurationEditDialog), m_info(info), m_parent(parent)
 {
 	m_ui->setupUi(this);
 
@@ -82,8 +82,6 @@ ConfigurationEditDialog::ConfigurationEditDialog(Kyty::Configuration* info, Conf
 	layout()->setSizeConstraint(QLayout::SetFixedSize);
 
 	restoreGeometry(g_last_geometry);
-
-	m_info = info;
 
 	Init();
 
@@ -280,7 +278,7 @@ void ConfigurationEditDialog::scan_elfs()
 
 	m_ui->listWidget_elfs->clear();
 
-	int selected_num = 0;
+	// int selected_num = 0;
 
 	for (const auto& elf: m_info->elfs)
 	{
@@ -299,7 +297,7 @@ void ConfigurationEditDialog::scan_elfs()
 			item->setCheckState(selected ? Qt::Checked : Qt::Unchecked);
 		}
 
-		selected_num += (selected ? 1 : 0);
+		// selected_num += (selected ? 1 : 0);
 	}
 
 	for (const auto& elf: elfs)
@@ -323,7 +321,7 @@ void ConfigurationEditDialog::scan_libs()
 
 	m_ui->listWidget_libs->clear();
 
-	int selected_num = 0;
+	// int selected_num = 0;
 
 	for (const auto& lib: m_info->libs)
 	{
@@ -342,7 +340,7 @@ void ConfigurationEditDialog::scan_libs()
 			item->setCheckState(selected ? Qt::Checked : Qt::Unchecked);
 		}
 
-		selected_num += (selected ? 1 : 0);
+		// selected_num += (selected ? 1 : 0);
 	}
 
 	for (const auto& lib: libs)

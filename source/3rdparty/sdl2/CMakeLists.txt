@@ -97,7 +97,7 @@ file(GLOB sdl2_src
 
 if (MINGW)
 	if (CLANG)
-		set_source_files_properties(${sdl2_src} PROPERTIES COMPILE_FLAGS "-Wno-unused-function -Wno-pragma-pack -Wno-shadow -Wno-unknown-pragmas -Wno-unused-local-typedefs -DHAVE_LIBC -DUSING_GENERATED_CONFIG_H -D_FLOAT_H___")
+		set_source_files_properties(${sdl2_src} PROPERTIES COMPILE_FLAGS "-Wno-unused-but-set-variable -Wno-unused-function -Wno-pragma-pack -Wno-shadow -Wno-unknown-pragmas -Wno-unused-local-typedefs -DHAVE_LIBC -DUSING_GENERATED_CONFIG_H -D_FLOAT_H___")
 	else()
 		set_source_files_properties(${sdl2_src} PROPERTIES COMPILE_FLAGS "-Wno-unused-function -Wno-shadow -Wno-unused-but-set-variable -Wno-unknown-pragmas -Wno-unused-local-typedefs -Wno-maybe-uninitialized -DHAVE_LIBC -DUSING_GENERATED_CONFIG_H")
 	endif()

@@ -26,6 +26,7 @@
 // IWYU pragma: no_include <wtypes.h>
 // IWYU pragma: no_include <minwinbase.h>
 // IWYU pragma: no_include <apisetcconv.h>
+// IWYU pragma: no_include <winbase.h>
 
 //#include <memoryapi.h>
 
@@ -169,7 +170,7 @@ ExceptionHandler::~ExceptionHandler()
 
 uint64_t ExceptionHandler::GetSize()
 {
-	return (sizeof(ExceptionHandlerPrivate::HandlerInfo) & ~(uint64_t(0x1000) - 1)) + 0x1000;
+	return (sizeof(ExceptionHandlerPrivate::HandlerInfo) & ~(static_cast<uint64_t>(0x1000) - 1)) + 0x1000;
 }
 
 bool ExceptionHandler::Install(uint64_t base_address, uint64_t handler_addr, uint64_t image_size, handler_func_t func)

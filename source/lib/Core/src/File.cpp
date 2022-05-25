@@ -13,6 +13,7 @@
 
 // IWYU pragma: no_include <fileapi.h>
 // IWYU pragma: no_include <windows.h>
+// IWYU pragma: no_include <winbase.h>
 
 #if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
 #ifdef CreateDirectory
@@ -931,7 +932,7 @@ DateTime File::GetLastAccessTimeUTC(const String& name)
 
 	if (t.is_invalid)
 	{
-		return DateTime();
+		return {};
 	}
 
 	return DateTime(Date(t.Year, t.Month, t.Day), Time(t.Hour, t.Minute, t.Second, t.Milliseconds));
@@ -944,7 +945,7 @@ DateTime File::GetLastWriteTimeUTC(const String& name)
 
 	if (t.is_invalid)
 	{
-		return DateTime();
+		return {};
 	}
 
 	return DateTime(Date(t.Year, t.Month, t.Day), Time(t.Hour, t.Minute, t.Second, t.Milliseconds));

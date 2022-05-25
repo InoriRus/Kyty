@@ -111,7 +111,7 @@ public:
 
 	V& operator[](const K& key)
 	{
-		V def;
+		V def {};
 		return *(static_cast<V*>(m_b.OperatorSquareBrackets(&key, &def)));
 	}
 
@@ -155,7 +155,8 @@ public:
 			return false;
 		}
 		bool ok       = true;
-		auto callback = [&ok, &other](const K* key, const V* value) {
+		auto callback = [&ok, &other](const K* key, const V* value)
+		{
 			if (!(other.Find(*key) && other.Get(*key) == *value))
 			{
 				ok = false;

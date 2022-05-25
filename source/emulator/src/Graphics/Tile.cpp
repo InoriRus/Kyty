@@ -162,8 +162,8 @@ public:
 
 		if (tile_bytes > 512)
 		{
-			tile_split_slice = element_offset / (512 * 8);
-			element_offset %= (512 * 8);
+			tile_split_slice = element_offset / (static_cast<uint64_t>(512) * 8);
+			element_offset %= (static_cast<uint64_t>(512) * 8);
 			tile_bytes = 512;
 		}
 
@@ -304,7 +304,7 @@ static void Detile32(const Tiler32* t, uint32_t width, uint32_t height, uint32_t
 		uint32_t       start_y   = p->start_y;
 		uint32_t       width     = p->width;
 		uint32_t       height    = p->height;
-		uint32_t       dst_pitch = p->dst_pitch;
+		uint64_t       dst_pitch = p->dst_pitch;
 		bool           neo       = p->neo;
 
 		for (uint32_t y = start_y; y < height; y++)
@@ -359,7 +359,7 @@ static void Detile32(const Tiler1d* t, uint32_t width, uint32_t height, uint32_t
 	for (uint32_t y = 0; y < height; y++)
 	{
 		uint32_t x             = 0;
-		uint64_t linear_offset = y * dst_pitch * 4;
+		uint64_t linear_offset = y * static_cast<uint64_t>(dst_pitch) * 4;
 
 		for (; x + 1 < width; x += 2)
 		{
@@ -382,7 +382,7 @@ static void Detile64(const Tiler1d* t, uint32_t width, uint32_t height, uint32_t
 	for (uint32_t y = 0; y < height; y++)
 	{
 		uint32_t x             = 0;
-		uint64_t linear_offset = y * dst_pitch * 8;
+		uint64_t linear_offset = y * static_cast<uint64_t>(dst_pitch) * 8;
 
 		for (; x + 1 < width; x += 2)
 		{
@@ -405,7 +405,7 @@ static void Detile128(const Tiler1d* t, uint32_t width, uint32_t height, uint32_
 	for (uint32_t y = 0; y < height; y++)
 	{
 		uint32_t x             = 0;
-		uint64_t linear_offset = y * dst_pitch * 16;
+		uint64_t linear_offset = y * static_cast<uint64_t>(dst_pitch) * 16;
 
 		for (; x + 1 < width; x += 2)
 		{

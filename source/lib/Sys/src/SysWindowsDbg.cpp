@@ -8,6 +8,9 @@
 // IWYU pragma: no_include <memoryapi.h>
 // IWYU pragma: no_include <minwindef.h>
 // IWYU pragma: no_include <processthreadsapi.h>
+// IWYU pragma: no_include <errhandlingapi.h>
+// IWYU pragma: no_include <excpt.h>
+// IWYU pragma: no_include <winbase.h>
 
 #if KYTY_PLATFORM != KYTY_PLATFORM_WINDOWS
 //#error "KYTY_PLATFORM != KYTY_PLATFORM_WINDOWS"

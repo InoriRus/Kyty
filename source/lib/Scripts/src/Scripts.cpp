@@ -555,7 +555,7 @@ bool ScriptVar::IsInteger() const
 #else
 bool ScriptVar::IsInteger() const
 {
-	return m_p->is_double && double(int32_t(m_p->val_double)) == m_p->val_double;
+	return m_p->is_double && static_cast<double>(static_cast<int32_t>(m_p->val_double)) == m_p->val_double;
 }
 #endif
 bool ScriptVar::IsString() const
@@ -575,7 +575,7 @@ int64_t ScriptVar::ToInteger() const
 #else
 int32_t ScriptVar::ToInteger() const
 {
-	return IsInteger() ? int32_t(m_p->val_double) : 0;
+	return IsInteger() ? static_cast<int32_t>(m_p->val_double) : 0;
 }
 #endif
 double ScriptVar::ToDouble() const
@@ -747,7 +747,7 @@ void PushInteger(int32_t i)
 {
 	lua_init();
 
-	PushDouble(double(i));
+	PushDouble(static_cast<double>(i));
 }
 #endif
 
@@ -781,7 +781,7 @@ ScriptVar ScriptTable::At(const String& key) const
 			return p.GetValue();
 		}
 	}
-	return ScriptVar();
+	return {};
 }
 
 ScriptVar ScriptTable::At(double key) const
@@ -797,7 +797,7 @@ ScriptVar ScriptTable::At(double key) const
 			return p.GetValue();
 		}
 	}
-	return ScriptVar();
+	return {};
 }
 
 void ScriptTable::DbgPrint(int depth) const

@@ -15,7 +15,7 @@ class AsyncJob
 {
 public:
 	using func_t = std::function<void(void*)>;
-	explicit AsyncJob(const char* name): m_name(name) { m_thread = new Core::Thread(ThreadRun, this); }
+	explicit AsyncJob(const char* name): m_name(name), m_thread(new Core::Thread(ThreadRun, this)) {}
 	virtual ~AsyncJob()
 	{
 		EXIT_IF(m_thread == nullptr);
@@ -52,12 +52,11 @@ private:
 	Core::Mutex   m_mutex;
 	Core::CondVar m_cond_var1;
 	Core::CondVar m_cond_var2;
-	Core::Thread* m_thread = nullptr;
-	const char*   m_name   = nullptr;
-
-	func_t m_func      = nullptr;
-	void*  m_arg       = nullptr;
-	bool   m_need_exit = false;
+	const char*   m_name      = nullptr;
+	func_t        m_func      = nullptr;
+	void*         m_arg       = nullptr;
+	bool          m_need_exit = false;
+	Core::Thread* m_thread    = nullptr;
 
 	static void ThreadRun(void* data)
 	{

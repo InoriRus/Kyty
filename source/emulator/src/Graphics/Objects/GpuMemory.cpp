@@ -59,13 +59,10 @@ static OverlapType GetOverlapType(uint64_t vaddr_a, uint64_t size_a, uint64_t va
 		return OverlapType::Equals;
 	}
 
-	uint64_t vaddr_last_a = vaddr_a + size_a - 1;
-	uint64_t vaddr_last_b = vaddr_b + size_b - 1;
-
 	bool a_b  = addr_in_block(vaddr_a, size_a, vaddr_b);
-	bool a_lb = addr_in_block(vaddr_a, size_a, vaddr_last_b);
+	bool a_lb = addr_in_block(vaddr_a, size_a, vaddr_b + size_b - 1);
 	bool b_a  = addr_in_block(vaddr_b, size_b, vaddr_a);
-	bool b_la = addr_in_block(vaddr_b, size_b, vaddr_last_a);
+	bool b_la = addr_in_block(vaddr_b, size_b, vaddr_a + size_a - 1);
 
 	if (a_b && a_lb)
 	{

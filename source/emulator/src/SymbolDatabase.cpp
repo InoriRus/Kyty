@@ -64,7 +64,7 @@ void SymbolDatabase::DbgDump(const String& folder, const String& file_name)
 
 const SymbolRecord* SymbolDatabase::Find(const SymbolResolve& s) const
 {
-	auto index = m_map.Get(GenerateName(s), uint32_t(-1));
+	auto index = m_map.Get(GenerateName(s), decltype(m_symbols)::INVALID_INDEX);
 	if (!m_symbols.IndexValid(index))
 	{
 		return nullptr;

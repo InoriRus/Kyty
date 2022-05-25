@@ -426,6 +426,13 @@ static bool MSpaceInternalInit(MSpaceContext& ctx, const char* name, void* base,
 
 	ctx = MSpaceContext();
 
+	int s = snprintf(ctx.name, sizeof(ctx.name), "%s", name);
+
+	if (static_cast<size_t>(s) >= sizeof(ctx.name))
+	{
+		return false;
+	}
+
 	ctx.base     = static_cast<MSpaceBlock*>(base);
 	ctx.capacity = (capacity / sizeof(MSpaceBlock)) - 2;
 
@@ -437,8 +444,6 @@ static bool MSpaceInternalInit(MSpaceContext& ctx, const char* name, void* base,
 
 	ctx.mutex        = (thread_safe ? new Core::Mutex : nullptr);
 	ctx.dbg_callback = dbg_callback;
-
-	snprintf(ctx.name, sizeof(ctx.name), "%s", name);
 
 	return true;
 }

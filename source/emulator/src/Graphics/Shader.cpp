@@ -2144,8 +2144,11 @@ static bool SpirvDisassemble(const uint32_t* src_binary, size_t src_binary_size,
 
 		std::string disassembly;
 		if (!core.Disassemble(src_binary, src_binary_size, &disassembly,
-		                      uint32_t(SPV_BINARY_TO_TEXT_OPTION_NO_HEADER) | SPV_BINARY_TO_TEXT_OPTION_FRIENDLY_NAMES |
-		                          SPV_BINARY_TO_TEXT_OPTION_COMMENT | SPV_BINARY_TO_TEXT_OPTION_INDENT | SPV_BINARY_TO_TEXT_OPTION_COLOR))
+		                      static_cast<uint32_t>(SPV_BINARY_TO_TEXT_OPTION_NO_HEADER) |
+		                          static_cast<uint32_t>(SPV_BINARY_TO_TEXT_OPTION_FRIENDLY_NAMES) |
+		                          static_cast<uint32_t>(SPV_BINARY_TO_TEXT_OPTION_COMMENT) |
+		                          static_cast<uint32_t>(SPV_BINARY_TO_TEXT_OPTION_INDENT) |
+		                          static_cast<uint32_t>(SPV_BINARY_TO_TEXT_OPTION_COLOR)))
 		{
 			*dst_disassembly = disassembly.c_str();
 
@@ -2242,7 +2245,7 @@ static const ShaderBinaryInfo* GetBinaryInfo(const uint32_t* code)
 
 	if (code[0] == 0xBEEB03FF)
 	{
-		return reinterpret_cast<const ShaderBinaryInfo*>(code + (code[1] + 1) * 2);
+		return reinterpret_cast<const ShaderBinaryInfo*>(code + static_cast<size_t>(code[1] + 1) * 2);
 	}
 
 	return nullptr;

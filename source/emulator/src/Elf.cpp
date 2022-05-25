@@ -379,7 +379,8 @@ void Elf64::DbgDump(const String& folder)
 		}
 
 		char str[512];
-		sprintf(str, "phdr_%03d", i);
+		int  s = snprintf(str, 512, "phdr_%03d", i);
+		EXIT_NOT_IMPLEMENTED(s >= 512);
 
 		Core::File fout;
 		fout.Create(folder_str + str);
@@ -406,7 +407,8 @@ void Elf64::DbgDump(const String& folder)
 		}
 
 		char str[512];
-		sprintf(str, "shdr_%03d", i);
+		int  s = snprintf(str, 512, "shdr_%03d", i);
+		EXIT_NOT_IMPLEMENTED(s >= 512);
 
 		Core::File fout;
 		fout.Create(folder_str + str);

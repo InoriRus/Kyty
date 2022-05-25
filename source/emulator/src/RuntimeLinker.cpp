@@ -171,7 +171,7 @@ static void KYTY_SYSV_ABI stackwalk_x86(uint64_t rbp, void** stack, int* depth, 
 
 	for (; i < d; i++)
 	{
-		if (!(uintptr_t(frame) >= stack_addr && uintptr_t(frame) < stack_addr + stack_size))
+		if (!(reinterpret_cast<uintptr_t>(frame) >= stack_addr && reinterpret_cast<uintptr_t>(frame) < stack_addr + stack_size))
 		{
 			break;
 		}
@@ -765,22 +765,6 @@ void RuntimeLinker::SaveProgram(Program* program, const String& elf_name)
 	}
 }
 
-void RuntimeLinker::Clear()
-{
-	// EXIT_NOT_IMPLEMENTED(!Core::Thread::IsMainThread());
-
-	Core::LockGuard lock(m_mutex);
-
-	for (auto* p: m_programs)
-	{
-		DeleteProgram(p);
-	}
-	m_programs.Clear();
-	delete m_symbols;
-	m_symbols   = nullptr;
-	m_relocated = false;
-}
-
 void RuntimeLinker::Execute()
 {
 	KYTY_PROFILER_THREAD("Thread_Main");
@@ -797,7 +781,7 @@ void RuntimeLinker::Execute()
 	// Reserve some stack. There may be jumps over guard page. To prevent segfault we need to expand committed area.
 
 	size_t expanded_size = 0;
-	size_t expanded_max  = 256 * 1024;
+	size_t expanded_max  = static_cast<size_t>(256) * 1024;
 
 	while (expanded_size < expanded_max)
 	{
@@ -817,6 +801,22 @@ void RuntimeLinker::Execute()
 
 		run_entry(entry, &p, ProgramExitHandler);
 	}
+}
+
+void RuntimeLinker::Clear()
+{
+	// EXIT_NOT_IMPLEMENTED(!Core::Thread::IsMainThread());
+
+	Core::LockGuard lock(m_mutex);
+
+	for (auto* p: m_programs)
+	{
+		DeleteProgram(p);
+	}
+	m_programs.Clear();
+	delete m_symbols;
+	m_symbols   = nullptr;
+	m_relocated = false;
 }
 
 void RuntimeLinker::Resolve(const String& name, SymbolType type, Program* program, SymbolRecord* out_info, bool* bind_self)
@@ -1117,7 +1117,7 @@ void RuntimeLinker::LoadProgramToMemory(Program* program)
 	EXIT_IF(phdr == nullptr || ehdr == nullptr);
 
 	program->base_size         = calc_base_size(ehdr, phdr);
-	program->base_size_aligned = (program->base_size & ~(uint64_t(0x1000) - 1)) + 0x1000;
+	program->base_size_aligned = (program->base_size & ~(static_cast<uint64_t>(0x1000) - 1)) + 0x1000;
 
 	uint64_t exception_handler_size = VirtualMemory::ExceptionHandler::GetSize();
 	uint64_t tls_handler_size       = is_shared ? 0 : Jit::SafeCall::GetSize();
@@ -1360,7 +1360,7 @@ static void InstallRelocateHandler(Program* program)
 	KYTY_PROFILER_FUNCTION();
 
 	uint64_t pltgot_vaddr = program->dynamic_info->pltgot_vaddr + program->base_vaddr;
-	uint64_t pltgot_size  = 3 * 8;
+	uint64_t pltgot_size  = static_cast<uint64_t>(3) * 8;
 	void**   pltgot       = reinterpret_cast<void**>(pltgot_vaddr);
 
 	VirtualMemory::Mode old_mode {};

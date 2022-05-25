@@ -11,10 +11,12 @@
 #include "Emulator/Config.h"
 
 #if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
-#include <windows.h>
+#include <windows.h> // IWYU pragma: keep
 // IWYU pragma: no_include <handleapi.h>
 // IWYU pragma: no_include <minwindef.h>
 // IWYU pragma: no_include <processenv.h>
+// IWYU pragma: no_include <winbase.h>
+// IWYU pragma: no_include <wincon.h>
 #endif
 
 #ifdef KYTY_EMU_ENABLED

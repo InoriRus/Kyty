@@ -25,7 +25,7 @@ public:
 		}
 	}
 
-	ByteBuffer(const void* buf, uint32_t size): ByteBuffer(size, false) // @suppress("Ambiguous problem")
+	explicit ByteBuffer(const void* buf, uint32_t size): ByteBuffer(size, false) // @suppress("Ambiguous problem")
 	{
 		Byte* values_ptr = GetData();
 		std::memcpy(values_ptr, buf, size);

@@ -251,12 +251,12 @@ public:
 	[[nodiscard]] const_iterator cend() const { return GetDataConst() + Size(); } // NOLINT(readability-identifier-naming)
 
 private:
-	String(const char32_t* array, uint32_t size);
+	explicit String(const char32_t* array, uint32_t size);
 	// String(const uint8_t *utf8_str);
 	// String(const char16_t *utf16_str);
 
 	template <class T, class OP>
-	String(const T* str, OP&& read, uint32_t size = 0, bool with_size = false): m_data(new DataType)
+	explicit String(const T* str, OP&& read, uint32_t size = 0, bool with_size = false): m_data(new DataType)
 	{
 		if (str == nullptr)
 		{

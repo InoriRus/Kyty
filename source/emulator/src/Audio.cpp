@@ -41,7 +41,7 @@ public:
 
 	private:
 		Id() = default;
-		static Id Invalid() { return Id(); }
+		static Id Invalid() { return {}; }
 		static Id Create(int audio_id)
 		{
 			Id r;
@@ -710,15 +710,15 @@ static void draw_fake_frame(uint32_t width, uint32_t height, void* data, float l
 {
 	constexpr int STRIPS_NUM = 5;
 
-	uint32_t luma_width        = width;
-	uint32_t luma_height       = height;
-	uint32_t chroma_width      = luma_width / 2;
-	uint32_t chroma_height     = luma_height / 2;
-	auto*    buffer            = static_cast<uint8_t*>(data);
-	auto*    luma              = buffer;
-	auto*    chroma            = buffer + luma_width * luma_height;
-	uint32_t luma_strip_size   = luma_height / STRIPS_NUM;
-	uint32_t chroma_strip_size = chroma_height / STRIPS_NUM;
+	size_t luma_width        = width;
+	size_t luma_height       = height;
+	size_t chroma_width      = luma_width / 2;
+	size_t chroma_height     = luma_height / 2;
+	auto*  buffer            = static_cast<uint8_t*>(data);
+	auto*  luma              = buffer;
+	auto*  chroma            = buffer + luma_width * luma_height;
+	size_t luma_strip_size   = luma_height / STRIPS_NUM;
+	size_t chroma_strip_size = chroma_height / STRIPS_NUM;
 
 	uint8_t color[STRIPS_NUM][3] = {};
 
@@ -728,9 +728,9 @@ static void draw_fake_frame(uint32_t width, uint32_t height, void* data, float l
 	rgb_to_yuv(0, 0, 0, &color[3][0], &color[3][1], &color[3][2]);
 	rgb_to_yuv(l, l, l, &color[4][0], &color[4][1], &color[4][2]);
 
-	for (uint32_t y = 0; y < luma_strip_size; y++)
+	for (size_t y = 0; y < luma_strip_size; y++)
 	{
-		for (uint32_t x = 0; x < luma_width; x++)
+		for (size_t x = 0; x < luma_width; x++)
 		{
 			for (int si = 0; si < STRIPS_NUM; si++)
 			{
@@ -738,9 +738,9 @@ static void draw_fake_frame(uint32_t width, uint32_t height, void* data, float l
 			}
 		}
 	}
-	for (uint32_t y = 0; y < chroma_strip_size; y++)
+	for (size_t y = 0; y < chroma_strip_size; y++)
 	{
-		for (uint32_t x = 0; x < chroma_width; x++)
+		for (size_t x = 0; x < chroma_width; x++)
 		{
 			for (int si = 0; si < STRIPS_NUM; si++)
 			{

@@ -8,6 +8,7 @@
 #include "Emulator/Libs/Printf.h"
 
 #include "Kyty/Core/Common.h"
+#include "Kyty/Core/DbgAssert.h"
 #include "Kyty/Core/Vector.h"
 
 #include "Emulator/Common.h"
@@ -15,7 +16,6 @@
 
 #include <cfloat>
 #include <cmath>
-#include <cstddef>
 
 #ifdef KYTY_EMU_ENABLED
 
@@ -856,7 +856,8 @@ static int kyty_printf_internal(bool sn, char* sn_s, size_t sn_n, const char* fo
 
 	if (sn)
 	{
-		snprintf(sn_s, sn_n, "%s", buffer.GetDataConst());
+		int s = snprintf(sn_s, sn_n, "%s", buffer.GetDataConst());
+		EXIT_NOT_IMPLEMENTED(static_cast<size_t>(s) >= sn_n);
 	} else
 	{
 		printf(FG_BRIGHT_MAGENTA "%s" DEFAULT, buffer.GetDataConst());

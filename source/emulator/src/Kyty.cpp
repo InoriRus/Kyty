@@ -138,7 +138,8 @@ KYTY_SCRIPT_FUNC(kyty_init_func)
 
 	print_system_info();
 
-	atexit(kyty_close);
+	int ok = atexit(kyty_close);
+	EXIT_NOT_IMPLEMENTED(ok != 0);
 
 	return 0;
 }

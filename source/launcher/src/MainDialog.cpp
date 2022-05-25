@@ -27,10 +27,11 @@
 
 #include "ui_main_dialog.h"
 
-#include <windows.h>
+#include <windows.h> // IWYU pragma: keep
 
 // IWYU pragma: no_include <minwindef.h>
 // IWYU pragma: no_include <processthreadsapi.h>
+// IWYU pragma: no_include <winbase.h>
 
 class QWidget;
 

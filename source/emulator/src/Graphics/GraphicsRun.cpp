@@ -616,18 +616,18 @@ void CommandProcessor::WriteConstRam(uint32_t offset, const uint32_t* src, uint3
 {
 	Core::LockGuard lock(m_mutex);
 
-	memcpy(m_const_ram + offset / 4, src, dw_num * 4);
+	memcpy(m_const_ram + offset / 4, src, static_cast<size_t>(dw_num) * 4);
 }
 
 void CommandProcessor::DumpConstRam(uint32_t* dst, uint32_t offset, uint32_t dw_num)
 {
 	Core::LockGuard lock(m_mutex);
 
-	GpuMemoryCheckAccessViolation(reinterpret_cast<uint64_t>(dst), dw_num * 4);
+	GpuMemoryCheckAccessViolation(reinterpret_cast<uint64_t>(dst), static_cast<size_t>(dw_num) * 4);
 
-	memcpy(dst, m_const_ram + offset / 4, dw_num * 4);
+	memcpy(dst, m_const_ram + offset / 4, static_cast<size_t>(dw_num) * 4);
 
-	GraphicsRenderMemoryFlush(reinterpret_cast<uint64_t>(dst), dw_num * 4);
+	GraphicsRenderMemoryFlush(reinterpret_cast<uint64_t>(dst), static_cast<size_t>(dw_num) * 4);
 }
 
 void CommandProcessor::WaitRegMem(uint32_t func, bool me, bool mem, const uint32_t* addr, uint32_t ref, uint32_t mask, uint32_t poll)
@@ -651,11 +651,11 @@ void CommandProcessor::WriteData(uint32_t* dst, const uint32_t* src, uint32_t dw
 
 	EXIT_NOT_IMPLEMENTED(write_control != 0x04100500);
 
-	GpuMemoryCheckAccessViolation(reinterpret_cast<uint64_t>(dst), dw_num * 4);
+	GpuMemoryCheckAccessViolation(reinterpret_cast<uint64_t>(dst), static_cast<size_t>(dw_num) * 4);
 
-	memcpy(dst, src, dw_num * 4);
+	memcpy(dst, src, static_cast<size_t>(dw_num) * 4);
 
-	GraphicsRenderMemoryFlush(reinterpret_cast<uint64_t>(dst), dw_num * 4);
+	GraphicsRenderMemoryFlush(reinterpret_cast<uint64_t>(dst), static_cast<size_t>(dw_num) * 4);
 }
 
 void GraphicsRing::Submit(uint32_t* cmd_draw_buffer, uint32_t num_draw_dw, uint32_t* cmd_const_buffer, uint32_t num_const_dw, int handle,
@@ -940,7 +940,7 @@ void CommandProcessor::Run(uint32_t* data, uint32_t num_dw)
 
 	if (num_dw > 0)
 	{
-		GraphicsRenderMemoryFree(reinterpret_cast<uint64_t>(data), num_dw * 4);
+		GraphicsRenderMemoryFree(reinterpret_cast<uint64_t>(data), static_cast<size_t>(num_dw) * 4);
 	}
 
 	auto* cmd = data;
@@ -1596,7 +1596,7 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_aa_sample_control)
 
 		HW::AaSampleControl r;
 
-		memcpy(r.locations, buffer, 16 * 4);
+		memcpy(r.locations, buffer, static_cast<size_t>(16) * 4);
 
 		r.centroid_priority = static_cast<uint64_t>(buffer[18]) | (static_cast<uint64_t>(buffer[19]) << 32u);
 

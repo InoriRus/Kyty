@@ -1,5 +1,6 @@
 #include "Emulator/Graphics/GraphicsRender.h"
 
+#include "Kyty/Core/Common.h"
 #include "Kyty/Core/DbgAssert.h"
 #include "Kyty/Core/File.h"
 #include "Kyty/Core/Hash.h"
@@ -49,6 +50,7 @@ struct VulkanDescriptor
 	VkDescriptorSet descriptor_set = nullptr;
 };
 
+// Pack structs to guarantee the uniquess of object representation
 #pragma pack(push, 1)
 
 struct PipelineStencilStaticState
@@ -1813,11 +1815,11 @@ static VulkanPipeline* CreatePipelineInternal(VkRenderPass render_pass, const Sh
 	create_info.pNext = nullptr;
 	create_info.flags = 0;
 
-	create_info.codeSize = vs_shader.Size() * 4;
+	create_info.codeSize = static_cast<size_t>(vs_shader.Size()) * 4;
 	create_info.pCode    = vs_shader.GetDataConst();
 	vkCreateShaderModule(gctx->device, &create_info, nullptr, &vert_shader_module);
 
-	create_info.codeSize = ps_shader.Size() * 4;
+	create_info.codeSize = static_cast<size_t>(ps_shader.Size()) * 4;
 	create_info.pCode    = ps_shader.GetDataConst();
 	vkCreateShaderModule(gctx->device, &create_info, nullptr, &frag_shader_module);
 
@@ -2169,7 +2171,7 @@ static VulkanPipeline* CreatePipelineInternal(const ShaderComputeInputInfo* inpu
 	create_info.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 	create_info.pNext    = nullptr;
 	create_info.flags    = 0;
-	create_info.codeSize = cs_shader.Size() * 4;
+	create_info.codeSize = static_cast<size_t>(cs_shader.Size()) * 4;
 	create_info.pCode    = cs_shader.GetDataConst();
 	vkCreateShaderModule(gctx->device, &create_info, nullptr, &comp_shader_module);
 
@@ -2231,6 +2233,7 @@ static VulkanPipeline* CreatePipelineInternal(const ShaderComputeInputInfo* inpu
 
 bool PipelineStaticParameters::operator==(const PipelineStaticParameters& other) const
 {
+	// NOLINTNEXTLINE(bugprone-suspicious-memory-comparison,cert-exp42-c,cert-flp37-c)
 	return (0 == memcmp(this, &other, sizeof(struct PipelineStaticParameters)));
 }
 
@@ -4162,7 +4165,7 @@ static void PrepareGdsPointers(const ShaderGdsResources& gds_pointers, uint32_t*
 
 	if (gds_pointers.pointers_num > 0)
 	{
-		(*sgprs) += 4 * ((gds_pointers.pointers_num - 1) / 4 + 1);
+		(*sgprs) += static_cast<ptrdiff_t>(4 * ((gds_pointers.pointers_num - 1) / 4 + 1));
 	}
 }
 
@@ -4351,11 +4354,11 @@ void GraphicsRenderDrawIndex(uint64_t submit_id, CommandBuffer* buffer, HW::Hard
 	{
 		case 0:
 			index_type = VK_INDEX_TYPE_UINT16;
-			index_size = 2 * index_count;
+			index_size = 2 * static_cast<uint64_t>(index_count);
 			break;
 		case 1:
 			index_type = VK_INDEX_TYPE_UINT32;
-			index_size = 4 * index_count;
+			index_size = 4 * static_cast<uint64_t>(index_count);
 			break;
 		default: EXIT("unknown index_type_and_size: %u\n", index_type_and_size);
 	}
@@ -4395,7 +4398,7 @@ void GraphicsRenderDrawIndex(uint64_t submit_id, CommandBuffer* buffer, HW::Hard
 	{
 		const auto& b    = vs_input_info.buffers[i];
 		uint64_t    addr = b.addr;
-		uint64_t    size = b.stride * b.num_records;
+		uint64_t    size = static_cast<uint64_t>(b.stride) * b.num_records;
 
 		auto* vertices = static_cast<VulkanBuffer*>(
 		    GpuMemoryCreateObject(submit_id, g_render_ctx->GetGraphicCtx(), nullptr, addr, size, VertexBufferGpuObject()));
@@ -4520,7 +4523,7 @@ void GraphicsRenderDrawIndexAuto(uint64_t submit_id, CommandBuffer* buffer, HW::
 	{
 		const auto& b    = vs_input_info.buffers[i];
 		uint64_t    addr = b.addr;
-		uint64_t    size = b.stride * b.num_records;
+		uint64_t    size = static_cast<uint64_t>(b.stride) * b.num_records;
 
 		auto* vertices = static_cast<VulkanBuffer*>(
 		    GpuMemoryCreateObject(submit_id, g_render_ctx->GetGraphicCtx(), nullptr, addr, size, VertexBufferGpuObject()));

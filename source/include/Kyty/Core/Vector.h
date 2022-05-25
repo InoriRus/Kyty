@@ -18,6 +18,8 @@ public:
 	using SortSwapFunc    = typename A::SortSwapFunc;
 	using SortCompareFunc = typename A::SortCompareFunc;
 
+	static constexpr uint32_t INVALID_INDEX = static_cast<uint32_t>(-1);
+
 	VectorBase(): m_data(new DataType) {}
 
 	VectorBase(const VectorType& src) { src.m_data->CopyPtr(&m_data, src.m_data); }
@@ -162,12 +164,12 @@ public:
 		return m_data->Find(t2, t3, op_eq);
 	}
 
-	[[nodiscard]] bool Contains(const T& t) const { return Find(t) != uint32_t(-1); }
+	[[nodiscard]] bool Contains(const T& t) const { return Find(t) != INVALID_INDEX; }
 
 	template <typename T2, typename OP>
 	bool Contains(const T2& t, OP&& op_eq) const
 	{
-		return Find(t, op_eq) != uint32_t(-1);
+		return Find(t, op_eq) != INVALID_INDEX;
 	}
 
 	bool Remove(const T& t)

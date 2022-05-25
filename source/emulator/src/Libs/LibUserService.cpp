@@ -89,7 +89,9 @@ static KYTY_SYSV_ABI int UserServiceGetUserName(int user_id, char* name, size_t 
 	EXIT_NOT_IMPLEMENTED(user_id != 1);
 	EXIT_NOT_IMPLEMENTED(size < 5);
 
-	snprintf(name, size, "%s", "Kyty");
+	int s = snprintf(name, size, "%s", "Kyty");
+
+	EXIT_NOT_IMPLEMENTED(static_cast<size_t>(s) >= size);
 
 	return OK;
 }

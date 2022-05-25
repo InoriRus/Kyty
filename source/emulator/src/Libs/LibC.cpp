@@ -55,7 +55,9 @@ static KYTY_SYSV_ABI int atexit(void (*func)())
 
 	::printf("func = %" PRIx64 "\n", reinterpret_cast<uint64_t>(func));
 
-	::atexit(func);
+	int ok = ::atexit(func);
+
+	EXIT_NOT_IMPLEMENTED(ok != 0);
 
 	return 0;
 }

@@ -1155,7 +1155,7 @@ String String::Mid(uint32_t first, uint32_t count) const
 
 	if (first >= size)
 	{
-		return String();
+		return {};
 	}
 
 	if (first + count > size)
@@ -1225,7 +1225,7 @@ String String::TrimRight() const
 			return Mid(0, size - i);
 		}
 	}
-	return String();
+	return {};
 }
 
 String String::TrimLeft() const
@@ -1240,7 +1240,7 @@ String String::TrimLeft() const
 			return Mid(i, size - i);
 		}
 	}
-	return String();
+	return {};
 }
 
 String String::Trim() const
@@ -1902,7 +1902,7 @@ String String::DirectoryWithoutFilename() const
 
 	if (index == STRING_INVALID_INDEX)
 	{
-		return String();
+		return {};
 	}
 
 	return Left(index + 1);
@@ -1938,7 +1938,7 @@ String String::ExtensionWithoutFilename() const
 
 	if (index == STRING_INVALID_INDEX)
 	{
-		return String();
+		return {};
 	}
 
 	return Mid(index);
@@ -1966,7 +1966,7 @@ String String::RemoveLast(uint32_t num) const
 
 	if (num >= size)
 	{
-		return String();
+		return {};
 	}
 
 	return Left(size - num);
@@ -1978,7 +1978,7 @@ String String::RemoveFirst(uint32_t num) const
 
 	if (num >= size)
 	{
-		return String();
+		return {};
 	}
 
 	return Right(size - num);
@@ -2097,7 +2097,7 @@ String String::SortChars() const
 
 	if (IsEmpty())
 	{
-		return String();
+		return {};
 	}
 	auto             size = m_data->Size() - 1;
 	Vector<char32_t> d(size);

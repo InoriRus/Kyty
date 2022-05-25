@@ -214,17 +214,17 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ConfigurationEditDialog.cpp" line="241"/>
+        <location filename="../src/ConfigurationEditDialog.cpp" line="239"/>
         <source>Save failed</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ConfigurationEditDialog.cpp" line="241"/>
+        <location filename="../src/ConfigurationEditDialog.cpp" line="239"/>
         <source>Please fill all mandatory fields</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ConfigurationEditDialog.cpp" line="254"/>
+        <location filename="../src/ConfigurationEditDialog.cpp" line="252"/>
         <source>Open Directory</source>
         <translation type="unfinished"></translation>
     </message>
@@ -322,12 +322,12 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/MainDialog.cpp" line="271"/>
+        <location filename="../src/MainDialog.cpp" line="272"/>
         <source>Error</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/MainDialog.cpp" line="271"/>
+        <location filename="../src/MainDialog.cpp" line="272"/>
         <source>Can&apos;t create file:
 </source>
         <translation type="unfinished"></translation>
@@ -336,27 +336,27 @@
 <context>
     <name>MainDialogPrivate</name>
     <message>
-        <location filename="../src/MainDialog.cpp" line="137"/>
+        <location filename="../src/MainDialog.cpp" line="138"/>
         <source>Settings file: </source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/MainDialog.cpp" line="163"/>
+        <location filename="../src/MainDialog.cpp" line="164"/>
         <source>Emulator: </source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/MainDialog.cpp" line="175"/>
+        <location filename="../src/MainDialog.cpp" line="176"/>
         <source>Version: </source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/MainDialog.cpp" line="190"/>
+        <location filename="../src/MainDialog.cpp" line="191"/>
         <source>Error</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/MainDialog.cpp" line="190"/>
+        <location filename="../src/MainDialog.cpp" line="191"/>
         <source>Can&apos;t find emulator</source>
         <translation type="unfinished"></translation>
     </message>

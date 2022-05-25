@@ -1235,7 +1235,7 @@ ByteBuffer ZipReader::ExtractFile(int file_index)
 
 	if (file_index < 0 || IsFileDirectory(file_index))
 	{
-		return ByteBuffer();
+		return {};
 	}
 
 	ZipFileStat s {};
@@ -1243,7 +1243,7 @@ ByteBuffer ZipReader::ExtractFile(int file_index)
 
 	if (s.m_uncomp_size == 0)
 	{
-		return ByteBuffer();
+		return {};
 	}
 
 	void* ptr = mz_zip_reader_extract_to_heap(&m_p->zip, file_index, &size, 0);

@@ -99,7 +99,11 @@ public:
 	KYTY_CLASS_NO_COPY(MemLock);
 
 #ifdef MEM_TRACKER
-	[[nodiscard]] bool IsRecursive() const { return g_mem_depth > 1; } // NOLINT(readability-convert-member-functions-to-static)
+	// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+	[[nodiscard]] bool IsRecursive() const
+	{
+		return g_mem_depth > 1;
+	}
 #endif
 };
 
@@ -193,7 +197,7 @@ void core_memory_init()
 void* mem_alloc_check_alignment(void* ptr)
 {
 #ifdef MEM_ALLOC_ALIGNED
-	if ((uintptr_t(ptr) & uintptr_t(MEM_ALLOC_ALIGN - 1)) != 0u)
+	if ((reinterpret_cast<uintptr_t>(ptr) & static_cast<uintptr_t>(MEM_ALLOC_ALIGN - 1)) != 0u)
 	{
 		EXIT("mem alloc not aligned!\n");
 	}

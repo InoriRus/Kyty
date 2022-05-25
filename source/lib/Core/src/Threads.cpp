@@ -23,7 +23,8 @@
 //#define KYTY_DEBUG_LOCKS_TIMED
 
 #if !(defined(KYTY_DEBUG_LOCKS) || defined(KYTY_DEBUG_LOCKS_TIMED)) && defined(KYTY_WIN_CS)
-#include <windows.h>
+#include <windows.h> // IWYU pragma: keep
+// IWYU pragma: no_include <winbase.h>
 constexpr DWORD KYTY_CS_SPIN_COUNT = 4000;
 
 // IWYU pragma: no_include <minwindef.h>
@@ -84,8 +85,14 @@ struct MutexPrivate
 	std::recursive_timed_mutex m_mutex;
 #else
 #ifdef KYTY_WIN_CS
-	MutexPrivate() { InitializeCriticalSectionAndSpinCount(&m_cs, KYTY_CS_SPIN_COUNT); }
-	~MutexPrivate() { DeleteCriticalSection(&m_cs); }
+	MutexPrivate()
+	{
+		InitializeCriticalSectionAndSpinCount(&m_cs, KYTY_CS_SPIN_COUNT);
+	}
+	~MutexPrivate()
+	{
+		DeleteCriticalSection(&m_cs);
+	}
 	KYTY_CLASS_NO_COPY(MutexPrivate);
 	CRITICAL_SECTION            m_cs {};
 #else

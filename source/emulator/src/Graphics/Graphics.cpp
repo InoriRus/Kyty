@@ -149,7 +149,7 @@ int KYTY_SYSV_ABI GraphicsSetPsShader(uint32_t* cmd, uint64_t size, const uint32
 		printf("\t ps_regs.m_cbShaderMask        = %08" PRIx32 "\n", ps_regs[11]);
 
 		cmd[0] = KYTY_PM4(size, Pm4::IT_NOP, Pm4::R_PS);
-		memcpy(&cmd[1], ps_regs, 12 * 4);
+		memcpy(&cmd[1], ps_regs, static_cast<size_t>(12) * 4);
 	}
 
 	return OK;
@@ -190,7 +190,7 @@ int KYTY_SYSV_ABI GraphicsSetPsShader350(uint32_t* cmd, uint64_t size, const uin
 		printf("\t ps_regs.m_cbShaderMask        = %08" PRIx32 "\n", ps_regs[11]);
 
 		cmd[0] = KYTY_PM4(size, Pm4::IT_NOP, Pm4::R_PS);
-		memcpy(&cmd[1], ps_regs, 12 * 4);
+		memcpy(&cmd[1], ps_regs, static_cast<size_t>(12) * 4);
 	}
 
 	// printf("ok\n");
@@ -222,7 +222,7 @@ int KYTY_SYSV_ABI GraphicsUpdatePsShader(uint32_t* cmd, uint64_t size, const uin
 	printf("\t ps_regs.m_cbShaderMask        = %08" PRIx32 "\n", ps_regs[11]);
 
 	cmd[0] = KYTY_PM4(size, Pm4::IT_NOP, Pm4::R_PS_UPDATE);
-	memcpy(&cmd[1], ps_regs, 12 * 4);
+	memcpy(&cmd[1], ps_regs, static_cast<size_t>(12) * 4);
 
 	return OK;
 }
@@ -251,7 +251,7 @@ int KYTY_SYSV_ABI GraphicsUpdatePsShader350(uint32_t* cmd, uint64_t size, const 
 	printf("\t ps_regs.m_cbShaderMask        = %08" PRIx32 "\n", ps_regs[11]);
 
 	cmd[0] = KYTY_PM4(size, Pm4::IT_NOP, Pm4::R_PS_UPDATE);
-	memcpy(&cmd[1], ps_regs, 12 * 4);
+	memcpy(&cmd[1], ps_regs, static_cast<size_t>(12) * 4);
 
 	return OK;
 }
@@ -276,7 +276,7 @@ int KYTY_SYSV_ABI GraphicsSetCsShaderWithModifier(uint32_t* cmd, uint64_t size, 
 
 	cmd[0] = KYTY_PM4(size, Pm4::IT_NOP, Pm4::R_CS);
 	cmd[1] = shader_modifier;
-	memcpy(&cmd[2], cs_regs, 7 * 4);
+	memcpy(&cmd[2], cs_regs, static_cast<size_t>(7) * 4);
 
 	return OK;
 }

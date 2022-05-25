@@ -12,12 +12,13 @@
 #include "Kyty/Sys/SysFileIO.h"
 #include "Kyty/Sys/SysTimer.h"
 
-#include <windows.h>
+#include <windows.h> // IWYU pragma: keep
 
 // IWYU pragma: no_include <fileapi.h>
 // IWYU pragma: no_include <handleapi.h>
 // IWYU pragma: no_include <minwinbase.h>
 // IWYU pragma: no_include <minwindef.h>
+// IWYU pragma: no_include <winbase.h>
 
 namespace Kyty {
 
@@ -188,8 +189,8 @@ sys_file_t* sys_file_create(const String& file_name)
 
 	HANDLE h_file = nullptr;
 	h_file        = CreateFileW(reinterpret_cast<LPCWSTR>(file_name.utf16_str().GetData()),
-                         static_cast<DWORD>(GENERIC_READ) | static_cast<DWORD>(GENERIC_WRITE), 0, nullptr, CREATE_ALWAYS,
-                         FILE_ATTRIBUTE_NORMAL, nullptr);
+	                            static_cast<DWORD>(GENERIC_READ) | static_cast<DWORD>(GENERIC_WRITE), 0, nullptr, CREATE_ALWAYS,
+	                            FILE_ATTRIBUTE_NORMAL, nullptr);
 
 	ret->handle = h_file;
 	ret->type   = SYS_FILE_FILE;
@@ -250,7 +251,7 @@ sys_file_t* sys_file_open_w(const String& file_name, sys_file_cache_type_t cache
 
 	HANDLE h_file = nullptr;
 	h_file        = CreateFileW(reinterpret_cast<LPCWSTR>(file_name.utf16_str().GetData()), GENERIC_WRITE, 0, nullptr, OPEN_EXISTING,
-                         get_cache_access_type(cache_type), nullptr);
+	                            get_cache_access_type(cache_type), nullptr);
 
 	if (h_file == KYTY_INVALID_HANDLE_VALUE())
 	{
@@ -271,8 +272,8 @@ sys_file_t* sys_file_open_rw(const String& file_name, sys_file_cache_type_t cach
 
 	HANDLE h_file = nullptr;
 	h_file        = CreateFileW(reinterpret_cast<LPCWSTR>(file_name.utf16_str().GetData()),
-                         static_cast<DWORD>(GENERIC_READ) | static_cast<DWORD>(GENERIC_WRITE), 0, nullptr, OPEN_EXISTING,
-                         get_cache_access_type(cache_type), nullptr);
+	                            static_cast<DWORD>(GENERIC_READ) | static_cast<DWORD>(GENERIC_WRITE), 0, nullptr, OPEN_EXISTING,
+	                            get_cache_access_type(cache_type), nullptr);
 
 	if (h_file == KYTY_INVALID_HANDLE_VALUE())
 	{

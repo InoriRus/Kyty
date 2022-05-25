@@ -20,7 +20,7 @@ if (MINGW)
 	if (CLANG)
 		set_source_files_properties(${cpuinfo_src} PROPERTIES COMPILE_FLAGS "-Wno-unused-variable -Wno-implicit-function-declaration")
 	else()
-		set_source_files_properties(${cpuinfo_src} PROPERTIES COMPILE_FLAGS "-Wno-unused-variable -Wno-implicit-function-declaration -Wno-format -Wno-format-extra-args")
+		set_source_files_properties(${cpuinfo_src} PROPERTIES COMPILE_FLAGS "-Wno-maybe-uninitialized -Wno-unused-variable -Wno-implicit-function-declaration -Wno-format -Wno-format-extra-args")
 	endif()
 endif()
 

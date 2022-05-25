@@ -33,7 +33,7 @@ public:
 	explicit Date(jd_t d): m_jd(d) {}
 	Date(const Date& d)     = default;
 	Date(Date&& d) noexcept = default;
-	Date(int year, int month, int day); // month in [1...12], day in [1...31]
+	explicit Date(int year, int month, int day); // month in [1...12], day in [1...31]
 	~Date() = default;
 
 	static Date FromSystem();
@@ -70,7 +70,7 @@ public:
 	bool operator>(const Date& other) const { return m_jd > other.m_jd; }
 	bool operator>=(const Date& other) const { return m_jd >= other.m_jd; }
 
-	Date& operator=(const Date& other) = default;
+	Date& operator=(const Date& other)     = default;
 	Date& operator=(Date&& other) noexcept = default;
 	Date  operator+(int days) const { return Date(m_jd + days); }
 	Date  operator-(int days) const { return Date(m_jd - days); }
@@ -102,7 +102,7 @@ public:
 	}
 	Time(const Time& t)     = default;
 	Time(Time&& t) noexcept = default;
-	Time(int hour24, int minute, int second, int msec = 0);
+	explicit Time(int hour24, int minute, int second, int msec = 0);
 	~Time() = default;
 
 	static Time FromSystem();
@@ -133,7 +133,7 @@ public:
 	bool operator>(const Time& other) const { return m_ms > other.m_ms; }
 	bool operator>=(const Time& other) const { return m_ms >= other.m_ms; }
 
-	Time& operator=(const Time& other) = default;
+	Time& operator=(const Time& other)     = default;
 	Time& operator=(Time&& other) noexcept = default;
 	Time  operator+(int secs) const;
 	Time  operator-(int secs) const;
@@ -150,8 +150,8 @@ public:
 	DateTime() = default;
 	explicit DateTime(const Date& d): m_date(d) {}
 	explicit DateTime(const Time& t): m_time(t) {}
-	DateTime(const Date& d, const Time& t): m_date(d), m_time(t) {}
-	DateTime(const Time& t, const Date& d): m_date(d), m_time(t) {}
+	explicit DateTime(const Date& d, const Time& t): m_date(d), m_time(t) {}
+	explicit DateTime(const Time& t, const Date& d): m_date(d), m_time(t) {}
 	DateTime(const DateTime& dt)     = default;
 	DateTime(DateTime&& dt) noexcept = default;
 	~DateTime()                      = default;
@@ -178,7 +178,7 @@ public:
 
 	String ToString(const char* format = "YYYY.MM.DD HH24:MI:SS", LanguageId lang_id = LanguageId::English) const;
 
-	DateTime& operator=(const DateTime& other) = default;
+	DateTime& operator=(const DateTime& other)     = default;
 	DateTime& operator=(DateTime&& other) noexcept = default;
 
 	bool operator==(const DateTime& other) const { return m_date == other.m_date && m_time == other.m_time; }

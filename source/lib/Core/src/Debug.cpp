@@ -16,9 +16,9 @@
 #endif
 
 #ifdef KYTY_UNDECORATE
-//String unDName(const String &mangled,
+// String unDName(const String &mangled,
 //		void* (*memget)(size_t), void (*memfree)(void*),
-//                      unsigned short int flags);
+//                       unsigned short int flags);
 #endif
 
 namespace Kyty::Core {
@@ -199,7 +199,7 @@ void DebugMap::LoadCsv()
 
 #endif
 
-	//EXIT("1");
+	// EXIT("1");
 
 #endif
 }
@@ -269,7 +269,7 @@ void DebugMap::LoadMsvcLink(const String& name, int mode)
 			if (DBG_PRINTF)
 			{
 				printf("%016" PRIx64 "; %s; %s\n", static_cast<uint64_t>(addr), func.utf8_str().GetData(), obj.utf8_str().GetData());
-				fflush(stdout);
+				// int ok = fflush(stdout);
 			}
 
 			DebugFunctionInfo inf = {addr, 0, func.utf8_str(), obj.utf8_str()};
@@ -365,7 +365,7 @@ void DebugMap::LoadMsvcLldLink(const String& name, int mode)
 			if (DBG_PRINTF)
 			{
 				printf("%016" PRIx64 "; %s; %s\n", static_cast<uint64_t>(addr), func.utf8_str().GetData(), obj.utf8_str().GetData());
-				fflush(stdout);
+				// fflush(stdout);
 			}
 
 			DebugFunctionInfo inf = {addr, 0, func.utf8_str(), obj.utf8_str()};
@@ -417,7 +417,7 @@ void DebugMap::LoadMsvcLldLink(const String& name, int mode)
 		{
 			m_p->data[i - 1].length = m_p->data[i].addr - m_p->data[i - 1].addr;
 		}
-			
+
 #ifdef KYTY_UNDECORATE
 #endif
 	}

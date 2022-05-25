@@ -53,7 +53,7 @@ inline void SwapByteOrder(T& x)
 	{
 		if (std::is_signed_v<T>)
 		{
-			x = std::make_signed_t<T>(SwapByteOrder16(std::make_unsigned_t<uint16_t>(x)));
+			x = static_cast<std::make_signed_t<T>>(SwapByteOrder16(static_cast<std::make_unsigned_t<uint16_t>>(x)));
 		} else
 		{
 			x = SwapByteOrder16(x);
@@ -63,7 +63,7 @@ inline void SwapByteOrder(T& x)
 	{
 		if (std::is_signed_v<T>)
 		{
-			x = std::make_signed_t<T>(SwapByteOrder32(std::make_unsigned_t<uint32_t>(x)));
+			x = static_cast<std::make_signed_t<T>>(SwapByteOrder32(static_cast<std::make_unsigned_t<uint32_t>>(x)));
 		} else
 		{
 			x = SwapByteOrder32(x);
@@ -73,7 +73,7 @@ inline void SwapByteOrder(T& x)
 	{
 		if (std::is_signed_v<T>)
 		{
-			x = std::make_signed_t<T>(SwapByteOrder64(std::make_unsigned_t<uint64_t>(x)));
+			x = static_cast<std::make_signed_t<T>>(SwapByteOrder64(static_cast<std::make_unsigned_t<uint64_t>>(x)));
 		} else
 		{
 			x = SwapByteOrder64(x);

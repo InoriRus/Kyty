@@ -38,7 +38,8 @@ public:
 	using SortSwapFunc    = void (*)(T*, int32_t, int32_t, void*);
 	using SortCompareFunc = bool (*)(const T&, const T&);
 
-	static constexpr size_t SIZEOF_T = sizeof(T); // NOLINT(bugprone-sizeof-expression)
+	static constexpr size_t   SIZEOF_T      = sizeof(T); // NOLINT(bugprone-sizeof-expression)
+	static constexpr uint32_t INVALID_INDEX = static_cast<uint32_t>(-1);
 
 	SimpleArray() = default;
 
@@ -191,7 +192,7 @@ public:
 				return index;
 			}
 		}
-		return uint32_t(-1);
+		return INVALID_INDEX;
 	}
 
 	template <typename OP>
@@ -204,7 +205,7 @@ public:
 				return index;
 			}
 		}
-		return uint32_t(-1);
+		return INVALID_INDEX;
 	}
 
 	template <typename T2, typename OP>
@@ -217,7 +218,7 @@ public:
 				return index;
 			}
 		}
-		return uint32_t(-1);
+		return INVALID_INDEX;
 	}
 
 	template <typename T2, typename OP, typename V>
@@ -242,13 +243,13 @@ public:
 				return index;
 			}
 		}
-		return uint32_t(-1);
+		return INVALID_INDEX;
 	}
 
 	bool Remove(const T& t)
 	{
 		uint32_t index = Find(t);
-		if (index == uint32_t(-1))
+		if (index == INVALID_INDEX)
 		{
 			return false;
 		}
