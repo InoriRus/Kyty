@@ -219,7 +219,8 @@ struct SurfaceCapabilities
 	VkSurfaceCapabilitiesKHR   capabilities {};
 	Vector<VkSurfaceFormatKHR> formats;
 	Vector<VkPresentModeKHR>   present_modes;
-	bool                       format_srgb_bgra32 = false;
+	bool                       format_srgb_bgra32  = false;
+	bool                       format_unorm_bgra32 = false;
 };
 
 struct WindowContext
@@ -1270,6 +1271,11 @@ static void VulkanGetSurfaceCapabilities(VkPhysicalDevice physical_device, VkSur
 			r->format_srgb_bgra32 = true;
 			break;
 		}
+		if (f.format == VK_FORMAT_B8G8R8A8_UNORM && f.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+		{
+			r->format_unorm_bgra32 = true;
+			break;
+		}
 	}
 }
 
@@ -1822,13 +1828,26 @@ static VKAPI_ATTR VkResult VKAPI_CALL VulkanCreateDebugUtilsMessengerEXT(VkInsta
 	image_count = std::clamp(image_count, r->capabilities.minImageCount, r->capabilities.maxImageCount);
 
 	VkSwapchainCreateInfoKHR create_info {};
-	create_info.sType                 = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-	create_info.pNext                 = nullptr;
-	create_info.flags                 = 0;
-	create_info.surface               = surface;
-	create_info.minImageCount         = image_count;
-	create_info.imageFormat           = (r->format_srgb_bgra32 ? VK_FORMAT_B8G8R8A8_SRGB : r->formats.At(0).format);
-	create_info.imageColorSpace       = (r->format_srgb_bgra32 ? VK_COLOR_SPACE_SRGB_NONLINEAR_KHR : r->formats.At(0).colorSpace);
+	create_info.sType         = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+	create_info.pNext         = nullptr;
+	create_info.flags         = 0;
+	create_info.surface       = surface;
+	create_info.minImageCount = image_count;
+
+	if (r->format_unorm_bgra32)
+	{
+		create_info.imageFormat     = VK_FORMAT_B8G8R8A8_UNORM;
+		create_info.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+	} else if (r->format_srgb_bgra32)
+	{
+		create_info.imageFormat     = VK_FORMAT_B8G8R8A8_SRGB;
+		create_info.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+	} else
+	{
+		create_info.imageFormat     = r->formats.At(0).format;
+		create_info.imageColorSpace = r->formats.At(0).colorSpace;
+	}
+
 	create_info.imageExtent           = extent;
 	create_info.imageArrayLayers      = 1;
 	create_info.imageUsage            = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
