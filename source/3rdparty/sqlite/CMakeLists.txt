@@ -5,7 +5,11 @@ file(GLOB sqlite_src
 
 if (MINGW)
 	if (CLANG)
-		set_source_files_properties(${sqlite_src} PROPERTIES COMPILE_FLAGS "-Wno-unused-but-set-variable -Wno-unused-function -Wno-unknown-pragmas -Wno-unused-variable -Wno-sometimes-uninitialized")
+		if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 13.0.0)
+			set_source_files_properties(${sqlite_src} PROPERTIES COMPILE_FLAGS "-Wno-unused-but-set-variable -Wno-unused-function -Wno-unknown-pragmas -Wno-unused-variable -Wno-sometimes-uninitialized")
+		else()
+			set_source_files_properties(${sqlite_src} PROPERTIES COMPILE_FLAGS "-Wno-unused-function -Wno-unknown-pragmas -Wno-unused-variable -Wno-sometimes-uninitialized")
+		endif()		
 	else()
 		set_source_files_properties(${sqlite_src} PROPERTIES COMPILE_FLAGS "-Wno-misleading-indentation -Wno-return-local-addr -Wno-unused-but-set-variable -Wno-unused-function -Wno-unknown-pragmas -Wno-unused-variable -Wno-maybe-uninitialized -Wno-array-bounds")
 	endif()
