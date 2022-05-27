@@ -13,6 +13,8 @@ jobs:
     steps:
     - name: Checkout source
       uses: actions/checkout@v3
+    - name: Install WinLibs
+      run: choco install winlibs -y --no-progress
     - name: Install Qt
       uses: jurplel/install-qt-action@v2
       with:
