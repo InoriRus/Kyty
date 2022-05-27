@@ -16,6 +16,8 @@ jobs:
     - name: Run CMake
       run: cmake_EclipseMinGW.bat 4 _Gcc
       working-directory: _Build
+      shell: cmd
     - name: Build
       run: _build.bat
       working-directory: _Build/_Gcc
+      shell: cmd
