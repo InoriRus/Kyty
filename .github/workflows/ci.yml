@@ -13,6 +13,8 @@ jobs:
     steps:
     - name: Checkout source
       uses: actions/checkout@v3
+    - name: Install WinLibs
+      run: choco install winlibs -y
     - name: Run CMake
       run: cmake_EclipseMinGW.bat 4 _Gcc
       working-directory: _Build
