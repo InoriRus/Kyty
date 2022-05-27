@@ -1,0 +1,21 @@
+name: CI
+on:
+  push:
+    branches:
+    - '*'
+  pull_request:
+    branches:
+    - '*'
+jobs:
+  build:
+    name: Build
+    runs-on: windows-2022
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v3
+    - name: Run CMake
+      run: cmake_EclipseMinGW.bat 4 _Gcc
+      working-directory: _Build
+    - name: Build
+      run: _build.bat
+      working-directory: _Build/_Gcc
