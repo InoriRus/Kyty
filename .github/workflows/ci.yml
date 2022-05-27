@@ -15,16 +15,14 @@ jobs:
       uses: actions/checkout@v3
     - name: Install WinLibs
       run: choco install winlibs -y --no-progress
-      shell: cmd
     - name: Install Qt
       uses: jurplel/install-qt-action@v2
       with:
         arch: win64_mingw81
-    - name: Show PATH
-      run: echo %PATH%
-      shell: cmd
     - name: Run CMake
-      run: cmake_EclipseMinGW.bat 4 _Gcc
+      run: |
+        set PATH=C:\ProgramData\chocolatey\lib\winlibs\tools\mingw64\bin;%PATH%
+        cmake_EclipseMinGW.bat 4 _Gcc
       working-directory: _Build
       shell: cmd
     - name: Build
