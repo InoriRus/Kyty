@@ -13,8 +13,10 @@ jobs:
     steps:
     - name: Checkout source
       uses: actions/checkout@v3
-    - name: Install WinLibs
-      run: choco install winlibs -y
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v2
+      with:
+        arch: win64_mingw81
     - name: Run CMake
       run: cmake_EclipseMinGW.bat 4 _Gcc
       working-directory: _Build
