@@ -27,6 +27,7 @@
 // IWYU pragma: no_include <minwinbase.h>
 // IWYU pragma: no_include <apisetcconv.h>
 // IWYU pragma: no_include <winbase.h>
+// IWYU pragma: no_include <winerror.h>
 
 //#include <memoryapi.h>
 
@@ -299,12 +300,21 @@ void Init()
 
 uint64_t Alloc(uint64_t address, uint64_t size, Mode mode)
 {
-	auto ptr = reinterpret_cast<uintptr_t>(VirtualAlloc(reinterpret_cast<LPVOID>(static_cast<uintptr_t>(address)), size,
-	                                                    static_cast<DWORD>(MEM_COMMIT) | static_cast<DWORD>(MEM_RESERVE),
-	                                                    get_protection_flag(mode)));
+	auto ptr = (address == 0 ? AllocAligned(address, size, mode, 1)
+	                         : reinterpret_cast<uintptr_t>(VirtualAlloc(reinterpret_cast<LPVOID>(static_cast<uintptr_t>(address)), size,
+	                                                                    static_cast<DWORD>(MEM_COMMIT) | static_cast<DWORD>(MEM_RESERVE),
+	                                                                    get_protection_flag(mode))));
 	if (ptr == 0)
 	{
-		printf("VirtualAlloc() failed: 0x%08" PRIx32 "\n", static_cast<uint32_t>(GetLastError()));
+		auto err = static_cast<uint32_t>(GetLastError());
+
+		if (err != ERROR_INVALID_ADDRESS)
+		{
+			printf("VirtualAlloc() failed: 0x%08" PRIx32 "\n", err);
+		} else
+		{
+			return AllocAligned(address, size, mode, 1);
+		}
 	}
 	return ptr;
 }
@@ -325,16 +335,30 @@ uint64_t AllocAligned(uint64_t address, uint64_t size, Mode mode, uint64_t align
 {
 	if (alignment == 0)
 	{
+		printf("VirtualAlloc2 failed: 0x%08" PRIx32 "\n", static_cast<uint32_t>(GetLastError()));
 		return 0;
 	}
 
-	MEM_ADDRESS_REQUIREMENTS req2 {};
+	static constexpr uint64_t SYSTEM_MANAGED_MIN = 0x0000040000u;
+	static constexpr uint64_t SYSTEM_MANAGED_MAX = 0x07FFFFBFFFu;
+	static constexpr uint64_t USER_MIN           = 0x1000000000u;
+	static constexpr uint64_t USER_MAX           = 0xFBFFFFFFFFu;
+
+	MEM_ADDRESS_REQUIREMENTS req {};
 	MEM_EXTENDED_PARAMETER   param {};
-	req2.LowestStartingAddress = nullptr;
-	req2.HighestEndingAddress  = reinterpret_cast<PVOID>(0xffffffffffu); // nullptr;
+	req.LowestStartingAddress = (address == 0 ? reinterpret_cast<PVOID>(SYSTEM_MANAGED_MIN) : reinterpret_cast<PVOID>(address));
+	req.HighestEndingAddress  = (address == 0 ? reinterpret_cast<PVOID>(SYSTEM_MANAGED_MAX) : reinterpret_cast<PVOID>(USER_MAX));
+	req.Alignment             = alignment;
+	param.Type                = MemExtendedParameterAddressRequirements;
+	param.Pointer             = &req;
+
+	MEM_ADDRESS_REQUIREMENTS req2 {};
+	MEM_EXTENDED_PARAMETER   param2 {};
+	req2.LowestStartingAddress = (address == 0 ? reinterpret_cast<PVOID>(USER_MIN) : reinterpret_cast<PVOID>(address));
+	req2.HighestEndingAddress  = reinterpret_cast<PVOID>(USER_MAX);
 	req2.Alignment             = alignment;
-	param.Type                 = MemExtendedParameterAddressRequirements;
-	param.Pointer              = &req2;
+	param2.Type                = MemExtendedParameterAddressRequirements;
+	param2.Pointer             = &req2;
 
 	static auto virtual_alloc2 = ResolveVirtualAlloc2();
 
@@ -343,11 +367,24 @@ uint64_t AllocAligned(uint64_t address, uint64_t size, Mode mode, uint64_t align
 	auto ptr = reinterpret_cast<uintptr_t>(virtual_alloc2(GetCurrentProcess(), nullptr, size,
 	                                                      static_cast<DWORD>(MEM_COMMIT) | static_cast<DWORD>(MEM_RESERVE),
 	                                                      get_protection_flag(mode), &param, 1));
+
 	if (ptr == 0)
 	{
-		printf("VirtualAlloc2(alignment = 0x%016" PRIx64 ") failed: 0x%08" PRIx32 "\n", alignment, static_cast<uint32_t>(GetLastError()));
+		ptr = reinterpret_cast<uintptr_t>(virtual_alloc2(GetCurrentProcess(), nullptr, size,
+		                                                 static_cast<DWORD>(MEM_COMMIT) | static_cast<DWORD>(MEM_RESERVE),
+		                                                 get_protection_flag(mode), &param2, 1));
+	}
 
-		return AllocAligned(address, size, mode, alignment << 1u);
+	if (ptr == 0)
+	{
+		auto err = static_cast<uint32_t>(GetLastError());
+		if (err != ERROR_INVALID_PARAMETER)
+		{
+			printf("VirtualAlloc2(alignment = 0x%016" PRIx64 ") failed: 0x%08" PRIx32 "\n", alignment, err);
+		} else
+		{
+			return AllocAligned(address, size, mode, alignment << 1u);
+		}
 	}
 	return ptr;
 }

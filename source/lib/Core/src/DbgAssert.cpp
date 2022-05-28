@@ -73,6 +73,11 @@ int dbg_exit_handler(char const* file, int line, const char* f, ...)
 	return 1;
 }
 
+void dbg_exit(int status)
+{
+	std::_Exit(status);
+}
+
 bool dbg_is_debugger_present()
 {
 #if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS

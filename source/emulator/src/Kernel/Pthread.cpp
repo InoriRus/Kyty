@@ -631,6 +631,8 @@ int KYTY_SYSV_ABI PthreadMutexattrInit(PthreadMutexattr* attr)
 {
 	// PRINT_NAME();
 
+	EXIT_NOT_IMPLEMENTED(attr == nullptr);
+
 	*attr = new PthreadMutexattrPrivate {};
 
 	int result = pthread_mutexattr_init(&(*attr)->p);
@@ -669,6 +671,8 @@ int KYTY_SYSV_ABI PthreadMutexattrSettype(PthreadMutexattr* attr, int type)
 {
 	// PRINT_NAME();
 
+	EXIT_NOT_IMPLEMENTED(attr == nullptr || *attr == nullptr);
+
 	int ptype = PTHREAD_MUTEX_DEFAULT;
 	switch (type)
 	{
@@ -692,6 +696,8 @@ int KYTY_SYSV_ABI PthreadMutexattrSettype(PthreadMutexattr* attr, int type)
 int KYTY_SYSV_ABI PthreadMutexattrSetprotocol([[maybe_unused]] PthreadMutexattr* attr, int protocol)
 {
 	// PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(attr == nullptr || *attr == nullptr);
 
 	[[maybe_unused]] int pprotocol = PTHREAD_PRIO_NONE;
 	switch (protocol)
@@ -2654,6 +2660,27 @@ int KYTY_SYSV_ABI pthread_mutex_init(LibKernel::PthreadMutex* mutex, const LibKe
 	PRINT_NAME();
 
 	return POSIX_PTHREAD_CALL(LibKernel::PthreadMutexInit(mutex, attr, nullptr));
+}
+
+int KYTY_SYSV_ABI pthread_mutexattr_init(LibKernel::PthreadMutexattr* attr)
+{
+	PRINT_NAME();
+
+	return POSIX_PTHREAD_CALL(LibKernel::PthreadMutexattrInit(attr));
+}
+
+int KYTY_SYSV_ABI pthread_mutexattr_settype(LibKernel::PthreadMutexattr* attr, int type)
+{
+	PRINT_NAME();
+
+	return POSIX_PTHREAD_CALL(LibKernel::PthreadMutexattrSettype(attr, type));
+}
+
+int KYTY_SYSV_ABI pthread_mutexattr_destroy(LibKernel::PthreadMutexattr* attr)
+{
+	PRINT_NAME();
+
+	return POSIX_PTHREAD_CALL(LibKernel::PthreadMutexattrDestroy(attr));
 }
 
 } // namespace Posix

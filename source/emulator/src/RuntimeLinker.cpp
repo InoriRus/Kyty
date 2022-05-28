@@ -68,13 +68,17 @@ struct RelocateHandlerStack
 	uint64_t stack[3];
 };
 
-constexpr uint64_t INVALID_MEMORY    = 0x840000000;
-constexpr uint64_t DESIRED_BASE_ADDR = 0x010000000;
+constexpr uint64_t SYSTEM_RESERVED  = 0x800000000u;
+constexpr uint64_t CODE_BASE_INCR   = 0x010000000u;
+constexpr uint64_t INVALID_OFFSET   = 0x040000000u;
+constexpr uint64_t CODE_BASE_OFFSET = 0x100000000u;
+constexpr uint64_t INVALID_MEMORY   = SYSTEM_RESERVED + INVALID_OFFSET;
 
 constexpr size_t   XSAVE_BUFFER_SIZE = 2688;
-constexpr uint64_t XSAVE_CHK_GUARD   = 0xDeadBeef5533CCAA;
+constexpr uint64_t XSAVE_CHK_GUARD   = 0xDeadBeef5533CCAAu;
 
-static uint64_t g_desired_base_addr = DESIRED_BASE_ADDR;
+static uint64_t g_desired_base_addr = SYSTEM_RESERVED + CODE_BASE_OFFSET;
+static uint64_t g_invalid_memory    = 0;
 
 static Program* g_tls_main_program = nullptr;
 alignas(64) static uint8_t g_tls_reg_save_area[XSAVE_BUFFER_SIZE + sizeof(XSAVE_CHK_GUARD)];
@@ -191,7 +195,8 @@ static void KYTY_SYSV_ABI stackwalk_x86(uint64_t rbp, void** stack, int* depth, 
 
 void KYTY_SYSV_ABI sys_stack_walk_x86(uint64_t rbp, void** stack, int* depth)
 {
-	stackwalk_x86(rbp, stack, depth, 0, UINT64_MAX, DESIRED_BASE_ADDR, g_desired_base_addr - DESIRED_BASE_ADDR);
+	stackwalk_x86(rbp, stack, depth, 0, UINT64_MAX, SYSTEM_RESERVED + CODE_BASE_OFFSET,
+	              g_desired_base_addr - (SYSTEM_RESERVED + CODE_BASE_OFFSET));
 }
 
 static void kyty_exception_handler(const VirtualMemory::ExceptionHandler::ExceptionInfo* info)
@@ -209,7 +214,7 @@ static void kyty_exception_handler(const VirtualMemory::ExceptionHandler::Except
 		Core::Singleton<Loader::RuntimeLinker>::Instance()->StackTrace(info->rbp);
 
 		EXIT("Access violation: %s [%016" PRIx64 "] %s\n", Core::EnumName(info->access_violation_type).C_Str(),
-		     info->access_violation_vaddr, (info->access_violation_vaddr == INVALID_MEMORY ? "(Unpatched object)" : ""));
+		     info->access_violation_vaddr, (info->access_violation_vaddr == g_invalid_memory ? "(Unpatched object)" : ""));
 	}
 
 	EXIT("Unknown exception!!!");
@@ -426,7 +431,7 @@ static void relocate(uint32_t index, Elf64_Rela* r, Program* program, bool jmpre
 		bool     weak  = (ri.bind == BindType::Weak || !program->fail_if_global_not_resolved);
 		if (ri.type == SymbolType::Object && weak)
 		{
-			value = INVALID_MEMORY;
+			value = g_invalid_memory;
 		} else if (ri.type == SymbolType::Func && jmprela_table && weak)
 		{
 			if (program->custom_call_plt_vaddr != 0)
@@ -722,7 +727,7 @@ Program* RuntimeLinker::LoadProgram(const String& elf_name)
 
 	if (elf_name.FilenameWithoutExtension().EndsWith(U"libc") || elf_name.FilenameWithoutExtension().EndsWith(U"Fios2") ||
 	    elf_name.FilenameWithoutExtension().EndsWith(U"Fios2_debug") || elf_name.FilenameWithoutExtension().EndsWith(U"NpToolkit") ||
-	    elf_name.FilenameWithoutExtension().EndsWith(U"NpToolkit2"))
+	    elf_name.FilenameWithoutExtension().EndsWith(U"NpToolkit2") || elf_name.FilenameWithoutExtension().EndsWith(U"JobManager"))
 	{
 		program->fail_if_global_not_resolved = false;
 	}
@@ -1130,7 +1135,7 @@ void RuntimeLinker::LoadProgramToMemory(Program* program)
 		program->tls.handler_vaddr = program->base_vaddr + program->base_size_aligned + exception_handler_size;
 	}
 
-	g_desired_base_addr += DESIRED_BASE_ADDR * (1 + alloc_size / DESIRED_BASE_ADDR);
+	g_desired_base_addr += CODE_BASE_INCR * (1 + alloc_size / CODE_BASE_INCR);
 
 	EXIT_IF(program->base_vaddr == 0);
 	EXIT_IF(program->base_size_aligned < program->base_size);
@@ -1152,8 +1157,9 @@ void RuntimeLinker::LoadProgramToMemory(Program* program)
 		                                    program->base_size_aligned + exception_handler_size + tls_handler_size, kyty_exception_handler);
 	} else
 	{
-		program->exception_handler->Install(0, program->base_vaddr + program->base_size_aligned,
-		                                    program->base_vaddr + program->base_size_aligned + exception_handler_size + tls_handler_size,
+		program->exception_handler->Install(SYSTEM_RESERVED, program->base_vaddr + program->base_size_aligned,
+		                                    program->base_vaddr + program->base_size_aligned + exception_handler_size + tls_handler_size -
+		                                        SYSTEM_RESERVED,
 		                                    kyty_exception_handler);
 
 		if (Libs::Graphics::GpuMemoryWatcherEnabled())
@@ -1381,7 +1387,8 @@ static void InstallRelocateHandler(Program* program)
 	{
 		program->custom_call_plt_num   = program->dynamic_info->jmprela_table_size / sizeof(Elf64_Rela);
 		auto size                      = Jit::CallPlt::GetSize(program->custom_call_plt_num);
-		program->custom_call_plt_vaddr = VirtualMemory::Alloc(0, size, VirtualMemory::Mode::Write);
+		program->custom_call_plt_vaddr = VirtualMemory::Alloc(SYSTEM_RESERVED, size, VirtualMemory::Mode::Write);
+		EXIT_NOT_IMPLEMENTED(program->custom_call_plt_vaddr == 0);
 		auto* code = new (reinterpret_cast<void*>(program->custom_call_plt_vaddr)) Jit::CallPlt(program->custom_call_plt_num);
 		code->SetPltGot(pltgot_vaddr);
 		VirtualMemory::Protect(program->custom_call_plt_vaddr, size, VirtualMemory::Mode::Execute);
@@ -1394,6 +1401,12 @@ void RuntimeLinker::Relocate(Program* program)
 	KYTY_PROFILER_FUNCTION();
 
 	EXIT_IF(program == nullptr);
+
+	if (g_invalid_memory == 0)
+	{
+		g_invalid_memory = VirtualMemory::Alloc(INVALID_MEMORY, 4096, VirtualMemory::Mode::NoAccess);
+		EXIT_NOT_IMPLEMENTED(g_invalid_memory == 0);
+	}
 
 	printf("--- Relocate program: " FG_WHITE BOLD "%s" DEFAULT " ---\n", program->file_name.C_Str());
 

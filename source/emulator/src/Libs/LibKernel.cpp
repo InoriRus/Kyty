@@ -417,6 +417,13 @@ int KYTY_SYSV_ABI clock_gettime(int clock_id, LibKernel::KernelTimespec* time)
 	return POSIX_CALL(LibKernel::KernelClockGettime(clock_id, time));
 }
 
+void KYTY_SYSV_ABI KernelSetGPO(uint32_t bits)
+{
+	PRINT_NAME();
+
+	printf("\t bits = %08" PRIx32 "\n", bits);
+}
+
 } // namespace LibKernel
 
 namespace Posix {
@@ -455,6 +462,9 @@ LIB_DEFINE(InitLibKernel_1_Posix)
 	LIB_FUNC("7H0iTOciTLo", Posix::pthread_mutex_lock);
 	LIB_FUNC("2Z+PpY6CaJg", Posix::pthread_mutex_unlock);
 	LIB_FUNC("ttHNfU+qDBU", Posix::pthread_mutex_init);
+	LIB_FUNC("dQHWEsJtoE4", Posix::pthread_mutexattr_init);
+	LIB_FUNC("mDmgMOGVUqg", Posix::pthread_mutexattr_settype);
+	LIB_FUNC("HF7lK46xzjY", Posix::pthread_mutexattr_destroy);
 	LIB_FUNC("ltCfaGr2JGE", Posix::pthread_mutex_destroy);
 	LIB_FUNC("mkx2fVhNMsg", Posix::pthread_cond_broadcast);
 	LIB_FUNC("Op8TBGY5KHg", Posix::pthread_cond_wait);
@@ -492,6 +502,7 @@ LIB_DEFINE(InitLibKernel_1_FS)
 LIB_DEFINE(InitLibKernel_1_Mem)
 {
 	LIB_FUNC("mL8NDH86iQI", Memory::KernelMapNamedFlexibleMemory);
+	LIB_FUNC("IWIBBdTHit4", Memory::KernelMapFlexibleMemory);
 	LIB_FUNC("cQke9UuBQOk", Memory::KernelMunmap);
 	LIB_FUNC("pO96TwzOm5E", Memory::KernelGetDirectMemorySize);
 	LIB_FUNC("rTXw65xmLIA", Memory::KernelAllocateDirectMemory);
@@ -499,6 +510,7 @@ LIB_DEFINE(InitLibKernel_1_Mem)
 	LIB_FUNC("MBuItvba6z8", Memory::KernelReleaseDirectMemory);
 	LIB_FUNC("WFcfL2lzido", Memory::KernelQueryMemoryProtection);
 	LIB_FUNC("BHouLQzh0X0", Memory::KernelDirectMemoryQuery);
+	LIB_FUNC("aNz11fnnzi4", Memory::KernelAvailableFlexibleMemorySize);
 }
 
 LIB_DEFINE(InitLibKernel_1_Equeue)
@@ -600,34 +612,34 @@ LIB_DEFINE(InitLibKernel_1)
 	LIB_OBJECT("f7uOxY9mM1U", &LibKernel::g_stack_chk_guard);
 	LIB_OBJECT("djxxOmW6-aw", &LibKernel::g_progname);
 
-	LIB_FUNC("Ou3iL1abvng", LibKernel::stack_chk_fail);
-	LIB_FUNC("wzvqT4UqKX8", LibKernel::KernelLoadStartModule);
-	LIB_FUNC("QKd0qM58Qes", LibKernel::KernelStopUnloadModule);
-	LIB_FUNC("vNe1w4diLCs", LibKernel::tls_get_addr);
+	LIB_FUNC("1jfXLRVzisc", LibKernel::KernelUsleep);
+	LIB_FUNC("6xVpy0Fdq+I", LibKernel::sigprocmask);
+	LIB_FUNC("6Z83sYWFlA8", LibKernel::exit);
+	LIB_FUNC("8OnWXlgQlvo", LibKernel::KernelRtldThreadAtexitDecrement);
 	LIB_FUNC("959qrazPIrg", LibKernel::KernelGetProcParam);
-	LIB_FUNC("p5EcQeEeJAE", LibKernel::KernelRtldSetApplicationHeapAPI);
-	LIB_FUNC("FxVZqBAA7ks", LibKernel::write);
+	LIB_FUNC("9BcDykPmo1I", LibKernel::get_error_addr);
+	LIB_FUNC("bnZxYgAFeA0", LibKernel::KernelGetSanitizerNewReplaceExternal);
+	LIB_FUNC("ca7v6Cxulzs", LibKernel::KernelSetGPO);
 	LIB_FUNC("DRuBt2pvICk", LibKernel::read);
 	LIB_FUNC("f7KBOafysXo", LibKernel::KernelGetModuleInfoFromAddr);
-	LIB_FUNC("zE-wXIZjLoM", LibKernel::KernelDebugRaiseExceptionOnReleaseMode);
-	LIB_FUNC("OMDRKKAZ8I4", LibKernel::KernelDebugRaiseException);
-	LIB_FUNC("6Z83sYWFlA8", LibKernel::exit);
-	LIB_FUNC("py6L8jiVAN8", LibKernel::KernelGetSanitizerMallocReplaceExternal);
-	LIB_FUNC("bnZxYgAFeA0", LibKernel::KernelGetSanitizerNewReplaceExternal);
 	LIB_FUNC("Fjc4-n1+y2g", LibKernel::elf_phdr_match_addr);
+	LIB_FUNC("FxVZqBAA7ks", LibKernel::write);
 	LIB_FUNC("kbw4UHHSYy0", LibKernel::pthread_cxa_finalize);
-	LIB_FUNC("Xjoosiw+XPI", LibKernel::KernelUuidCreate);
-	LIB_FUNC("WslcK1FQcGI", LibKernel::KernelIsNeoMode);
-	LIB_FUNC("9BcDykPmo1I", LibKernel::get_error_addr);
-	LIB_FUNC("6xVpy0Fdq+I", LibKernel::sigprocmask);
 	LIB_FUNC("lLMT9vJAck0", LibKernel::clock_gettime);
-
-	LIB_FUNC("1jfXLRVzisc", LibKernel::KernelUsleep);
-	LIB_FUNC("rNhWz+lvOMU", LibKernel::KernelSetThreadDtors);
-	LIB_FUNC("WhCc1w3EhSI", LibKernel::KernelSetThreadAtexitReport);
+	LIB_FUNC("OMDRKKAZ8I4", LibKernel::KernelDebugRaiseException);
+	LIB_FUNC("Ou3iL1abvng", LibKernel::stack_chk_fail);
+	LIB_FUNC("p5EcQeEeJAE", LibKernel::KernelRtldSetApplicationHeapAPI);
 	LIB_FUNC("pB-yGZ2nQ9o", LibKernel::KernelSetThreadAtexitCount);
+	LIB_FUNC("py6L8jiVAN8", LibKernel::KernelGetSanitizerMallocReplaceExternal);
+	LIB_FUNC("QKd0qM58Qes", LibKernel::KernelStopUnloadModule);
+	LIB_FUNC("rNhWz+lvOMU", LibKernel::KernelSetThreadDtors);
 	LIB_FUNC("Tz4RNUCBbGI", LibKernel::KernelRtldThreadAtexitIncrement);
-	LIB_FUNC("8OnWXlgQlvo", LibKernel::KernelRtldThreadAtexitDecrement);
+	LIB_FUNC("vNe1w4diLCs", LibKernel::tls_get_addr);
+	LIB_FUNC("WhCc1w3EhSI", LibKernel::KernelSetThreadAtexitReport);
+	LIB_FUNC("WslcK1FQcGI", LibKernel::KernelIsNeoMode);
+	LIB_FUNC("wzvqT4UqKX8", LibKernel::KernelLoadStartModule);
+	LIB_FUNC("Xjoosiw+XPI", LibKernel::KernelUuidCreate);
+	LIB_FUNC("zE-wXIZjLoM", LibKernel::KernelDebugRaiseExceptionOnReleaseMode);
 }
 
 } // namespace Kyty::Libs

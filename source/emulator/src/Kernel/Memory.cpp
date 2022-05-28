@@ -74,12 +74,16 @@ public:
 
 	KYTY_CLASS_NO_COPY(FlexibleMemory);
 
+	static uint64_t Size() { return static_cast<uint64_t>(448) * 1024 * 1024; }
+	uint64_t        Available();
+
 	bool Map(uint64_t vaddr, size_t len, int prot, VirtualMemory::Mode mode, Graphics::GpuMemoryMode gpu_mode);
 	bool Unmap(uint64_t vaddr, uint64_t size, Graphics::GpuMemoryMode* gpu_mode);
 	bool Find(uint64_t vaddr, uint64_t* base_addr, size_t* len, int* prot, VirtualMemory::Mode* mode, Graphics::GpuMemoryMode* gpu_mode);
 
 private:
 	Vector<AllocatedBlock> m_allocated;
+	uint64_t               m_allocated_total = 0;
 	Core::Mutex            m_mutex;
 };
 
@@ -311,6 +315,7 @@ bool FlexibleMemory::Map(uint64_t vaddr, size_t len, int prot, VirtualMemory::Mo
 	b.gpu_mode  = gpu_mode;
 
 	m_allocated.Add(b);
+	m_allocated_total += len;
 
 	return true;
 }
@@ -329,6 +334,7 @@ bool FlexibleMemory::Unmap(uint64_t vaddr, uint64_t size, Graphics::GpuMemoryMod
 			*gpu_mode = b.gpu_mode;
 
 			m_allocated.RemoveAt(index);
+			m_allocated_total -= size;
 			return true;
 		}
 		index++;
@@ -374,6 +380,13 @@ bool FlexibleMemory::Find(uint64_t vaddr, uint64_t* base_addr, size_t* len, int*
 	                   });
 }
 
+uint64_t FlexibleMemory::Available()
+{
+	Core::LockGuard lock(m_mutex);
+
+	return Size() - m_allocated_total;
+}
+
 int32_t KYTY_SYSV_ABI KernelMapNamedFlexibleMemory(void** addr_in_out, size_t len, int prot, int flags, const char* name)
 {
 	PRINT_NAME();
@@ -396,6 +409,11 @@ int32_t KYTY_SYSV_ABI KernelMapNamedFlexibleMemory(void** addr_in_out, size_t le
 		case 5: mode = VirtualMemory::Mode::ExecuteRead; break;
 		case 6:
 		case 7: mode = VirtualMemory::Mode::ExecuteReadWrite; break;
+		case 0x32:
+		case 0x33:
+			mode     = VirtualMemory::Mode::ReadWrite;
+			gpu_mode = Graphics::GpuMemoryMode::ReadWrite;
+			break;
 		default: EXIT("unknown prot: %d\n", prot);
 	}
 
@@ -405,23 +423,34 @@ int32_t KYTY_SYSV_ABI KernelMapNamedFlexibleMemory(void** addr_in_out, size_t le
 
 	if (!g_flexible_memory->Map(out_addr, len, prot, mode, gpu_mode))
 	{
-		printf(FG_RED "\t[Fail]\n" FG_DEFAULT);
+		printf(FG_RED "\t [Fail]\n" FG_DEFAULT);
 		VirtualMemory::Free(out_addr);
 		return KERNEL_ERROR_ENOMEM;
 	}
 
-	printf("\tin_addr  = 0x%016" PRIx64 "\n", in_addr);
-	printf("\tout_addr = 0x%016" PRIx64 "\n", out_addr);
-	printf("\tsize     = %" PRIu64 "\n", len);
-	printf("\tmode     = %s\n", Core::EnumName(mode).C_Str());
-	printf("\tname     = %s\n", name);
+	printf("\t in_addr  = 0x%016" PRIx64 "\n", in_addr);
+	printf("\t out_addr = 0x%016" PRIx64 "\n", out_addr);
+	printf("\t size     = %" PRIu64 "\n", len);
+	printf("\t mode     = %s\n", Core::EnumName(mode).C_Str());
+	printf("\t name     = %s\n", name);
+	printf("\t gpu_mode = %s\n", Core::EnumName(gpu_mode).C_Str());
 
 	if (out_addr == 0)
 	{
 		return KERNEL_ERROR_ENOMEM;
 	}
 
+	if (gpu_mode != Graphics::GpuMemoryMode::NoAccess)
+	{
+		Graphics::GpuMemorySetAllocatedRange(out_addr, len);
+	}
+
 	return OK;
+}
+
+int KYTY_SYSV_ABI KernelMapFlexibleMemory(void** addr_in_out, size_t len, int prot, int flags)
+{
+	return KernelMapNamedFlexibleMemory(addr_in_out, len, prot, flags, "");
 }
 
 int KYTY_SYSV_ABI KernelMunmap(uint64_t vaddr, size_t len)
@@ -684,6 +713,21 @@ int KYTY_SYSV_ABI KernelQueryMemoryProtection(void* addr, void** start, void** e
 	{
 		*prot = p;
 	}
+
+	return OK;
+}
+
+int KYTY_SYSV_ABI KernelAvailableFlexibleMemorySize(size_t* size)
+{
+	PRINT_NAME();
+
+	EXIT_IF(g_flexible_memory == nullptr);
+
+	EXIT_NOT_IMPLEMENTED(size == nullptr);
+
+	*size = g_flexible_memory->Available();
+
+	printf("\t *size = 0x%016" PRIx64 "\n", *size);
 
 	return OK;
 }

@@ -177,6 +177,9 @@ int KYTY_SYSV_ABI   pthread_setspecific(LibKernel::PthreadKey key, void* value);
 void* KYTY_SYSV_ABI pthread_getspecific(LibKernel::PthreadKey key);
 int KYTY_SYSV_ABI   pthread_mutex_destroy(LibKernel::PthreadMutex* mutex);
 int KYTY_SYSV_ABI   pthread_mutex_init(LibKernel::PthreadMutex* mutex, const LibKernel::PthreadMutexattr* attr);
+int KYTY_SYSV_ABI   pthread_mutexattr_init(LibKernel::PthreadMutexattr* attr);
+int KYTY_SYSV_ABI   pthread_mutexattr_settype(LibKernel::PthreadMutexattr* attr, int type);
+int KYTY_SYSV_ABI   pthread_mutexattr_destroy(LibKernel::PthreadMutexattr* attr);
 
 } // namespace Posix
 

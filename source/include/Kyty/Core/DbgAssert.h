@@ -12,15 +12,17 @@
 namespace Kyty::Core {
 
 #ifdef __clang__
-int dbg_exit_handler(char const* file, int line, const char* f, ...) KYTY_FORMAT_PRINTF(3, 4) __attribute__((analyzer_noreturn));
-int dbg_assert_handler(char const* expr, char const* file, int line) __attribute__((analyzer_noreturn));
-int dbg_exit_if_handler(char const* expr, char const* file, int line) __attribute__((analyzer_noreturn));
-int dbg_not_implemented_handler(char const* expr, char const* file, int line) __attribute__((analyzer_noreturn));
+int  dbg_exit_handler(char const* file, int line, const char* f, ...) KYTY_FORMAT_PRINTF(3, 4) __attribute__((analyzer_noreturn));
+int  dbg_assert_handler(char const* expr, char const* file, int line) __attribute__((analyzer_noreturn));
+int  dbg_exit_if_handler(char const* expr, char const* file, int line) __attribute__((analyzer_noreturn));
+int  dbg_not_implemented_handler(char const* expr, char const* file, int line) __attribute__((analyzer_noreturn));
+void dbg_exit(int status) __attribute__((analyzer_noreturn));
 #else
-int dbg_exit_handler(char const* file, int line, const char* f, ...) KYTY_FORMAT_PRINTF(3, 4);
-int dbg_assert_handler(char const* expr, char const* file, int line);
-int dbg_exit_if_handler(char const* expr, char const* file, int line);
-int dbg_not_implemented_handler(char const* expr, char const* file, int line);
+int  dbg_exit_handler(char const* file, int line, const char* f, ...) KYTY_FORMAT_PRINTF(3, 4);
+int  dbg_assert_handler(char const* expr, char const* file, int line);
+int  dbg_exit_if_handler(char const* expr, char const* file, int line);
+int  dbg_not_implemented_handler(char const* expr, char const* file, int line);
+void dbg_exit(int status);
 #endif
 
 bool dbg_is_debugger_present();
@@ -33,7 +35,8 @@ bool dbg_is_debugger_present();
 
 #if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
 #define ASSERT_HALT()                                                                                                                      \
-	(Kyty::Core::dbg_is_debugger_present() ? (::fflush(nullptr), *(reinterpret_cast<volatile int*>(1)) = 0) : (std::_Exit(321), 1))
+	(Kyty::Core::dbg_is_debugger_present() ? (::fflush(nullptr), *(reinterpret_cast<volatile int*>(1)) = 0)                                \
+	                                       : (Kyty::Core::dbg_exit(321), 1))
 #else
 #define ASSERT_HALT() (std::_Exit(321), 1)
 #endif
