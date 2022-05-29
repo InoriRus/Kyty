@@ -13,6 +13,8 @@ jobs:
     steps:
     - name: Checkout source
       uses: actions/checkout@v3
+      with:
+        lfs: true
     - name: Install WinLibs
       run: choco install winlibs -y --no-progress
     - name: Install Qt
@@ -26,8 +28,6 @@ jobs:
       working-directory: _Build
       shell: cmd
     - name: Build
-      run: |
-        set PATH=C:\ProgramData\chocolatey\lib\winlibs\tools\mingw64\bin;%PATH%
-        _build.bat
+      run: _build.bat
       working-directory: _Build/_Gcc
       shell: cmd
