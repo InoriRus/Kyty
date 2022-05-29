@@ -26,6 +26,8 @@ jobs:
       working-directory: _Build
       shell: cmd
     - name: Build
-      run: _build.bat
+      run: |
+        set PATH=C:\ProgramData\chocolatey\lib\winlibs\tools\mingw64\bin;%PATH%
+        _build.bat
       working-directory: _Build/_Gcc
       shell: cmd
