@@ -31,3 +31,8 @@ jobs:
       run: _build.bat
       working-directory: _Build/_Gcc
       shell: cmd
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: Kyty
+        path: _Build/_Gcc/_bin
