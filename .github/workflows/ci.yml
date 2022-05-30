@@ -6,6 +6,7 @@ on:
   pull_request:
     branches:
     - '*'
+concurrency: ci-${{ github.ref }}
 jobs:
   build:
     name: Build
