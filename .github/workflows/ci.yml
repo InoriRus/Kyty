@@ -33,12 +33,12 @@ jobs:
       shell: cmd
     - name: Copy Qt dependency DLLs
       run: |
-        $bin = Resolve-Path "${env:Qt5_DIR}\..\..\..\bin"
+        $src = Resolve-Path "${env:Qt5_DIR}\bin"
         $dest = "_Build\_Gcc\_bin"
 
-        Copy-Item "${bin}\libwinpthread-1.dll" -Destination $dest
-        Copy-Item "${bin}\libstdc++-6.dll" -Destination $dest
-        Copy-Item "${bin}\libgcc_s_seh-1.dll" -Destination $dest
+        Copy-Item "${src}\libwinpthread-1.dll" -Destination $dest
+        Copy-Item "${src}\libstdc++-6.dll" -Destination $dest
+        Copy-Item "${src}\libgcc_s_seh-1.dll" -Destination $dest
     - name: Upload artifacts
       uses: actions/upload-artifact@v3
       with:
