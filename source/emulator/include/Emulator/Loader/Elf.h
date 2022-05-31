@@ -1,5 +1,5 @@
-#ifndef EMULATOR_INCLUDE_EMULATOR_ELF_H_
-#define EMULATOR_INCLUDE_EMULATOR_ELF_H_
+#ifndef EMULATOR_INCLUDE_EMULATOR_LOADER_ELF_H_
+#define EMULATOR_INCLUDE_EMULATOR_LOADER_ELF_H_
 
 #include "Kyty/Core/Common.h"
 #include "Kyty/Core/String.h"
@@ -306,4 +306,4 @@ private:
 
 #endif // KYTY_EMU_ENABLED
 
-#endif /* EMULATOR_INCLUDE_EMULATOR_ELF_H_ */
+#endif /* EMULATOR_INCLUDE_EMULATOR_LOADER_ELF_H_ */

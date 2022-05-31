@@ -13,10 +13,12 @@
 #include "Emulator/Controller.h"
 #include "Emulator/Graphics/GraphicContext.h"
 #include "Emulator/Graphics/GraphicsRender.h"
+#include "Emulator/Graphics/Image.h"
 #include "Emulator/Graphics/Utils.h"
 #include "Emulator/Graphics/VideoOut.h"
+#include "Emulator/Loader/Param.h"
+#include "Emulator/Loader/VirtualMemory.h"
 #include "Emulator/Profiler.h"
-#include "Emulator/VirtualMemory.h"
 
 #include "SDL.h"
 #include "SDL_error.h"
@@ -27,6 +29,7 @@
 #include "SDL_keycode.h"
 #include "SDL_mouse.h"
 #include "SDL_stdinc.h"
+#include "SDL_surface.h"
 #include "SDL_thread.h"
 #include "SDL_touch.h"
 #include "SDL_video.h"
@@ -2163,12 +2166,33 @@ GraphicContext* WindowGetGraphicContext()
 	return &g_window_ctx->graphic_ctx;
 }
 
-void WindowShowFps()
+void WindowUpdateIcon()
+{
+	EXIT_IF(g_window_ctx == nullptr);
+
+	static Image* icon = Loader::ParamSfoGetIcon();
+
+	if (icon != nullptr)
+	{
+		SDL_SetWindowIcon(g_window_ctx->window, static_cast<SDL_Surface*>(icon->GetSdlSurface()));
+	}
+}
+
+void WindowUpdateTitle()
 {
 	EXIT_IF(g_window_ctx == nullptr);
 	EXIT_IF(g_window_ctx->game == nullptr);
 
-	auto fps = String::FromPrintf("[%s] [%s], frame: %d, fps: %f", g_window_ctx->device_name, g_window_ctx->processor_name,
+	static char title[128];
+	static char title_id[12];
+	static char app_ver[8];
+	static bool has_title    = Loader::ParamSfoGetString("TITLE", title, sizeof(title));
+	static bool has_title_id = Loader::ParamSfoGetString("TITLE_ID", title_id, sizeof(title_id));
+	static bool has_app_ver  = Loader::ParamSfoGetString("APP_VER", app_ver, sizeof(app_ver));
+
+	auto fps = String::FromPrintf("%s%s%s%s%s%s[%s] [%s], frame: %d, fps: %f", (has_title ? title : ""), (has_title ? ", " : ""),
+	                              (has_title_id ? title_id : ""), (has_title_id ? ", " : ""), (has_app_ver ? app_ver : ""),
+	                              (has_app_ver ? ", " : ""), g_window_ctx->device_name, g_window_ctx->processor_name,
 	                              g_window_ctx->game->m_frame_num, g_window_ctx->game->m_current_fps);
 
 	SDL_SetWindowTitle(g_window_ctx->window, fps.C_Str());
@@ -2184,6 +2208,8 @@ void WindowDrawBuffer(VideoOutVulkanImage* image)
 
 	if (g_window_ctx->window_hidden)
 	{
+		WindowUpdateIcon();
+
 		SDL_ShowWindow(g_window_ctx->window);
 
 		g_window_ctx->window_hidden = false;
@@ -2257,7 +2283,7 @@ void WindowDrawBuffer(VideoOutVulkanImage* image)
 	result = vkQueuePresentKHR(g_window_ctx->graphic_ctx.queue[GraphicContext::QUEUE_PRESENT], &present);
 	EXIT_NOT_IMPLEMENTED(result != VK_SUCCESS);
 
-	WindowShowFps();
+	WindowUpdateTitle();
 }
 
 } // namespace Kyty::Libs::Graphics

@@ -4,15 +4,17 @@
 
 #include "Emulator/Common.h"
 
-#ifdef KYTY_EMU_ENABLED
-
 namespace Kyty::Emulator {
 
+#ifdef KYTY_EMU_ENABLED
 void kyty_reg();
+#endif
 
 KYTY_SUBSYSTEM_INIT(Emulator)
 {
+#ifdef KYTY_EMU_ENABLED
 	kyty_reg();
+#endif
 }
 
 KYTY_SUBSYSTEM_UNEXPECTED_SHUTDOWN(Emulator) {}
@@ -20,5 +22,3 @@ KYTY_SUBSYSTEM_UNEXPECTED_SHUTDOWN(Emulator) {}
 KYTY_SUBSYSTEM_DESTROY(Emulator) {}
 
 } // namespace Kyty::Emulator
-
-#endif // KYTY_EMU_ENABLED

@@ -4,6 +4,7 @@
 #include "ConfigurationListWidget.h"
 #include "MainDialog.h"
 #include "MandatoryLineEdit.h"
+#include "Psf.h"
 
 #include <QByteArray>
 #include <QCheckBox>
@@ -20,6 +21,7 @@
 #include <QListWidget>
 #include <QListWidgetItem>
 #include <QMessageBox>
+#include <QPicture>
 #include <QPushButton>
 #include <QSettings>
 #include <QStringList>
@@ -32,6 +34,7 @@ constexpr char SETTINGS_CFG_LAST_GEOMETRY[] = "geometry";
 constexpr char SETTINGS_LAST_BASE_DIR[]     = "last_base_dir";
 constexpr char COLOR_SELECTED[]             = "#e2ffe2";
 constexpr char COLOR_NOT_SELECTED[]         = "#ffffff";
+constexpr char COLOR_ODD_ROW[]              = "#fff5e5";
 
 static void ChangeColor(QListWidgetItem* item)
 {
@@ -53,6 +56,7 @@ ConfigurationEditDialog::ConfigurationEditDialog(Kyty::Configuration* info, Conf
 	connect(m_ui->clear_button, &QPushButton::clicked, this, &ConfigurationEditDialog::clear);
 	connect(m_ui->test_button, &QPushButton::clicked, this, &ConfigurationEditDialog::test);
 	connect(m_ui->browse_base_dir_button, &QPushButton::clicked, this, &ConfigurationEditDialog::browse_base_path);
+	connect(m_ui->browse_param_file_button, &QPushButton::clicked, this, &ConfigurationEditDialog::browse_param_file);
 	connect(m_ui->comboBox_shader_log_direction, &QComboBox::currentTextChanged,
 	        [=](const QString& text)
 	        {
@@ -74,6 +78,7 @@ ConfigurationEditDialog::ConfigurationEditDialog(Kyty::Configuration* info, Conf
 		                                                 log == Kyty::Configuration::ProfilerDirection::FileAndNetwork);
 	        });
 	connect(m_ui->base_directory_lineedit, &QLineEdit::textChanged, this, &ConfigurationEditDialog::scan_elfs);
+	connect(m_ui->param_file_lineedit, &QLineEdit::textChanged, this, &ConfigurationEditDialog::load_param_sfo);
 	connect(m_ui->listWidget_elfs, &QListWidget::itemChanged, this, &ChangeColor);
 	connect(m_ui->listWidget_libs, &QListWidget::itemChanged, this, &ChangeColor);
 	connect(&m_process, static_cast<void (QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished),
@@ -83,10 +88,17 @@ ConfigurationEditDialog::ConfigurationEditDialog(Kyty::Configuration* info, Conf
 
 	restoreGeometry(g_last_geometry);
 
+	m_ui->params_table->setWordWrap(false);
+	m_ui->params_table->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
+	m_ui->params_table->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+	m_ui->params_table->horizontalHeader()->setStretchLastSection(true);
+	m_ui->params_table->setStyleSheet("selection-background-color: lightgray; selection-color: black;");
+
 	Init();
 
 	scan_libs();
 	scan_elfs();
+	load_param_sfo();
 }
 
 QString    ConfigurationEditDialog::g_last_base_dir;
@@ -134,8 +146,9 @@ static void ListInit(QComboBox* combo, T value)
 
 void ConfigurationEditDialog::Init()
 {
-	m_ui->name_lineedit->setText(m_info->Name);
-	m_ui->base_directory_lineedit->setText(m_info->BaseDir);
+	m_ui->name_lineedit->setText(m_info->name);
+	m_ui->base_directory_lineedit->setText(m_info->basedir);
+	m_ui->param_file_lineedit->setText(m_info->param_file);
 	ListInit(m_ui->comboBox_screen_resolution, m_info->screen_resolution);
 	m_ui->checkBox_neo->setChecked(m_info->neo);
 	m_ui->checkBox_shader_validation->setChecked(m_info->shader_validation_enabled);
@@ -149,7 +162,6 @@ void ConfigurationEditDialog::Init()
 	m_ui->lineEdit_printf_file->setText(m_info->printf_output_file);
 	ListInit(m_ui->comboBox_profiler_direction, m_info->profiler_direction);
 	m_ui->lineEdit_profiler_file->setText(m_info->profiler_output_file);
-	m_ui->checkBox_spirv_printf->setChecked(m_info->spirv_debug_printf_enabled);
 }
 
 void ConfigurationEditDialog::SetTitle(const QString& str)
@@ -184,8 +196,9 @@ static void UpdateList(QStringList* list, QStringList* list_selected, QListWidge
 
 static void UpdateInfo(Kyty::Configuration* info, Ui::ConfigurationEditDialog* ui)
 {
-	info->Name                      = ui->name_lineedit->text();
-	info->BaseDir                   = ui->base_directory_lineedit->text();
+	info->name                      = ui->name_lineedit->text();
+	info->basedir                   = ui->base_directory_lineedit->text();
+	info->param_file                = ui->param_file_lineedit->text();
 	info->screen_resolution         = TextToEnum<Kyty::Configuration::Resolution>(ui->comboBox_screen_resolution->currentText());
 	info->neo                       = ui->checkBox_neo->isChecked();
 	info->vulkan_validation_enabled = ui->checkBox_vulkan_validation->isChecked();
@@ -200,7 +213,6 @@ static void UpdateInfo(Kyty::Configuration* info, Ui::ConfigurationEditDialog* u
 	info->printf_output_file          = ui->lineEdit_printf_file->text();
 	info->profiler_direction          = TextToEnum<Kyty::Configuration::ProfilerDirection>(ui->comboBox_profiler_direction->currentText());
 	info->profiler_output_file        = ui->lineEdit_profiler_file->text();
-	info->spirv_debug_printf_enabled  = ui->checkBox_spirv_printf->isChecked();
 
 	info->elfs.clear();
 	info->elfs_selected.clear();
@@ -255,6 +267,23 @@ void ConfigurationEditDialog::browse_base_path()
 	{
 		m_ui->base_directory_lineedit->setText(dir);
 		g_last_base_dir = dir;
+	}
+}
+
+void ConfigurationEditDialog::browse_param_file()
+{
+	QString text = m_ui->param_file_lineedit->text();
+
+	if (text.isEmpty())
+	{
+		text = m_ui->base_directory_lineedit->text();
+	}
+
+	QString file = QFileDialog::getOpenFileName(this, tr("Select param.sfo"), text.isEmpty() ? g_last_base_dir : text, "param.sfo");
+
+	if (!file.isEmpty())
+	{
+		m_ui->param_file_lineedit->setText(file);
 	}
 }
 
@@ -356,6 +385,62 @@ void ConfigurationEditDialog::scan_libs()
 	m_ui->listWidget_libs->sortItems();
 }
 
+void ConfigurationEditDialog::load_param_sfo()
+{
+	auto file_name = m_ui->param_file_lineedit->text();
+
+	m_ui->image->clear();
+	m_ui->params_table->clear();
+	m_ui->params_table->setRowCount(0);
+	m_ui->params_table->setColumnCount(2);
+	m_ui->params_table->setHorizontalHeaderLabels({tr("Parameter"), tr("Value")});
+	m_ui->params_table->resizeColumnsToContents();
+
+	QFile param(file_name);
+
+	if (param.exists())
+	{
+		Psf psf;
+		psf.Load(file_name);
+
+		const auto& map = psf.GetMap();
+
+		m_ui->params_table->setColumnCount(2);
+		m_ui->params_table->setRowCount(map.size());
+
+		int index = 0;
+		for (auto& m: map.toStdMap())
+		{
+			auto* item1 = new QTableWidgetItem(m.first);
+			item1->setFlags(item1->flags() ^ Qt::ItemIsEditable);
+			auto* item2 = new QTableWidgetItem(
+			    m.second.type() == QVariant::UInt ? QString("0x%1").arg(m.second.toUInt(), 8, 16, QLatin1Char('0')) : m.second.toString());
+			item2->setFlags(item2->flags() ^ Qt::ItemIsEditable);
+			if (index % 2 != 0)
+			{
+				item1->setBackground(QColor(COLOR_ODD_ROW));
+				item2->setBackground(QColor(COLOR_ODD_ROW));
+			}
+			m_ui->params_table->setItem(index, 0, item1);
+			m_ui->params_table->setItem(index, 1, item2);
+
+			index++;
+		}
+
+		m_ui->params_table->resizeRowsToContents();
+		m_ui->params_table->resizeColumnToContents(0);
+
+		QFile image(QFileInfo(file_name).absoluteDir().filePath("pic1.png"));
+
+		if (image.exists())
+		{
+			QPixmap picture;
+			picture.load(image.fileName());
+			m_ui->image->setPixmap(picture.scaledToWidth(m_ui->image->width(), Qt::SmoothTransformation));
+		}
+	}
+}
+
 void ConfigurationEditDialog::clear()
 {
 	auto* old_info = m_info;
@@ -368,6 +453,7 @@ void ConfigurationEditDialog::clear()
 
 	scan_elfs();
 	scan_libs();
+	load_param_sfo();
 }
 
 void ConfigurationEditDialog::test()

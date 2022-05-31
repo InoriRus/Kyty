@@ -5,7 +5,8 @@
 #include "Emulator/Common.h"
 #include "Emulator/Libs/Errno.h"
 #include "Emulator/Libs/Libs.h"
-#include "Emulator/SymbolDatabase.h"
+#include "Emulator/Loader/Param.h"
+#include "Emulator/Loader/SymbolDatabase.h"
 
 #ifdef KYTY_EMU_ENABLED
 
@@ -66,12 +67,42 @@ int KYTY_SYSV_ABI AppContentGetAddcontInfoList(uint32_t service_label, AppConten
 	return OK;
 }
 
+int KYTY_SYSV_ABI AppContentAppParamGetInt(uint32_t param_id, int32_t* value)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(value == nullptr);
+
+	*value     = 0;
+	bool found = false;
+
+	printf("\t param_id = %u\n", param_id);
+
+	switch (param_id)
+	{
+		case 0:
+			*value = 3;
+			found  = true;
+			break;
+		case 1: found = Loader::ParamSfoGetInt("USER_DEFINED_PARAM_1", value); break;
+		case 2: found = Loader::ParamSfoGetInt("USER_DEFINED_PARAM_2", value); break;
+		case 3: found = Loader::ParamSfoGetInt("USER_DEFINED_PARAM_3", value); break;
+		case 4: found = Loader::ParamSfoGetInt("USER_DEFINED_PARAM_4", value); break;
+		default: EXIT("unknown param_id: %u\n", param_id);
+	}
+
+	printf("\t value    = %d [%s]\n", *value, found ? "found" : "not found");
+
+	return OK;
+}
+
 } // namespace AppContent
 
 LIB_DEFINE(InitAppContent_1)
 {
 	LIB_FUNC("R9lA82OraNs", AppContent::AppContentInitialize);
 	LIB_FUNC("xnd8BJzAxmk", AppContent::AppContentGetAddcontInfoList);
+	LIB_FUNC("99b82IKXpH4", AppContent::AppContentAppParamGetInt);
 }
 
 } // namespace Kyty::Libs

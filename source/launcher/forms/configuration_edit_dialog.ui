@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>697</width>
-    <height>587</height>
+    <width>837</width>
+    <height>822</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -17,6 +17,19 @@
    <locale language="English" country="UnitedStates"/>
   </property>
   <layout class="QGridLayout" name="gridLayout">
+   <item row="1" column="1">
+    <spacer name="verticalSpacer">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>0</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
    <item row="0" column="0" rowspan="2">
     <layout class="QVBoxLayout" name="verticalLayout_2">
      <property name="sizeConstraint">
@@ -89,6 +102,12 @@
          <layout class="QHBoxLayout" name="horizontalLayout_6">
           <item>
            <widget class="MandatoryLineEdit" name="base_directory_lineedit">
+            <property name="minimumSize">
+             <size>
+              <width>550</width>
+              <height>0</height>
+             </size>
+            </property>
             <property name="toolTip">
              <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Name of the directory where game is located&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
             </property>
@@ -99,6 +118,43 @@
           </item>
           <item>
            <widget class="QPushButton" name="browse_base_dir_button">
+            <property name="text">
+             <string>Browse...</string>
+            </property>
+            <property name="autoDefault">
+             <bool>false</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item row="2" column="0">
+         <widget class="QLabel" name="label_17">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="text">
+           <string>Param file</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="1">
+         <layout class="QHBoxLayout" name="horizontalLayout_8">
+          <item>
+           <widget class="QLineEdit" name="param_file_lineedit">
+            <property name="toolTip">
+             <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Path to &lt;span style=&quot; font-weight:600;&quot;&gt;param.sfo&lt;/span&gt; file&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+            </property>
+            <property name="clearButtonEnabled">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="browse_param_file_button">
             <property name="text">
              <string>Browse...</string>
             </property>
@@ -132,20 +188,6 @@
           <property name="fieldGrowthPolicy">
            <enum>QFormLayout::AllNonFixedFieldsGrow</enum>
           </property>
-          <item row="1" column="0">
-           <widget class="QLabel" name="label_16">
-            <property name="text">
-             <string>Screen resoultion:</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1">
-           <widget class="QComboBox" name="comboBox_screen_resolution">
-            <property name="toolTip">
-             <string>Window resolution</string>
-            </property>
-           </widget>
-          </item>
           <item row="0" column="0" colspan="2">
            <widget class="QFrame" name="frame_4">
             <property name="frameShape">
@@ -168,19 +210,6 @@
                </property>
               </widget>
              </item>
-             <item row="0" column="1">
-              <widget class="QCheckBox" name="checkBox_shader_validation">
-               <property name="toolTip">
-                <string>Validate SPIR-V binary</string>
-               </property>
-               <property name="text">
-                <string>Shader validation</string>
-               </property>
-               <property name="checked">
-                <bool>true</bool>
-               </property>
-              </widget>
-             </item>
              <item row="1" column="0">
               <widget class="QCheckBox" name="checkBox_vulkan_validation">
                <property name="toolTip">
@@ -188,6 +217,19 @@
                </property>
                <property name="text">
                 <string>Vulkan validation</string>
+               </property>
+               <property name="checked">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QCheckBox" name="checkBox_shader_validation">
+               <property name="toolTip">
+                <string>Validate SPIR-V binary</string>
+               </property>
+               <property name="text">
+                <string>Shader validation</string>
                </property>
                <property name="checked">
                 <bool>true</bool>
@@ -207,20 +249,34 @@
                </property>
               </widget>
              </item>
-             <item row="2" column="0">
-              <widget class="QCheckBox" name="checkBox_spirv_printf">
-               <property name="enabled">
-                <bool>false</bool>
+             <item row="1" column="2">
+              <spacer name="horizontalSpacer">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
                </property>
-               <property name="toolTip">
-                <string>Enable GL_EXT_debug_printf extension</string>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>40</width>
+                 <height>20</height>
+                </size>
                </property>
-               <property name="text">
-                <string>Spirv debug printf</string>
-               </property>
-              </widget>
+              </spacer>
              </item>
             </layout>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="label_16">
+            <property name="text">
+             <string>Screen resoultion:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QComboBox" name="comboBox_screen_resolution">
+            <property name="toolTip">
+             <string>Window resolution</string>
+            </property>
            </widget>
           </item>
           <item row="2" column="0">
@@ -237,10 +293,24 @@
             </property>
            </widget>
           </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="label_21">
+            <property name="text">
+             <string>Shader log direction:</string>
+            </property>
+           </widget>
+          </item>
           <item row="3" column="1">
            <widget class="QComboBox" name="comboBox_shader_log_direction">
             <property name="toolTip">
              <string>Dump shaders to file or console window. If enabled may decrease emulator performance</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="label_22">
+            <property name="text">
+             <string>Shader log folder:</string>
             </property>
            </widget>
           </item>
@@ -254,6 +324,13 @@
             </property>
            </widget>
           </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="label_24">
+            <property name="text">
+             <string>Command buffer dump folder:</string>
+            </property>
+           </widget>
+          </item>
           <item row="5" column="1">
            <widget class="MandatoryLineEdit" name="lineEdit_cmd_dump_folder">
             <property name="toolTip">
@@ -264,10 +341,24 @@
             </property>
            </widget>
           </item>
+          <item row="6" column="0">
+           <widget class="QLabel" name="label_25">
+            <property name="text">
+             <string>Printf direction:</string>
+            </property>
+           </widget>
+          </item>
           <item row="6" column="1">
            <widget class="QComboBox" name="comboBox_printf_direction">
             <property name="toolTip">
              <string>Print logs to file or console window. If enabled may decrease emulator performance</string>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="0">
+           <widget class="QLabel" name="label_26">
+            <property name="text">
+             <string>Printf output file:</string>
             </property>
            </widget>
           </item>
@@ -281,6 +372,13 @@
             </property>
            </widget>
           </item>
+          <item row="8" column="0">
+           <widget class="QLabel" name="label_27">
+            <property name="text">
+             <string>Profiler direction:</string>
+            </property>
+           </widget>
+          </item>
           <item row="8" column="1">
            <widget class="QComboBox" name="comboBox_profiler_direction">
             <property name="toolTip">
@@ -288,45 +386,10 @@
             </property>
            </widget>
           </item>
-          <item row="3" column="0">
-           <widget class="QLabel" name="label_21">
+          <item row="9" column="0">
+           <widget class="QLabel" name="label_28">
             <property name="text">
-             <string>Shader log direction:</string>
-            </property>
-           </widget>
-          </item>
-          <item row="4" column="0">
-           <widget class="QLabel" name="label_22">
-            <property name="text">
-             <string>Shader log folder:</string>
-            </property>
-           </widget>
-          </item>
-          <item row="5" column="0">
-           <widget class="QLabel" name="label_24">
-            <property name="text">
-             <string>Command buffer dump folder:</string>
-            </property>
-           </widget>
-          </item>
-          <item row="6" column="0">
-           <widget class="QLabel" name="label_25">
-            <property name="text">
-             <string>Printf direction:</string>
-            </property>
-           </widget>
-          </item>
-          <item row="7" column="0">
-           <widget class="QLabel" name="label_26">
-            <property name="text">
-             <string>Printf output file:</string>
-            </property>
-           </widget>
-          </item>
-          <item row="8" column="0">
-           <widget class="QLabel" name="label_27">
-            <property name="text">
-             <string>Profiler direction:</string>
+             <string>Profiler output file:</string>
             </property>
            </widget>
           </item>
@@ -340,12 +403,54 @@
             </property>
            </widget>
           </item>
-          <item row="9" column="0">
-           <widget class="QLabel" name="label_28">
-            <property name="text">
-             <string>Profiler output file:</string>
-            </property>
-           </widget>
+          <item row="11" column="0" colspan="2">
+           <layout class="QHBoxLayout" name="horizontalLayout_2">
+            <item>
+             <spacer name="horizontalSpacer_3">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <widget class="QLabel" name="image">
+              <property name="minimumSize">
+               <size>
+                <width>240</width>
+                <height>135</height>
+               </size>
+              </property>
+              <property name="frameShape">
+               <enum>QFrame::NoFrame</enum>
+              </property>
+              <property name="frameShadow">
+               <enum>QFrame::Plain</enum>
+              </property>
+              <property name="text">
+               <string/>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacer_2">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
           </item>
          </layout>
         </widget>
@@ -426,20 +531,10 @@
        </item>
       </layout>
      </item>
+     <item>
+      <widget class="QTableWidget" name="params_table"/>
+     </item>
     </layout>
-   </item>
-   <item row="1" column="1">
-    <spacer name="verticalSpacer">
-     <property name="orientation">
-      <enum>Qt::Vertical</enum>
-     </property>
-     <property name="sizeHint" stdset="0">
-      <size>
-       <width>20</width>
-       <height>0</height>
-      </size>
-     </property>
-    </spacer>
    </item>
    <item row="0" column="1">
     <layout class="QVBoxLayout" name="verticalLayout">

@@ -1,5 +1,5 @@
-#ifndef EMULATOR_INCLUDE_EMULATOR_TIMER_H_
-#define EMULATOR_INCLUDE_EMULATOR_TIMER_H_
+#ifndef EMULATOR_INCLUDE_EMULATOR_LOADER_TIMER_H_
+#define EMULATOR_INCLUDE_EMULATOR_LOADER_TIMER_H_
 
 #include "Kyty/Core/Common.h"
 #include "Kyty/Core/DateTime.h"
@@ -23,4 +23,4 @@ uint64_t   GetFrequency();
 
 #endif // KYTY_EMU_ENABLED
 
-#endif /* EMULATOR_INCLUDE_EMULATOR_TIMER_H_ */
+#endif /* EMULATOR_INCLUDE_EMULATOR_LOADER_TIMER_H_ */

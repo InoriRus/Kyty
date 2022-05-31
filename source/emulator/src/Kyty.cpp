@@ -20,11 +20,12 @@
 #include "Emulator/Kernel/Memory.h"
 #include "Emulator/Kernel/Pthread.h"
 #include "Emulator/Libs/Libs.h"
+#include "Emulator/Loader/Param.h"
+#include "Emulator/Loader/RuntimeLinker.h"
+#include "Emulator/Loader/Timer.h"
+#include "Emulator/Loader/VirtualMemory.h"
 #include "Emulator/Network.h"
 #include "Emulator/Profiler.h"
-#include "Emulator/RuntimeLinker.h"
-#include "Emulator/Timer.h"
-#include "Emulator/VirtualMemory.h"
 
 #include <cstdlib>
 
@@ -211,6 +212,25 @@ KYTY_SCRIPT_FUNC(kyty_load_symbols_func)
 	return 0;
 }
 
+KYTY_SCRIPT_FUNC(kyty_load_param_sfo_func)
+{
+	auto count = Scripts::ArgGetVarCount();
+
+	if (count != 1)
+	{
+		EXIT("invalid args\n");
+	}
+
+	auto file_name = Scripts::ArgGetVar(0).ToString();
+
+	if (!file_name.IsEmpty())
+	{
+		Loader::ParamSfoLoad(Scripts::ArgGetVar(0).ToString());
+	}
+
+	return 0;
+}
+
 KYTY_SCRIPT_FUNC(kyty_dbg_dump_func)
 {
 	if (Scripts::ArgGetVarCount() != 1)
@@ -385,6 +405,7 @@ void kyty_reg()
 	Scripts::RegisterFunc("kyty_load_elf", LuaFunc::kyty_load_elf_func, LuaFunc::kyty_help);
 	Scripts::RegisterFunc("kyty_save_main_elf", LuaFunc::kyty_save_main_elf_func, LuaFunc::kyty_help);
 	Scripts::RegisterFunc("kyty_load_symbols", LuaFunc::kyty_load_symbols_func, LuaFunc::kyty_help);
+	Scripts::RegisterFunc("kyty_load_param_sfo", LuaFunc::kyty_load_param_sfo_func, LuaFunc::kyty_help);
 	Scripts::RegisterFunc("kyty_dbg_dump", LuaFunc::kyty_dbg_dump_func, LuaFunc::kyty_help);
 	Scripts::RegisterFunc("kyty_execute", LuaFunc::kyty_execute_func, LuaFunc::kyty_help);
 	Scripts::RegisterFunc("kyty_mount", LuaFunc::kyty_mount_func, LuaFunc::kyty_help);

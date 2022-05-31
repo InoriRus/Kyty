@@ -11,8 +11,8 @@
 
 #include "Emulator/Libs/Errno.h"
 #include "Emulator/Libs/Libs.h"
-#include "Emulator/RuntimeLinker.h"
-#include "Emulator/Timer.h"
+#include "Emulator/Loader/RuntimeLinker.h"
+#include "Emulator/Loader/Timer.h"
 
 #include <atomic>
 #include <cerrno>

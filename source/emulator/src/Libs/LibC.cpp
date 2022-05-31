@@ -9,7 +9,7 @@
 #include "Emulator/Libs/Libs.h"
 #include "Emulator/Libs/Printf.h"
 #include "Emulator/Libs/VaContext.h"
-#include "Emulator/SymbolDatabase.h"
+#include "Emulator/Loader/SymbolDatabase.h"
 
 #include <cstdlib>
 

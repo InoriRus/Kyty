@@ -4,7 +4,7 @@
 #include "Kyty/Core/Subsystems.h"
 
 #include "Emulator/Common.h"
-#include "Emulator/Timer.h"
+#include "Emulator/Loader/Timer.h"
 
 #ifdef KYTY_EMU_ENABLED
 

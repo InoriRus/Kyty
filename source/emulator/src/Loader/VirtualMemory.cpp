@@ -1,9 +1,9 @@
-#include "Emulator/VirtualMemory.h"
+#include "Emulator/Loader/VirtualMemory.h"
 
 #include "Kyty/Core/DbgAssert.h"
 
 #include "Emulator/Common.h"
-#include "Emulator/Jit.h"
+#include "Emulator/Loader/Jit.h"
 #include "Emulator/Profiler.h"
 
 #include "cpuinfo.h"

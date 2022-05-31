@@ -102,8 +102,9 @@ public:
 
 	Configuration() = default;
 
-	QString Name;
-	QString BaseDir; /* Game base directory */
+	QString name;
+	QString basedir;    /* Game base directory */
+	QString param_file; /* Path to param.sfo */
 
 	Resolution             screen_resolution           = Resolution::R1280X720;
 	bool                   neo                         = true;
@@ -118,7 +119,6 @@ public:
 	QString                printf_output_file          = "_kyty.txt";
 	ProfilerDirection      profiler_direction          = ProfilerDirection::None;
 	QString                profiler_output_file        = "_profile.prof";
-	bool                   spirv_debug_printf_enabled  = false;
 
 	QStringList elfs;
 	QStringList elfs_selected;
@@ -127,8 +127,9 @@ public:
 
 	void WriteSettings(QSettings* s) const
 	{
-		KYTY_CFG_SET(Name);
-		KYTY_CFG_SET(BaseDir);
+		KYTY_CFG_SET(name);
+		KYTY_CFG_SET(basedir);
+		KYTY_CFG_SET(param_file);
 		KYTY_CFG_SET(screen_resolution);
 		KYTY_CFG_SET(neo);
 		KYTY_CFG_SET(vulkan_validation_enabled);
@@ -142,7 +143,6 @@ public:
 		KYTY_CFG_SET(printf_output_file);
 		KYTY_CFG_SET(profiler_direction);
 		KYTY_CFG_SET(profiler_output_file);
-		KYTY_CFG_SET(spirv_debug_printf_enabled);
 		KYTY_CFG_SETL(elfs);
 		KYTY_CFG_SETL(elfs_selected);
 		KYTY_CFG_SETL(libs);
@@ -151,8 +151,9 @@ public:
 
 	void ReadSettings(QSettings* s)
 	{
-		KYTY_CFG_GET(Name);
-		KYTY_CFG_GET(BaseDir);
+		KYTY_CFG_GET(name);
+		KYTY_CFG_GET(basedir);
+		KYTY_CFG_GET(param_file);
 		KYTY_CFG_GET(screen_resolution);
 		KYTY_CFG_GET(neo);
 		KYTY_CFG_GET(vulkan_validation_enabled);
@@ -166,7 +167,6 @@ public:
 		KYTY_CFG_GET(printf_output_file);
 		KYTY_CFG_GET(profiler_direction);
 		KYTY_CFG_GET(profiler_output_file);
-		KYTY_CFG_GET(spirv_debug_printf_enabled);
 		KYTY_CFG_GETL(elfs);
 		KYTY_CFG_GETL(elfs_selected);
 		KYTY_CFG_GETL(libs);

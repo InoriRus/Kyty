@@ -11,7 +11,7 @@ ConfigurationItem::ConfigurationItem(Kyty::Configuration* info, QListWidget* par
 	setSizeHint(QSize(0, 18));
 	if (m_info != nullptr)
 	{
-		setText(m_info->Name);
+		setText(m_info->name);
 	}
 	SetRunning(false);
 }
@@ -25,7 +25,7 @@ void ConfigurationItem::Update()
 {
 	if (m_info != nullptr)
 	{
-		setText(m_info->Name);
+		setText(m_info->name);
 	}
 }
 

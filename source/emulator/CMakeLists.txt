@@ -5,6 +5,7 @@ file(GLOB emulator_src
 	src/Graphics/*.cpp
 	src/Graphics/Objects/*.cpp
 	src/Kernel/*.cpp
+	src/Loader/*.cpp
 	include/*.h
 )
 
@@ -27,6 +28,7 @@ list(APPEND inc_headers
 	${CMAKE_SOURCE_DIR}/3rdparty/easy_profiler/include
 	${CMAKE_SOURCE_DIR}/3rdparty/xxhash/include
 	${CMAKE_SOURCE_DIR}/3rdparty/cpuinfo/include
+	${CMAKE_SOURCE_DIR}/3rdparty/stb
 )
 
 if (MSVC AND CLANG)

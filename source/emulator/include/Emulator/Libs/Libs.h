@@ -4,7 +4,7 @@
 #include "Kyty/Core/String.h"
 
 #include "Emulator/Common.h"
-#include "Emulator/Timer.h" // IWYU pragma: keep
+#include "Emulator/Loader/Timer.h" // IWYU pragma: keep
 
 #ifdef KYTY_EMU_ENABLED
 

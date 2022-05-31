@@ -42,6 +42,7 @@ constexpr char  KYTY_MOUNT[]                  = "kyty_mount";
 constexpr char  KYTY_EXECUTE[]                = "kyty_execute";
 constexpr char  KYTY_LOAD_ELF[]               = "kyty_load_elf";
 constexpr char  KYTY_LOAD_SYMBOLS[]           = "kyty_load_symbols";
+constexpr char  KYTY_LOAD_PARAM_SFO[]         = "kyty_load_param_sfo";
 constexpr char  KYTY_INIT[]                   = "kyty_init";
 constexpr char  KYTY_LUA_FILE[]               = "kyty_run.lua";
 constexpr DWORD CMD_X_CHARS                   = 175;
@@ -183,6 +184,7 @@ void MainDialogPrivate::FindInterpreter()
 		found = found && lines.contains(QString("Lua function: ") + KYTY_EXECUTE);
 		found = found && lines.contains(QString("Lua function: ") + KYTY_LOAD_ELF);
 		found = found && lines.contains(QString("Lua function: ") + KYTY_LOAD_SYMBOLS);
+		found = found && lines.contains(QString("Lua function: ") + KYTY_LOAD_PARAM_SFO);
 		found = found && lines.contains(QString("Lua function: ") + KYTY_INIT);
 	}
 
@@ -234,11 +236,13 @@ static bool CreateLuaScript(Kyty::Configuration* info, const QString& file_name)
 		s << "\t PrintfOutputFile = '" << info->printf_output_file << "';\n";
 		s << "\t ProfilerDirection = '" << EnumToText(info->profiler_direction) << "';\n";
 		s << "\t ProfilerOutputFile = '" << info->profiler_output_file << "';\n";
-		s << "\t SpirvDebugPrintfEnabled = " << (info->spirv_debug_printf_enabled ? "true" : "false") << ";\n";
+		s << "\t SpirvDebugPrintfEnabled = false;\n";
 		s << "}\n";
 
 		s << KYTY_INIT << "(cfg);\n";
-		s << KYTY_MOUNT << "('" << info->BaseDir << "', '/app0');\n";
+		s << KYTY_MOUNT << "('" << info->basedir << "', '/app0');\n";
+
+		s << KYTY_LOAD_PARAM_SFO << "('" << info->param_file << "');\n";
 
 		for (const auto& elf: info->elfs_selected)
 		{
@@ -357,7 +361,7 @@ void MainDialogPrivate::Update()
 	if (run_enabled && item != nullptr)
 	{
 		const auto* info = item->GetInfo();
-		auto        dir  = info->BaseDir;
+		auto        dir  = info->basedir;
 		run_enabled      = !dir.isEmpty() && QDir(dir).exists();
 	}
 

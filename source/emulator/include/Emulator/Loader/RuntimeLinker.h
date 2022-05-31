@@ -1,5 +1,5 @@
-#ifndef EMULATOR_INCLUDE_EMULATOR_RUNTIMELINKER_H_
-#define EMULATOR_INCLUDE_EMULATOR_RUNTIMELINKER_H_
+#ifndef EMULATOR_INCLUDE_EMULATOR_LOADER_RUNTIMELINKER_H_
+#define EMULATOR_INCLUDE_EMULATOR_LOADER_RUNTIMELINKER_H_
 
 #include "Kyty/Core/Common.h"
 #include "Kyty/Core/Hashmap.h"
@@ -8,7 +8,7 @@
 #include "Kyty/Core/Vector.h"
 
 #include "Emulator/Common.h"
-#include "Emulator/SymbolDatabase.h"
+#include "Emulator/Loader/SymbolDatabase.h"
 
 #ifdef KYTY_EMU_ENABLED
 
@@ -186,4 +186,4 @@ private:
 
 #endif // KYTY_EMU_ENABLED
 
-#endif /* EMULATOR_INCLUDE_EMULATOR_RUNTIMELINKER_H_ */
+#endif /* EMULATOR_INCLUDE_EMULATOR_LOADER_RUNTIMELINKER_H_ */

@@ -11,7 +11,7 @@
 #include "Emulator/Graphics/Window.h"
 #include "Emulator/Libs/Errno.h"
 #include "Emulator/Libs/Libs.h"
-#include "Emulator/VirtualMemory.h"
+#include "Emulator/Loader/VirtualMemory.h"
 
 #include <algorithm>
 

@@ -13,7 +13,7 @@ add_library(unit_test STATIC ${unit_test_src})
 target_link_libraries(unit_test core)
 target_link_libraries(unit_test math)
 
-target_include_directories(unit_test PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+#target_include_directories(unit_test PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
 list(APPEND inc_headers 
 	${PROJECT_BINARY_DIR}

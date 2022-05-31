@@ -1,7 +1,7 @@
 #include "Emulator/Common.h"
 #include "Emulator/Graphics/VideoOut.h"
 #include "Emulator/Libs/Libs.h"
-#include "Emulator/SymbolDatabase.h"
+#include "Emulator/Loader/SymbolDatabase.h"
 
 #ifdef KYTY_EMU_ENABLED
 

@@ -14,8 +14,8 @@
 #include "Emulator/Kernel/Semaphore.h"
 #include "Emulator/Libs/Errno.h"
 #include "Emulator/Libs/Libs.h"
-#include "Emulator/RuntimeLinker.h"
-#include "Emulator/SymbolDatabase.h"
+#include "Emulator/Loader/RuntimeLinker.h"
+#include "Emulator/Loader/SymbolDatabase.h"
 
 #include <cstdlib>
 

@@ -1,4 +1,4 @@
-#include "Emulator/RuntimeLinker.h"
+#include "Emulator/Loader/RuntimeLinker.h"
 
 #include "Kyty/Core/Common.h"
 #include "Kyty/Core/DbgAssert.h"
@@ -9,13 +9,13 @@
 #include "Kyty/Core/Threads.h"
 #include "Kyty/Sys/SysDbg.h"
 
-#include "Emulator/Elf.h"
 #include "Emulator/Graphics/Objects/GpuMemory.h"
-#include "Emulator/Jit.h"
 #include "Emulator/Kernel/Pthread.h"
+#include "Emulator/Loader/Elf.h"
+#include "Emulator/Loader/Jit.h"
+#include "Emulator/Loader/SymbolDatabase.h"
+#include "Emulator/Loader/VirtualMemory.h"
 #include "Emulator/Profiler.h"
-#include "Emulator/SymbolDatabase.h"
-#include "Emulator/VirtualMemory.h"
 
 #ifdef KYTY_EMU_ENABLED
 
@@ -725,9 +725,10 @@ Program* RuntimeLinker::LoadProgram(const String& elf_name)
 		Libs::LibKernel::SetProgName(elf_name.FilenameWithoutDirectory());
 	}
 
-	if (elf_name.FilenameWithoutExtension().EndsWith(U"libc") || elf_name.FilenameWithoutExtension().EndsWith(U"Fios2") ||
+	if (/*elf_name.FilenameWithoutExtension().EndsWith(U"libc") || elf_name.FilenameWithoutExtension().EndsWith(U"Fios2") ||
 	    elf_name.FilenameWithoutExtension().EndsWith(U"Fios2_debug") || elf_name.FilenameWithoutExtension().EndsWith(U"NpToolkit") ||
-	    elf_name.FilenameWithoutExtension().EndsWith(U"NpToolkit2") || elf_name.FilenameWithoutExtension().EndsWith(U"JobManager"))
+	    elf_name.FilenameWithoutExtension().EndsWith(U"NpToolkit2") || elf_name.FilenameWithoutExtension().EndsWith(U"JobManager")*/
+	    elf_name.DirectoryWithoutFilename().EndsWith(U"_module/", String::Case::Insensitive))
 	{
 		program->fail_if_global_not_resolved = false;
 	}

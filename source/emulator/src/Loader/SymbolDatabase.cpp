@@ -1,4 +1,4 @@
-#include "Emulator/SymbolDatabase.h"
+#include "Emulator/Loader/SymbolDatabase.h"
 
 #include "Kyty/Core/File.h"
 #include "Kyty/Core/MagicEnum.h"
