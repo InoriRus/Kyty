@@ -88,6 +88,7 @@ public:
 	bool HttpDeleteTemplate(Id tmpl_id);
 	bool HttpSetNonblock(Id id, bool enable);
 	bool HttpsSetSslCallback(Id id, HttpsCallback cbfunc, void* user_arg);
+	bool HttpsDisableOption(Id id, uint32_t ssl_flags);
 	bool HttpAddRequestHeader(Id id, const char* name, const char* value, bool add);
 	bool HttpValid(Id http_ctx_id);
 	bool HttpValidTemplate(Id tmpl_id);
@@ -97,6 +98,13 @@ public:
 	bool HttpDeleteConnection(Id conn_id);
 	Id   HttpCreateRequestWithURL2(Id conn_id, const char* method, const char* url, uint64_t content_length);
 	bool HttpDeleteRequest(Id req_id);
+	bool HttpSetResolveTimeOut(Id id, uint32_t usec);
+	bool HttpSetResolveRetry(Id id, int32_t retry);
+	bool HttpSetConnectTimeOut(Id id, uint32_t usec);
+	bool HttpSetSendTimeOut(Id id, uint32_t usec);
+	bool HttpSetRecvTimeOut(Id id, uint32_t usec);
+	bool HttpSetAutoRedirect(Id id, int enable);
+	bool HttpSetAuthEnabled(Id id, int enable);
 
 private:
 	struct Pool
@@ -128,31 +136,41 @@ private:
 
 	struct HttpBase
 	{
-		bool               used     = false;
-		bool               nonblock = false;
 		Vector<HttpHeader> headers;
-		HttpsCallback      ssl_cbfunc   = nullptr;
-		void*              ssl_user_arg = nullptr;
+		bool               used            = false;
+		bool               nonblock        = false;
+		bool               auto_redirect   = true;
+		bool               auth_enabled    = true;
+		HttpsCallback      ssl_cbfunc      = nullptr;
+		void*              ssl_user_arg    = nullptr;
+		uint32_t           ssl_flags       = 0xA7;
+		int                http_ctx_id     = 0;
+		uint32_t           resolve_timeout = 1'000000;
+		int32_t            resolve_retry   = 4;
+		uint32_t           connect_timeout = 30'000000;
+		uint32_t           send_timeout    = 120'000000;
+		uint32_t           recv_timeout    = 120'000000;
 	};
 
 	struct HttpTemplate: public HttpBase
 	{
-		int    http_ctx_id = 0;
 		String user_agent;
 		int    http_ver           = 0;
 		bool   is_auto_proxy_conf = true;
 	};
 
-	struct HttpConnection: public HttpBase
+	struct HttpConnection: public HttpTemplate
 	{
-		int    tmpl_id = 0;
+		explicit HttpConnection(const HttpTemplate& tmpl): HttpTemplate(tmpl) {}
+		// int    tmpl_id = 0;
 		String url;
 		bool   enable_keep_alive = false;
 	};
 
-	struct HttpRequest: public HttpBase
+	struct HttpRequest: public HttpConnection
 	{
-		int      conn_id = 0;
+		explicit HttpRequest(HttpConnection& conn): HttpConnection(conn) {}
+		// int      conn_id = 0;
 		String   method;
 		String   url;
 		uint64_t content_length = 0;
@@ -358,11 +376,11 @@ Network::Id Network::HttpCreateConnectionWithURL(Id tmpl_id, const char* url, bo
 
 	if (HttpValidTemplate(tmpl_id))
 	{
-		HttpConnection cn {};
+		HttpConnection cn(m_templates[tmpl_id.GetId()]);
 		cn.used              = true;
 		cn.enable_keep_alive = enable_keep_alive;
 		cn.url               = String::FromUtf8(url);
-		cn.tmpl_id           = tmpl_id.ToInt();
+		// cn.tmpl_id           = tmpl_id.ToInt();
 
 		int index = 0;
 		for (auto& t: m_connections)
@@ -405,11 +423,11 @@ Network::Id Network::HttpCreateRequestWithURL2(Id conn_id, const char* method, c
 
 	if (HttpValidConnection(conn_id))
 	{
-		HttpRequest cn {};
-		cn.used           = true;
-		cn.method         = String::FromUtf8(method);
-		cn.url            = String::FromUtf8(url);
-		cn.conn_id        = conn_id.ToInt();
+		HttpRequest cn(m_connections[conn_id.GetId()]);
+		cn.used   = true;
+		cn.method = String::FromUtf8(method);
+		cn.url    = String::FromUtf8(url);
+		// cn.conn_id        = conn_id.ToInt();
 		cn.content_length = content_length;
 
 		int index = 0;
@@ -514,6 +532,32 @@ bool Network::HttpsSetSslCallback(Id id, HttpsCallback cbfunc, void* user_arg)
 	return false;
 }
 
+bool Network::HttpsDisableOption(Id id, uint32_t ssl_flags)
+{
+	Core::LockGuard lock(m_mutex);
+
+	HttpBase* base = nullptr;
+
+	if (HttpValidTemplate(id))
+	{
+		base = &m_templates[id.GetId()];
+	} else if (HttpValidConnection(id))
+	{
+		base = &m_connections[id.GetId()];
+	} else if (HttpValidRequest(id))
+	{
+		base = &m_requests[id.GetId()];
+	}
+
+	if (base != nullptr)
+	{
+		base->ssl_flags &= ~ssl_flags;
+		return true;
+	}
+
+	return false;
+}
+
 bool Network::HttpAddRequestHeader(Id id, const char* name, const char* value, bool add)
 {
 	Core::LockGuard lock(m_mutex);
@@ -547,6 +591,182 @@ bool Network::HttpAddRequestHeader(Id id, const char* name, const char* value, b
 				}
 			}
 		}
+		return true;
+	}
+
+	return false;
+}
+
+bool Network::HttpSetResolveTimeOut(Id id, uint32_t usec)
+{
+	Core::LockGuard lock(m_mutex);
+
+	HttpBase* base = nullptr;
+
+	if (HttpValidTemplate(id))
+	{
+		base = &m_templates[id.GetId()];
+	} else if (HttpValidConnection(id))
+	{
+		base = &m_connections[id.GetId()];
+	}
+
+	if (base != nullptr)
+	{
+		base->resolve_timeout = usec;
+		return true;
+	}
+
+	return false;
+}
+
+bool Network::HttpSetResolveRetry(Id id, int32_t retry)
+{
+	Core::LockGuard lock(m_mutex);
+
+	HttpBase* base = nullptr;
+
+	if (HttpValidTemplate(id))
+	{
+		base = &m_templates[id.GetId()];
+	} else if (HttpValidConnection(id))
+	{
+		base = &m_connections[id.GetId()];
+	}
+
+	if (base != nullptr)
+	{
+		base->resolve_retry = retry;
+		return true;
+	}
+
+	return false;
+}
+
+bool Network::HttpSetConnectTimeOut(Id id, uint32_t usec)
+{
+	Core::LockGuard lock(m_mutex);
+
+	HttpBase* base = nullptr;
+
+	if (HttpValidTemplate(id))
+	{
+		base = &m_templates[id.GetId()];
+	} else if (HttpValidConnection(id))
+	{
+		base = &m_connections[id.GetId()];
+	} else if (HttpValidRequest(id))
+	{
+		base = &m_requests[id.GetId()];
+	}
+
+	if (base != nullptr)
+	{
+		base->connect_timeout = usec;
+		return true;
+	}
+
+	return false;
+}
+
+bool Network::HttpSetSendTimeOut(Id id, uint32_t usec)
+{
+	Core::LockGuard lock(m_mutex);
+
+	HttpBase* base = nullptr;
+
+	if (HttpValidTemplate(id))
+	{
+		base = &m_templates[id.GetId()];
+	} else if (HttpValidConnection(id))
+	{
+		base = &m_connections[id.GetId()];
+	} else if (HttpValidRequest(id))
+	{
+		base = &m_requests[id.GetId()];
+	}
+
+	if (base != nullptr)
+	{
+		base->send_timeout = usec;
+		return true;
+	}
+
+	return false;
+}
+
+bool Network::HttpSetRecvTimeOut(Id id, uint32_t usec)
+{
+	Core::LockGuard lock(m_mutex);
+
+	HttpBase* base = nullptr;
+
+	if (HttpValidTemplate(id))
+	{
+		base = &m_templates[id.GetId()];
+	} else if (HttpValidConnection(id))
+	{
+		base = &m_connections[id.GetId()];
+	} else if (HttpValidRequest(id))
+	{
+		base = &m_requests[id.GetId()];
+	}
+
+	if (base != nullptr)
+	{
+		base->recv_timeout = usec;
+		return true;
+	}
+
+	return false;
+}
+
+bool Network::HttpSetAutoRedirect(Id id, int enable)
+{
+	Core::LockGuard lock(m_mutex);
+
+	HttpBase* base = nullptr;
+
+	if (HttpValidTemplate(id))
+	{
+		base = &m_templates[id.GetId()];
+	} else if (HttpValidConnection(id))
+	{
+		base = &m_connections[id.GetId()];
+	} else if (HttpValidRequest(id))
+	{
+		base = &m_requests[id.GetId()];
+	}
+
+	if (base != nullptr)
+	{
+		base->auto_redirect = (enable != 0);
+		return true;
+	}
+
+	return false;
+}
+
+bool Network::HttpSetAuthEnabled(Id id, int enable)
+{
+	Core::LockGuard lock(m_mutex);
+
+	HttpBase* base = nullptr;
+
+	if (HttpValidTemplate(id))
+	{
+		base = &m_templates[id.GetId()];
+	} else if (HttpValidConnection(id))
+	{
+		base = &m_connections[id.GetId()];
+	} else if (HttpValidRequest(id))
+	{
+		base = &m_requests[id.GetId()];
+	}
+
+	if (base != nullptr)
+	{
+		base->auth_enabled = (enable != 0);
 		return true;
 	}
 
@@ -803,6 +1023,126 @@ int KYTY_SYSV_ABI HttpsSetSslCallback(int id, HttpsCallback cbfunc, void* user_a
 	printf("\t id     = %d\n", id);
 
 	if (!g_net->HttpsSetSslCallback(Network::Id(id), cbfunc, user_arg))
+	{
+		return HTTP_ERROR_INVALID_ID;
+	}
+
+	return OK;
+}
+
+int KYTY_SYSV_ABI HttpsDisableOption(int id, uint32_t ssl_flags)
+{
+	PRINT_NAME();
+
+	printf("\t id        = %d\n", id);
+	printf("\t ssl_flags = %u\n", ssl_flags);
+
+	if (!g_net->HttpsDisableOption(Network::Id(id), ssl_flags))
+	{
+		return HTTP_ERROR_INVALID_ID;
+	}
+
+	return OK;
+}
+
+int KYTY_SYSV_ABI HttpSetResolveTimeOut(int id, uint32_t usec)
+{
+	PRINT_NAME();
+
+	printf("\t id   = %d\n", id);
+	printf("\t usec = %u\n", usec);
+
+	if (!g_net->HttpSetResolveTimeOut(Network::Id(id), usec))
+	{
+		return HTTP_ERROR_INVALID_ID;
+	}
+
+	return OK;
+}
+
+int KYTY_SYSV_ABI HttpSetResolveRetry(int id, int32_t retry)
+{
+	PRINT_NAME();
+
+	printf("\t id    = %d\n", id);
+	printf("\t retry = %d\n", retry);
+
+	if (!g_net->HttpSetResolveRetry(Network::Id(id), retry))
+	{
+		return HTTP_ERROR_INVALID_ID;
+	}
+
+	return OK;
+}
+
+int KYTY_SYSV_ABI HttpSetConnectTimeOut(int id, uint32_t usec)
+{
+	PRINT_NAME();
+
+	printf("\t id   = %d\n", id);
+	printf("\t usec = %u\n", usec);
+
+	if (!g_net->HttpSetConnectTimeOut(Network::Id(id), usec))
+	{
+		return HTTP_ERROR_INVALID_ID;
+	}
+
+	return OK;
+}
+
+int KYTY_SYSV_ABI HttpSetSendTimeOut(int id, uint32_t usec)
+{
+	PRINT_NAME();
+
+	printf("\t id   = %d\n", id);
+	printf("\t usec = %u\n", usec);
+
+	if (!g_net->HttpSetSendTimeOut(Network::Id(id), usec))
+	{
+		return HTTP_ERROR_INVALID_ID;
+	}
+
+	return OK;
+}
+
+int KYTY_SYSV_ABI HttpSetRecvTimeOut(int id, uint32_t usec)
+{
+	PRINT_NAME();
+
+	printf("\t id   = %d\n", id);
+	printf("\t usec = %u\n", usec);
+
+	if (!g_net->HttpSetRecvTimeOut(Network::Id(id), usec))
+	{
+		return HTTP_ERROR_INVALID_ID;
+	}
+
+	return OK;
+}
+
+int KYTY_SYSV_ABI HttpSetAutoRedirect(int id, int enable)
+{
+	PRINT_NAME();
+
+	printf("\t id     = %d\n", id);
+	printf("\t enable = %d\n", enable);
+
+	if (!g_net->HttpSetAutoRedirect(Network::Id(id), enable))
+	{
+		return HTTP_ERROR_INVALID_ID;
+	}
+
+	return OK;
+}
+
+int KYTY_SYSV_ABI HttpSetAuthEnabled(int id, int enable)
+{
+	PRINT_NAME();
+
+	printf("\t id     = %d\n", id);
+	printf("\t enable = %d\n", enable);
+
+	if (!g_net->HttpSetAuthEnabled(Network::Id(id), enable))
 	{
 		return HTTP_ERROR_INVALID_ID;
 	}
@@ -1212,6 +1552,13 @@ void KYTY_SYSV_ABI NpRegisterGamePresenceCallback(void* /*callback*/, void* /*us
 }
 
 int KYTY_SYSV_ABI NpRegisterPlusEventCallback(void* /*callback*/, void* /*userdata*/)
+{
+	PRINT_NAME();
+
+	return OK;
+}
+
+int KYTY_SYSV_ABI NpRegisterNpReachabilityStateCallback(void* /*callback*/, void* /*userdata*/)
 {
 	PRINT_NAME();
 

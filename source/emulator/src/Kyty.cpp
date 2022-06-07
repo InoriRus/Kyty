@@ -20,8 +20,8 @@
 #include "Emulator/Kernel/Memory.h"
 #include "Emulator/Kernel/Pthread.h"
 #include "Emulator/Libs/Libs.h"
-#include "Emulator/Loader/Param.h"
 #include "Emulator/Loader/RuntimeLinker.h"
+#include "Emulator/Loader/SystemContent.h"
 #include "Emulator/Loader/Timer.h"
 #include "Emulator/Loader/VirtualMemory.h"
 #include "Emulator/Network.h"
@@ -225,7 +225,7 @@ KYTY_SCRIPT_FUNC(kyty_load_param_sfo_func)
 
 	if (!file_name.IsEmpty())
 	{
-		Loader::ParamSfoLoad(Scripts::ArgGetVar(0).ToString());
+		Loader::SystemContentLoadParamSfo(Scripts::ArgGetVar(0).ToString());
 	}
 
 	return 0;

@@ -7,8 +7,11 @@
 #include "Kyty/Core/Threads.h"
 
 #include "Emulator/Kernel/Pthread.h"
+#include "Emulator/Kernel/Semaphore.h"
 #include "Emulator/Libs/Errno.h"
 #include "Emulator/Libs/Libs.h"
+
+#include <atomic>
 
 #ifdef KYTY_EMU_ENABLED
 
@@ -69,6 +72,7 @@ public:
 	bool     AudioOutValid(Id handle);
 	bool     AudioOutSetVolume(Id handle, uint32_t bitflag, const int* volume);
 	uint32_t AudioOutOutputs(OutputParam* params, uint32_t num);
+	bool     AudioOutGetStatus(Id handle, int* type, int* channels_num);
 
 	Id       AudioInOpen(uint32_t type, uint32_t samples_num, uint32_t freq, Format format);
 	bool     AudioInValid(Id handle);
@@ -178,6 +182,23 @@ bool Audio::AudioOutValid(Id handle)
 	Core::LockGuard lock(m_mutex);
 
 	return (handle.GetId() >= 0 && handle.GetId() < OUT_PORTS_MAX && m_out_ports[handle.GetId()].used);
+}
+
+bool Audio::AudioOutGetStatus(Id handle, int* type, int* channels_num)
+{
+	Core::LockGuard lock(m_mutex);
+
+	if (AudioOutValid(handle))
+	{
+		auto& port = m_out_ports[handle.GetId()];
+
+		*type         = port.type;
+		*channels_num = port.channels_num;
+
+		return true;
+	}
+
+	return false;
 }
 
 bool Audio::AudioOutSetVolume(Id handle, uint32_t bitflag, const int* volume)
@@ -316,6 +337,17 @@ struct AudioOutOutputParam
 	const void* ptr;
 };
 
+struct AudioOutPortState
+{
+	uint16_t output;
+	uint8_t  channel;
+	uint8_t  reserved1[1];
+	int16_t  volume;
+	uint16_t reroute_counter;
+	uint64_t flag;
+	uint64_t reserved2[2];
+};
+
 int KYTY_SYSV_ABI AudioOutInit()
 {
 	PRINT_NAME();
@@ -334,7 +366,7 @@ int KYTY_SYSV_ABI AudioOutOpen(int user_id, int type, int index, uint32_t len, u
 	printf("\t freq    = %u\n", freq);
 
 	EXIT_NOT_IMPLEMENTED(user_id != 255 && user_id != 1);
-	EXIT_NOT_IMPLEMENTED(type != 0 && type != 3 && type != 4);
+	EXIT_NOT_IMPLEMENTED(type != 0 && type != 1 && type != 3 && type != 4);
 	EXIT_NOT_IMPLEMENTED(index != 0);
 
 	Audio::Format format = Audio::Format::Unknown;
@@ -376,6 +408,49 @@ int KYTY_SYSV_ABI AudioOutClose(int handle)
 	{
 		return AUDIO_OUT_ERROR_INVALID_PORT;
 	}
+
+	return OK;
+}
+
+int KYTY_SYSV_ABI AudioOutGetPortState(int handle, AudioOutPortState* state)
+{
+	PRINT_NAME();
+
+	int type         = 0;
+	int channels_num = 0;
+
+	if (!g_audio->AudioOutGetStatus(Audio::Id(handle), &type, &channels_num))
+	{
+		return AUDIO_OUT_ERROR_INVALID_PORT;
+	}
+
+	EXIT_NOT_IMPLEMENTED(state == nullptr);
+
+	state->reroute_counter = 0;
+	state->volume          = 127;
+
+	switch (type)
+	{
+		case 0:
+		case 1:
+		case 2:
+			state->output  = 1;
+			state->channel = (channels_num > 2 ? 2 : channels_num);
+			break;
+		case 3:
+		case 127:
+			state->output  = 0;
+			state->channel = 0;
+			break;
+		case 4:
+			state->output  = 4;
+			state->channel = 1;
+			break;
+		default: EXIT("unknown port type: %d\n", type);
+	}
+
+	printf("\t output  = %" PRIu16 "\n", state->output);
+	printf("\t channel = %" PRIu8 "\n", state->channel);
 
 	return OK;
 }
@@ -967,6 +1042,980 @@ int KYTY_SYSV_ABI AvPlayerClose(AvPlayerInternal* h)
 }
 
 } // namespace AvPlayer
+
+namespace Audio3d {
+
+LIB_NAME("Audio3d", "Audio3d");
+
+namespace Semaphore = LibKernel::Semaphore;
+
+struct Audio3dOpenParameters
+{
+	size_t   size        = 0x20;
+	uint32_t granularity = 256;
+	uint32_t rate        = 0;
+	uint32_t max_objects = 512;
+	uint32_t queue_depth = 2;
+	uint32_t buffer_mode = 2;
+	uint32_t pad         = 0;
+	// uint32_t num_beds;
+};
+
+struct Audio3dData
+{
+	enum class State
+	{
+		Empty,
+		Ready,
+		Play
+	};
+
+	std::atomic<State> state = State::Empty;
+};
+
+struct Audio3dInternal
+{
+	Audio3dData*          data                        = nullptr;
+	Core::Mutex*          data_mutex                  = nullptr;
+	uint64_t              data_delay                  = 0;
+	Semaphore::KernelSema playback_sema               = nullptr;
+	Audio3dOpenParameters params                      = {};
+	int                   user_id                     = 0;
+	float                 late_reverb_level           = 0.0f;
+	float                 downmix_spread_radius       = 2.0f;
+	int                   downmix_spread_height_aware = 0;
+	uint32_t              data_index                  = 0;
+	bool                  used                        = false;
+	std::atomic_bool      playback_finished           = false;
+};
+
+constexpr uint32_t MAX_PORTS = 4;
+
+static Audio3dInternal g_ports[MAX_PORTS] = {};
+
+static void playback_simulate(void* arg)
+{
+	auto* port = static_cast<Audio3dInternal*>(arg);
+	EXIT_IF(port == nullptr);
+	EXIT_IF(port->data_mutex == nullptr);
+	EXIT_IF(port->data == nullptr);
+
+	for (;;)
+	{
+		int result = Semaphore::KernelWaitSema(port->playback_sema, 1, nullptr);
+
+		if (result != OK)
+		{
+			break;
+		}
+
+		Audio3dData* play_data = nullptr;
+
+		port->data_mutex->Lock();
+		{
+			for (uint32_t i = 0; i < port->params.queue_depth; i++)
+			{
+				uint32_t index = (port->data_index + i) % port->params.queue_depth;
+
+				if (port->data[index].state == Audio3dData::State::Play)
+				{
+					play_data = &port->data[index];
+					break;
+				}
+			}
+		}
+		port->data_mutex->Unlock();
+
+		EXIT_IF(play_data == nullptr);
+
+		// TODO(): Audio output is not yet implemented, so simulate audio delay
+		Core::Thread::SleepMicro(port->data_delay);
+		play_data->state = Audio3dData::State::Empty;
+	}
+
+	port->playback_finished = true;
+}
+
+int KYTY_SYSV_ABI Audio3dInitialize(int64_t reserved)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(reserved != 0);
+
+	return OK;
+}
+
+void KYTY_SYSV_ABI Audio3dGetDefaultOpenParameters(Audio3dOpenParameters* p)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(sizeof(Audio3dOpenParameters) != 0x20);
+
+	*p = Audio3dOpenParameters();
+}
+
+int KYTY_SYSV_ABI Audio3dPortOpen(int user_id, const Audio3dOpenParameters* parameters, uint32_t* id)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(parameters == nullptr);
+	EXIT_NOT_IMPLEMENTED(id == nullptr);
+	EXIT_NOT_IMPLEMENTED(parameters->size != 0x20);
+
+	printf("\t user_id     = %d\n", user_id);
+	printf("\t granularity = %u\n", parameters->granularity);
+	printf("\t rate        = %u\n", parameters->rate);
+	printf("\t max_objects = %u\n", parameters->max_objects);
+	printf("\t queue_depth = %u\n", parameters->queue_depth);
+	printf("\t buffer_mode = %u\n", parameters->buffer_mode);
+
+	EXIT_NOT_IMPLEMENTED(parameters->buffer_mode != 2);
+	EXIT_NOT_IMPLEMENTED(user_id != 255 && user_id != 1);
+
+	uint32_t port = 0;
+	for (; port < MAX_PORTS; port++)
+	{
+		if (!g_ports[port].used)
+		{
+			break;
+		}
+	}
+
+	EXIT_NOT_IMPLEMENTED(port >= MAX_PORTS);
+
+	g_ports[port].user_id = user_id;
+	g_ports[port].params  = *parameters;
+	g_ports[port].used    = true;
+
+	EXIT_IF(g_ports[port].data != nullptr);
+	EXIT_IF(g_ports[port].data_mutex != nullptr);
+	EXIT_IF(g_ports[port].playback_sema != nullptr);
+
+	g_ports[port].data       = new Audio3dData[parameters->queue_depth];
+	g_ports[port].data_index = 0;
+	g_ports[port].data_mutex = new Core::Mutex;
+	g_ports[port].data_delay = (1000000 * static_cast<uint64_t>(parameters->granularity)) / 48000;
+
+	for (uint32_t d = 0; d < parameters->queue_depth; d++)
+	{
+		g_ports[port].data[d].state = Audio3dData::State::Empty;
+	}
+
+	int result = Semaphore::KernelCreateSema(&g_ports[port].playback_sema, "audio3d_play", 0x01, 0,
+	                                         static_cast<int>(parameters->queue_depth), nullptr);
+	EXIT_NOT_IMPLEMENTED(result != OK);
+
+	g_ports[port].playback_finished = false;
+	Core::Thread playback_thread(playback_simulate, &g_ports[port]);
+	playback_thread.Detach();
+
+	*id = port;
+
+	return OK;
+}
+
+int KYTY_SYSV_ABI Audio3dPortSetAttribute(uint32_t port_id, uint32_t attribute_id, const void* attribute, size_t attribute_size)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(port_id >= MAX_PORTS);
+	EXIT_NOT_IMPLEMENTED(!g_ports[port_id].used);
+	EXIT_NOT_IMPLEMENTED(attribute == nullptr);
+
+	printf("\t attribute_id = 0x%" PRIx32 "\n", attribute_id);
+
+	switch (attribute_id)
+	{
+		case 0x10001:
+			EXIT_NOT_IMPLEMENTED(attribute_size != 4);
+			g_ports[port_id].late_reverb_level = *static_cast<const float*>(attribute);
+			printf("\t late_reverb_level = %f\n", g_ports[port_id].late_reverb_level);
+			break;
+		case 0x10002:
+			EXIT_NOT_IMPLEMENTED(attribute_size != 4);
+			g_ports[port_id].downmix_spread_radius = *static_cast<const float*>(attribute);
+			printf("\t downmix_spread_radius = %f\n", g_ports[port_id].downmix_spread_radius);
+			break;
+		case 0x10003:
+			EXIT_NOT_IMPLEMENTED(attribute_size != 4);
+			g_ports[port_id].downmix_spread_height_aware = *static_cast<const int*>(attribute);
+			printf("\t downmix_spread_height_aware = %d\n", g_ports[port_id].downmix_spread_height_aware);
+			break;
+		default: EXIT("unknown attribute: 0x%" PRIx32 "\n", attribute_id);
+	}
+
+	return OK;
+}
+
+int KYTY_SYSV_ABI Audio3dPortGetQueueLevel(uint32_t port_id, uint32_t* queue_level, uint32_t* queue_available)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(port_id >= MAX_PORTS);
+	EXIT_NOT_IMPLEMENTED(!g_ports[port_id].used);
+	EXIT_NOT_IMPLEMENTED(queue_level == nullptr && queue_available == nullptr);
+
+	auto* port = &g_ports[port_id];
+
+	uint32_t empty_num = 0;
+
+	port->data_mutex->Lock();
+	{
+		for (uint32_t i = 0; i < port->params.queue_depth; i++)
+		{
+			uint32_t index = (port->data_index + i) % port->params.queue_depth;
+
+			if (port->data[index].state == Audio3dData::State::Empty)
+			{
+				empty_num++;
+			} else
+			{
+				break;
+			}
+		}
+	}
+	port->data_mutex->Unlock();
+
+	EXIT_IF(empty_num > port->params.queue_depth);
+
+	printf("\t queue_available = %u\n", empty_num);
+
+	if (queue_level != nullptr)
+	{
+		*queue_level = port->params.queue_depth - empty_num;
+	}
+	if (queue_available != nullptr)
+	{
+		*queue_available = empty_num;
+	}
+
+	return OK;
+}
+
+int KYTY_SYSV_ABI Audio3dPortAdvance(uint32_t port_id)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(port_id >= MAX_PORTS);
+	EXIT_NOT_IMPLEMENTED(!g_ports[port_id].used);
+
+	auto* port = &g_ports[port_id];
+
+	port->data_mutex->Lock();
+	{
+		uint32_t current_index = port->data_index;
+		uint32_t next_index    = (current_index + 1) % port->params.queue_depth;
+
+		if (port->data[current_index].state == Audio3dData::State::Empty)
+		{
+			port->data[current_index].state = Audio3dData::State::Ready;
+		}
+
+		EXIT_NOT_IMPLEMENTED(port->data[current_index].state != Audio3dData::State::Ready);
+
+		port->data_index = next_index;
+
+		printf("\t %u -> %u\n", current_index, next_index);
+	}
+	port->data_mutex->Unlock();
+
+	return OK;
+}
+
+int KYTY_SYSV_ABI Audio3dPortPush(uint32_t port_id, uint32_t blocking)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(port_id >= MAX_PORTS);
+	EXIT_NOT_IMPLEMENTED(!g_ports[port_id].used);
+
+	auto* port = &g_ports[port_id];
+
+	EXIT_NOT_IMPLEMENTED(blocking != 1);
+
+	printf("\t blocking = %u\n", blocking);
+
+	int          data_num   = 0;
+	Audio3dData* first_data = nullptr;
+
+	port->data_mutex->Lock();
+	{
+		first_data = port->data + port->data_index;
+
+		for (uint32_t i = 0; i < port->params.queue_depth; i++)
+		{
+			uint32_t index = (port->data_index + i) % port->params.queue_depth;
+
+			if (port->data[index].state == Audio3dData::State::Ready)
+			{
+				port->data[index].state = Audio3dData::State::Play;
+				data_num++;
+			}
+		}
+	}
+	port->data_mutex->Unlock();
+
+	printf("\t push num = %d\n", data_num);
+
+	if (data_num > 0)
+	{
+		Semaphore::KernelSignalSema(port->playback_sema, data_num);
+
+		if (blocking == 1)
+		{
+			auto wait_time = port->data_delay / 8;
+			while (first_data->state != Audio3dData::State::Empty)
+			{
+				Core::Thread::SleepMicro(wait_time);
+			}
+		}
+	}
+
+	return OK;
+}
+
+} // namespace Audio3d
+
+namespace Ngs2 {
+
+LIB_NAME("Ngs2", "Ngs2");
+
+struct Ngs2SystemOption
+{
+	size_t   size              = 0;
+	char     name[16]          = {};
+	uint32_t flags             = 0;
+	uint32_t max_grain_samples = 0;
+	uint32_t num_grain_samples = 0;
+	uint32_t sample_rate       = 0;
+	uint32_t reserved[6]       = {};
+};
+
+struct Ngs2RackOption
+{
+	size_t   size                   = 0;
+	char     name[16]               = {};
+	uint32_t flags                  = 0;
+	uint32_t max_grain_samples      = 0;
+	uint32_t max_voices             = 0;
+	uint32_t max_input_delay_blocks = 0;
+	uint32_t max_matrices           = 0;
+	uint32_t max_ports              = 0;
+	uint32_t reserved[20]           = {};
+};
+
+struct Ngs2MasteringRackOption
+{
+	Ngs2RackOption rack_option;
+	uint32_t       max_channels          = 0;
+	uint32_t       num_peak_meter_blocks = 0;
+};
+
+struct Ngs2SubmixerRackOption
+{
+	Ngs2RackOption rack_option;
+	uint32_t       max_channels          = 0;
+	uint32_t       max_envelope_points   = 0;
+	uint32_t       max_filters           = 0;
+	uint32_t       max_inputs            = 0;
+	uint32_t       num_peak_meter_blocks = 0;
+};
+
+struct Ngs2SamplerRackOption
+{
+	Ngs2RackOption rack_option;
+	uint32_t       max_channel_works        = 0;
+	uint32_t       max_codec_caches         = 0;
+	uint32_t       max_waveform_blocks      = 0;
+	uint32_t       max_envelope_points      = 0;
+	uint32_t       max_filters              = 0;
+	uint32_t       max_atrac9_decoders      = 0;
+	uint32_t       max_atrac9_channel_works = 0;
+	uint32_t       max_ajm_atrac9_decoders  = 0;
+	uint32_t       num_peak_meter_blocks    = 0;
+};
+
+struct Ngs2ReverbRackOption
+{
+	Ngs2RackOption rack_option;
+	uint32_t       max_channels = 0;
+	uint32_t       reverb_size  = 0;
+};
+
+struct Ngs2CustomModuleOption
+{
+	uint32_t size = 0;
+};
+
+struct Ngs2CustomRackModuleInfo
+{
+	const Ngs2CustomModuleOption* option           = nullptr;
+	uint32_t                      module_id        = 0;
+	uint32_t                      source_buffer_id = 0;
+	uint32_t                      extra_buffer_id  = 0;
+	uint32_t                      dest_buffer_id   = 0;
+	uint32_t                      state_offset     = 0;
+	uint32_t                      state_size       = 0;
+	uint32_t                      reserved         = 0;
+	uint32_t                      reserved2        = 0;
+};
+
+struct Ngs2CustomRackPortInfo
+{
+	uint32_t source_buffer_id = 0;
+	uint32_t reserved         = 0;
+};
+
+struct Ngs2CustomRackOption
+{
+	Ngs2RackOption           rack_option;
+	uint32_t                 state_size  = 0;
+	uint32_t                 num_buffers = 0;
+	uint32_t                 num_modules = 0;
+	uint32_t                 reserved    = 0;
+	Ngs2CustomRackModuleInfo module[24];
+	Ngs2CustomRackPortInfo   port[16];
+};
+
+struct Ngs2CustomSubmixerRackOption
+{
+	Ngs2CustomRackOption custom_rack_option;
+	uint32_t             max_channels = 0;
+	uint32_t             max_inputs   = 0;
+};
+
+union Ngs2RackOptionUnion
+{
+	Ngs2RackOption               common;
+	Ngs2SamplerRackOption        sampler;
+	Ngs2MasteringRackOption      mastering;
+	Ngs2SubmixerRackOption       submixer;
+	Ngs2ReverbRackOption         reverb;
+	Ngs2CustomSubmixerRackOption custom_submixer;
+};
+
+struct Ngs2ContextBufferInfo
+{
+	void*     host_buffer      = nullptr;
+	size_t    host_buffer_size = 0;
+	uintptr_t reserved[5]      = {};
+	uintptr_t user_data        = 0;
+};
+
+using Ngs2BufferAllocHandler = int32_t KYTY_SYSV_ABI (*)(Ngs2ContextBufferInfo*);
+using Ngs2BufferFreeHandler  = int32_t  KYTY_SYSV_ABI (*)(Ngs2ContextBufferInfo*);
+
+struct Ngs2BufferAllocator
+{
+	Ngs2BufferAllocHandler alloc_handler = nullptr;
+	Ngs2BufferFreeHandler  free_handler  = nullptr;
+	uintptr_t              user_data     = 0;
+};
+
+struct Ngs2Internal
+{
+	Ngs2SystemOption    option;
+	Ngs2BufferAllocator allocator;
+	Ngs2Internal*       next = nullptr;
+	Core::Mutex         mutex;
+};
+
+enum class Ngs2RackType
+{
+	Sampler,
+	Submixer,
+	Mastering,
+	Reverb,
+	CustomSubmixer,
+};
+
+struct Ngs2RackInternal
+{
+	Ngs2Internal*       ngs  = nullptr;
+	Ngs2RackInternal*   next = nullptr;
+	Ngs2RackType        type = Ngs2RackType::Sampler;
+	Ngs2RackOptionUnion option;
+	Ngs2BufferAllocator allocator;
+};
+
+enum class Ngs2VoicePlayState
+{
+	Empty,
+	Playing,
+	Paused,
+	Stopped
+};
+
+enum class Ngs2VoicePlayEvent
+{
+	None,
+	Play,
+	Pause,
+	Resume,
+	Stop,
+	StopImm,
+	Kill
+};
+
+struct Ngs2VoiceInternal
+{
+	Ngs2VoicePlayEvent event = Ngs2VoicePlayEvent::None;
+	Ngs2VoicePlayState state = Ngs2VoicePlayState::Empty;
+	Ngs2RackInternal*  rack  = nullptr;
+};
+
+struct Ngs2VoiceParamHeader
+{
+	uint16_t size;
+	int16_t  next;
+	uint32_t id;
+};
+
+struct Ngs2VoiceEventParam
+{
+	Ngs2VoiceParamHeader header;
+	uint32_t             event_id;
+};
+
+struct Ngs2VoicePatchParam
+{
+	Ngs2VoiceParamHeader header;
+	uint32_t             port;
+	uint32_t             dest_input_id;
+	uintptr_t            dest_handle;
+};
+
+struct Ngs2VoicePortMatrixParam
+{
+	Ngs2VoiceParamHeader header;
+	uint32_t             port;
+	int32_t              matrix_id;
+};
+
+struct Ngs2VoiceState
+{
+	uint32_t state_flags;
+};
+
+struct Ngs2SamplerVoiceState
+{
+	Ngs2VoiceState voice_state;
+	float          envelope_height;
+	float          peak_height;
+	uint32_t       reserved;
+	uint64_t       num_decoded_samples;
+	uint64_t       decoded_data_size;
+	uint64_t       user_data;
+	const void*    waveform_data;
+};
+
+static Ngs2Internal*     g_ngs_list   = nullptr;
+static Ngs2RackInternal* g_racks_list = nullptr;
+
+int KYTY_SYSV_ABI Ngs2RackQueryBufferSize(uint32_t rack_id, const Ngs2RackOption* option, Ngs2ContextBufferInfo* buffer_info)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(option == nullptr);
+	EXIT_NOT_IMPLEMENTED(buffer_info == nullptr);
+
+	printf("\t rack_id    = 0x%" PRIx32 "\n", rack_id);
+	printf("\t max_voices = %u\n", option->max_voices);
+
+	buffer_info->host_buffer_size = sizeof(Ngs2RackInternal) + sizeof(Ngs2VoiceInternal) * option->max_voices;
+
+	return OK;
+}
+
+int KYTY_SYSV_ABI Ngs2SystemCreateWithAllocator(const Ngs2SystemOption* option, const Ngs2BufferAllocator* allocator, uintptr_t* handle)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(option == nullptr);
+	EXIT_NOT_IMPLEMENTED(allocator == nullptr);
+	EXIT_NOT_IMPLEMENTED(handle == nullptr);
+	EXIT_NOT_IMPLEMENTED(allocator->alloc_handler == nullptr);
+	EXIT_NOT_IMPLEMENTED(allocator->free_handler == nullptr);
+
+	EXIT_NOT_IMPLEMENTED(option->size != sizeof(Ngs2SystemOption));
+
+	printf("\t name              = %.16s\n", option->name);
+	printf("\t flags             = %u\n", option->flags);
+	printf("\t max_grain_samples = %u\n", option->max_grain_samples);
+	printf("\t num_grain_samples = %u\n", option->num_grain_samples);
+	printf("\t sample_rate       = %u\n", option->sample_rate);
+	printf("\t alloc_handler     = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(allocator->alloc_handler));
+	printf("\t free_handler      = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(allocator->free_handler));
+	printf("\t user_data         = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(allocator->user_data));
+
+	Ngs2ContextBufferInfo buf {};
+	buf.host_buffer      = nullptr;
+	buf.host_buffer_size = sizeof(Ngs2Internal);
+	buf.user_data        = allocator->user_data;
+
+	int result = allocator->alloc_handler(&buf);
+
+	EXIT_NOT_IMPLEMENTED(result != OK);
+	EXIT_NOT_IMPLEMENTED(buf.host_buffer == nullptr);
+
+	auto* ngs = new (buf.host_buffer) Ngs2Internal;
+
+	ngs->option    = *option;
+	ngs->allocator = *allocator;
+
+	ngs->next  = g_ngs_list;
+	g_ngs_list = ngs;
+
+	*handle = reinterpret_cast<uintptr_t>(ngs);
+
+	return OK;
+}
+
+int KYTY_SYSV_ABI Ngs2RackCreate(uintptr_t system_handle, uint32_t rack_id, const Ngs2RackOption* option,
+                                 const Ngs2ContextBufferInfo* buffer_info, uintptr_t* handle)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(option == nullptr);
+	EXIT_NOT_IMPLEMENTED(buffer_info == nullptr);
+	EXIT_NOT_IMPLEMENTED(handle == nullptr);
+	EXIT_NOT_IMPLEMENTED(buffer_info->host_buffer == nullptr);
+	EXIT_NOT_IMPLEMENTED(buffer_info->host_buffer_size == 0);
+	EXIT_NOT_IMPLEMENTED(system_handle == 0);
+
+	EXIT_NOT_IMPLEMENTED(option->size < sizeof(Ngs2RackOption));
+
+	printf("\t rack_id                = 0x%" PRIx32 "\n", rack_id);
+	printf("\t name                   = %.16s\n", option->name);
+	printf("\t flags                  = %u\n", option->flags);
+	printf("\t max_grain_samples      = %u\n", option->max_grain_samples);
+	printf("\t max_voices             = %u\n", option->max_voices);
+	printf("\t max_input_delay_blocks = %u\n", option->max_input_delay_blocks);
+	printf("\t max_matrices           = %u\n", option->max_matrices);
+	printf("\t max_ports              = %u\n", option->max_ports);
+	printf("\t host_buffer            = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(buffer_info->host_buffer));
+	printf("\t host_buffer_size      = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(buffer_info->host_buffer_size));
+
+	auto* ngs    = reinterpret_cast<Ngs2Internal*>(system_handle);
+	auto* rack   = static_cast<Ngs2RackInternal*>(buffer_info->host_buffer);
+	auto* voices = reinterpret_cast<Ngs2VoiceInternal*>(rack + 1);
+
+	Core::LockGuard lock(ngs->mutex);
+
+	switch (rack_id)
+	{
+		case 0x1000:
+			EXIT_NOT_IMPLEMENTED(option->size != sizeof(Ngs2SamplerRackOption));
+			rack->option.sampler = *reinterpret_cast<const Ngs2SamplerRackOption*>(option);
+			rack->type           = Ngs2RackType::Sampler;
+			break;
+		case 0x2000:
+			EXIT_NOT_IMPLEMENTED(option->size != sizeof(Ngs2SubmixerRackOption));
+			rack->option.submixer = *reinterpret_cast<const Ngs2SubmixerRackOption*>(option);
+			rack->type            = Ngs2RackType::Submixer;
+			break;
+		case 0x2001:
+			EXIT_NOT_IMPLEMENTED(option->size != sizeof(Ngs2ReverbRackOption));
+			rack->option.reverb = *reinterpret_cast<const Ngs2ReverbRackOption*>(option);
+			rack->type          = Ngs2RackType::Reverb;
+			break;
+		case 0x3000:
+			EXIT_NOT_IMPLEMENTED(option->size != sizeof(Ngs2MasteringRackOption));
+			rack->option.mastering = *reinterpret_cast<const Ngs2MasteringRackOption*>(option);
+			rack->type             = Ngs2RackType::Mastering;
+			break;
+		case 0x4002:
+			EXIT_NOT_IMPLEMENTED(option->size != sizeof(Ngs2CustomSubmixerRackOption));
+			rack->option.custom_submixer = *reinterpret_cast<const Ngs2CustomSubmixerRackOption*>(option);
+			rack->type                   = Ngs2RackType::CustomSubmixer;
+			break;
+		default: EXIT("unknown rack_id: 0x%" PRIx32 "\n", rack_id);
+	}
+
+	printf("\t type                   = %s\n", Core::EnumName(rack->type).C_Str());
+
+	rack->allocator = Ngs2BufferAllocator();
+	rack->ngs       = ngs;
+
+	rack->next   = g_racks_list;
+	g_racks_list = rack;
+
+	for (uint32_t i = 0; i < option->max_voices; i++)
+	{
+		voices[i].rack  = rack;
+		voices[i].event = Ngs2VoicePlayEvent::None;
+		voices[i].state = Ngs2VoicePlayState::Empty;
+	}
+
+	*handle = reinterpret_cast<uintptr_t>(rack);
+
+	return OK;
+}
+
+int KYTY_SYSV_ABI Ngs2RackCreateWithAllocator(uintptr_t system_handle, uint32_t rack_id, const Ngs2RackOption* option,
+                                              const Ngs2BufferAllocator* allocator, uintptr_t* handle)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(option == nullptr);
+	EXIT_NOT_IMPLEMENTED(allocator == nullptr);
+	EXIT_NOT_IMPLEMENTED(handle == nullptr);
+	EXIT_NOT_IMPLEMENTED(allocator->alloc_handler == nullptr);
+	EXIT_NOT_IMPLEMENTED(allocator->free_handler == nullptr);
+	EXIT_NOT_IMPLEMENTED(system_handle == 0);
+
+	EXIT_NOT_IMPLEMENTED(option->size < sizeof(Ngs2RackOption));
+
+	printf("\t rack_id                = 0x%" PRIx32 "\n", rack_id);
+	printf("\t name                   = %.16s\n", option->name);
+	printf("\t flags                  = %u\n", option->flags);
+	printf("\t max_grain_samples      = %u\n", option->max_grain_samples);
+	printf("\t max_voices             = %u\n", option->max_voices);
+	printf("\t max_input_delay_blocks = %u\n", option->max_input_delay_blocks);
+	printf("\t max_matrices           = %u\n", option->max_matrices);
+	printf("\t max_ports              = %u\n", option->max_ports);
+	printf("\t alloc_handler          = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(allocator->alloc_handler));
+	printf("\t free_handler           = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(allocator->free_handler));
+	printf("\t user_data              = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(allocator->user_data));
+
+	Ngs2ContextBufferInfo buf {};
+	buf.host_buffer      = nullptr;
+	buf.host_buffer_size = 0;
+	buf.user_data        = allocator->user_data;
+
+	Ngs2RackQueryBufferSize(rack_id, option, &buf);
+
+	EXIT_NOT_IMPLEMENTED(buf.host_buffer_size == 0);
+
+	int result = allocator->alloc_handler(&buf);
+
+	EXIT_NOT_IMPLEMENTED(result != OK);
+	EXIT_NOT_IMPLEMENTED(buf.host_buffer == nullptr);
+
+	result = Ngs2RackCreate(system_handle, rack_id, option, &buf, handle);
+
+	if (result == OK)
+	{
+		auto* rack      = static_cast<Ngs2RackInternal*>(buf.host_buffer);
+		rack->allocator = *allocator;
+	}
+
+	return result;
+}
+
+int KYTY_SYSV_ABI Ngs2SystemRender(uintptr_t system_handle, const Ngs2RenderBufferInfo* buffer_info, uint32_t num_buffer_info)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(buffer_info == nullptr);
+	EXIT_NOT_IMPLEMENTED(system_handle == 0);
+	EXIT_NOT_IMPLEMENTED(num_buffer_info == 0);
+
+	auto* ngs = reinterpret_cast<Ngs2Internal*>(system_handle);
+
+	Core::LockGuard lock(ngs->mutex);
+
+	for (auto* rack = g_racks_list; rack != nullptr; rack = rack->next)
+	{
+		if (rack->ngs == ngs)
+		{
+			auto* voices = reinterpret_cast<Ngs2VoiceInternal*>(rack + 1);
+
+			for (uint32_t i = 0; i < rack->option.common.max_voices; i++)
+			{
+				auto& voice = voices[i];
+				switch (voice.event)
+				{
+					case Ngs2VoicePlayEvent::None:
+						if (voice.state == Ngs2VoicePlayState::Playing || voice.state == Ngs2VoicePlayState::Stopped)
+						{
+							voice.state = Ngs2VoicePlayState::Empty;
+						}
+						break;
+					case Ngs2VoicePlayEvent::Play:
+						if (voice.state == Ngs2VoicePlayState::Empty)
+						{
+							voice.state = Ngs2VoicePlayState::Playing;
+						}
+						break;
+					case Ngs2VoicePlayEvent::Pause:
+						if (voice.state == Ngs2VoicePlayState::Playing)
+						{
+							voice.state = Ngs2VoicePlayState::Paused;
+						}
+						break;
+					case Ngs2VoicePlayEvent::Resume:
+						if (voice.state == Ngs2VoicePlayState::Paused)
+						{
+							voice.state = Ngs2VoicePlayState::Playing;
+						}
+						break;
+					case Ngs2VoicePlayEvent::Stop:
+						if (voice.state == Ngs2VoicePlayState::Playing)
+						{
+							voice.state = Ngs2VoicePlayState::Stopped;
+						}
+						break;
+					case Ngs2VoicePlayEvent::StopImm:
+					case Ngs2VoicePlayEvent::Kill: voice.state = Ngs2VoicePlayState::Empty; break;
+				}
+				voice.event = Ngs2VoicePlayEvent::None;
+			}
+		}
+	}
+
+	return OK;
+}
+
+int KYTY_SYSV_ABI Ngs2RackGetVoiceHandle(uintptr_t rack_handle, uint32_t voice_id, uintptr_t* handle)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(handle == nullptr);
+	EXIT_NOT_IMPLEMENTED(rack_handle == 0);
+
+	printf("\t voice_id = %u\n", voice_id);
+
+	auto* rack   = reinterpret_cast<Ngs2RackInternal*>(rack_handle);
+	auto* voices = reinterpret_cast<Ngs2VoiceInternal*>(rack_handle + sizeof(Ngs2RackInternal));
+
+	EXIT_NOT_IMPLEMENTED(voice_id >= rack->option.common.max_voices);
+
+	EXIT_IF(voices[voice_id].rack != rack);
+
+	*handle = reinterpret_cast<uintptr_t>(voices + voice_id);
+
+	return OK;
+}
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+int KYTY_SYSV_ABI Ngs2VoiceControl(uintptr_t voice_handle, const Ngs2VoiceParamHeader* param_list)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(param_list == nullptr);
+	EXIT_NOT_IMPLEMENTED(voice_handle == 0);
+
+	auto* voice = reinterpret_cast<Ngs2VoiceInternal*>(voice_handle);
+
+	Core::LockGuard lock(voice->rack->ngs->mutex);
+
+	const auto* param = param_list;
+
+	for (;;)
+	{
+		printf("\t id   = 0x%08" PRIx32 "\n", param->id);
+		printf("\t size = %" PRIu16 "\n", param->size);
+		printf("\t next = %" PRId16 "\n", param->next);
+
+		auto rack_id = param->id >> 16u;
+
+		EXIT_NOT_IMPLEMENTED(((param->id >> 15u) & 0x1u) != 0);
+
+		switch (rack_id)
+		{
+			case 0x0000:
+			{
+				auto cid = param->id & 0x7fffu;
+				switch (cid)
+				{
+					case 0x0002:
+					{
+						EXIT_NOT_IMPLEMENTED(param->size != sizeof(Ngs2VoicePortMatrixParam));
+						const auto* pm = reinterpret_cast<const Ngs2VoicePortMatrixParam*>(param);
+						printf("\t port      = %u\n", pm->port);
+						printf("\t matrix_id = %d\n", pm->matrix_id);
+						break;
+					}
+					case 0x0005:
+					{
+						EXIT_NOT_IMPLEMENTED(param->size != sizeof(Ngs2VoicePatchParam));
+						const auto* patch = reinterpret_cast<const Ngs2VoicePatchParam*>(param);
+						printf("\t connect->port          = %u\n", patch->port);
+						printf("\t connect->dest_input_id = %u\n", patch->dest_input_id);
+						printf("\t connect->dest_handle   = 0x%016" PRIx64 "\n", patch->dest_handle);
+						break;
+					}
+					case 0x0006:
+					{
+						EXIT_NOT_IMPLEMENTED(param->size != sizeof(Ngs2VoiceEventParam));
+						const auto* event = reinterpret_cast<const Ngs2VoiceEventParam*>(param);
+						switch (event->event_id)
+						{
+							case 0: voice->event = Ngs2VoicePlayEvent::Play; break;
+							case 1: voice->event = Ngs2VoicePlayEvent::Stop; break;
+							case 2: voice->event = Ngs2VoicePlayEvent::StopImm; break;
+							case 3: voice->event = Ngs2VoicePlayEvent::Kill; break;
+							case 4: voice->event = Ngs2VoicePlayEvent::Pause; break;
+							case 5: voice->event = Ngs2VoicePlayEvent::Resume; break;
+							default: EXIT("unknown event_id: 0x%08" PRIx32 "\n", event->event_id);
+						}
+						printf("\t event = %u\n", event->event_id);
+						break;
+					}
+					default: EXIT("unknown id: 0x%04" PRIx32 "\n", cid);
+				}
+				break;
+			}
+			case 0x1000: EXIT_NOT_IMPLEMENTED(voice->rack->type != Ngs2RackType::Sampler); break;
+			case 0x2000: EXIT_NOT_IMPLEMENTED(voice->rack->type != Ngs2RackType::Submixer); break;
+			case 0x2001: EXIT_NOT_IMPLEMENTED(voice->rack->type != Ngs2RackType::Reverb); break;
+			case 0x3000: EXIT_NOT_IMPLEMENTED(voice->rack->type != Ngs2RackType::Mastering); break;
+			case 0x4000: EXIT_NOT_IMPLEMENTED(voice->rack->type != Ngs2RackType::CustomSubmixer); break;
+			case 0x4002: EXIT_NOT_IMPLEMENTED(voice->rack->type != Ngs2RackType::CustomSubmixer); break;
+			default: EXIT("unknown rack_id: 0x%" PRIx32 "\n", rack_id);
+		}
+
+		if (param->next == 0)
+		{
+			break;
+		}
+		param = reinterpret_cast<const Ngs2VoiceParamHeader*>(reinterpret_cast<uintptr_t>(param) + param->next);
+	}
+
+	return OK;
+}
+
+int KYTY_SYSV_ABI Ngs2VoiceGetState(uintptr_t voice_handle, Ngs2VoiceState* state, size_t state_size)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(state == nullptr);
+	EXIT_NOT_IMPLEMENTED(voice_handle == 0);
+
+	auto* voice = reinterpret_cast<Ngs2VoiceInternal*>(voice_handle);
+
+	Core::LockGuard lock(voice->rack->ngs->mutex);
+
+	switch (voice->rack->type)
+	{
+		case Ngs2RackType::Sampler:
+		{
+			EXIT_NOT_IMPLEMENTED(state_size != sizeof(Ngs2SamplerVoiceState));
+			auto* sampler = reinterpret_cast<Ngs2SamplerVoiceState*>(state);
+			switch (voice->state)
+			{
+				case Ngs2VoicePlayState::Empty: sampler->voice_state.state_flags = 0; break;
+				case Ngs2VoicePlayState::Playing: sampler->voice_state.state_flags = 0x3; break;
+				case Ngs2VoicePlayState::Paused: sampler->voice_state.state_flags = 0x5; break;
+				case Ngs2VoicePlayState::Stopped: sampler->voice_state.state_flags = 0xb; break;
+			}
+			sampler->envelope_height     = 1.0f;
+			sampler->peak_height         = 0.0f;
+			sampler->reserved            = 0;
+			sampler->num_decoded_samples = 0;
+			sampler->user_data           = 0;
+			sampler->waveform_data       = nullptr;
+			printf("\t state_flags = %u\n", sampler->voice_state.state_flags);
+			break;
+		}
+		default: EXIT("unknown type: %s\n", Core::EnumName(voice->rack->type).C_Str());
+	}
+
+	return OK;
+}
+
+} // namespace Ngs2
 
 } // namespace Kyty::Libs::Audio
 

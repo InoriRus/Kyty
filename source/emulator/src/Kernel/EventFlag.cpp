@@ -40,7 +40,8 @@ public:
 		Or
 	};
 
-	KernelEventFlagPrivate(const String& name, bool flag, uint64_t bits): m_name(name), m_single_thread(flag), m_bits(bits) {};
+	KernelEventFlagPrivate(const String& name, bool single, bool /*fifo*/, uint64_t bits)
+	    : m_name(name), m_single_thread(single), m_bits(bits) {};
 	virtual ~KernelEventFlagPrivate();
 
 	KYTY_CLASS_NO_COPY(KernelEventFlagPrivate);
@@ -270,16 +271,29 @@ int KYTY_SYSV_ABI KernelCreateEventFlag(KernelEventFlag* ef, const char* name, u
 		return KERNEL_ERROR_EINVAL;
 	}
 
-	bool single = false;
+	bool single = true;
+	bool fifo   = true;
 
 	switch (attr)
 	{
-		case 0x10: single = true; break;
-		case 0x20: single = false; break;
+		case 0x10:
+		case 0x11:
+			single = true;
+			fifo   = true;
+			break;
+		case 0x20:
+		case 0x21:
+			single = false;
+			fifo   = true;
+			break;
+		case 0x22:
+			single = false;
+			fifo   = false;
+			break;
 		default: EXIT("unknown attr: %u\n", attr);
 	}
 
-	*ef = new KernelEventFlagPrivate(String::FromUtf8(name), single, init_pattern);
+	*ef = new KernelEventFlagPrivate(String::FromUtf8(name), single, fifo, init_pattern);
 
 	printf("\tEventFlag create: %s\n", name);
 

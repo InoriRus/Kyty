@@ -58,6 +58,7 @@ int KYTY_SYSV_ABI      GraphicsInsertPushMarker(uint32_t* cmd, uint64_t size, co
 int KYTY_SYSV_ABI      GraphicsInsertPopMarker(uint32_t* cmd, uint64_t size);
 uint64_t KYTY_SYSV_ABI GraphicsGetGpuCoreClockFrequency();
 int KYTY_SYSV_ABI      GraphicsIsUserPaEnabled();
+void* KYTY_SYSV_ABI    GraphicsGetTheTessellationFactorRingBufferBaseAddress();
 
 int KYTY_SYSV_ABI GraphicsRegisterOwner(uint32_t* owner_handle, const char* name);
 int KYTY_SYSV_ABI GraphicsRegisterResource(uint32_t* resource_handle, uint32_t owner_handle, const void* memory, size_t size,

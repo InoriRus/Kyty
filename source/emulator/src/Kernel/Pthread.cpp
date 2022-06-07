@@ -2287,6 +2287,13 @@ void KYTY_SYSV_ABI PthreadYield()
 	sched_yield();
 }
 
+int KYTY_SYSV_ABI PthreadGetthreadid()
+{
+	PRINT_NAME();
+
+	return Core::Thread::GetThreadIdUnique();
+}
+
 int KYTY_SYSV_ABI KernelClockGetres(KernelClockid clock_id, KernelTimespec* tp)
 {
 	PRINT_NAME();
@@ -2590,6 +2597,13 @@ int KYTY_SYSV_ABI pthread_mutex_lock(LibKernel::PthreadMutex* mutex)
 	// PRINT_NAME();
 
 	return POSIX_PTHREAD_CALL(LibKernel::PthreadMutexLock(mutex));
+}
+
+int KYTY_SYSV_ABI pthread_mutex_trylock(LibKernel::PthreadMutex* mutex)
+{
+	// PRINT_NAME();
+
+	return POSIX_PTHREAD_CALL(LibKernel::PthreadMutexTrylock(mutex));
 }
 
 int KYTY_SYSV_ABI pthread_mutex_unlock(LibKernel::PthreadMutex* mutex)

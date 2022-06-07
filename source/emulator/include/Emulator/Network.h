@@ -57,6 +57,14 @@ int KYTY_SYSV_ABI HttpSetEpoll(int id, HttpEpollHandle eh, void* user_arg);
 int KYTY_SYSV_ABI HttpUnsetEpoll(int id);
 int KYTY_SYSV_ABI HttpSendRequest(int request_id, const void* post_data, size_t size);
 int KYTY_SYSV_ABI HttpsSetSslCallback(int id, HttpsCallback cbfunc, void* user_arg);
+int KYTY_SYSV_ABI HttpsDisableOption(int id, uint32_t ssl_flags);
+int KYTY_SYSV_ABI HttpSetResolveTimeOut(int id, uint32_t usec);
+int KYTY_SYSV_ABI HttpSetResolveRetry(int id, int32_t retry);
+int KYTY_SYSV_ABI HttpSetConnectTimeOut(int id, uint32_t usec);
+int KYTY_SYSV_ABI HttpSetSendTimeOut(int id, uint32_t usec);
+int KYTY_SYSV_ABI HttpSetRecvTimeOut(int id, uint32_t usec);
+int KYTY_SYSV_ABI HttpSetAutoRedirect(int id, int enable);
+int KYTY_SYSV_ABI HttpSetAuthEnabled(int id, int enable);
 
 } // namespace Http
 
@@ -92,6 +100,7 @@ int KYTY_SYSV_ABI  NpSetContentRestriction(const NpContentRestriction* restricti
 int KYTY_SYSV_ABI  NpRegisterStateCallback(void* callback, void* userdata);
 void KYTY_SYSV_ABI NpRegisterGamePresenceCallback(void* callback, void* userdata);
 int KYTY_SYSV_ABI  NpRegisterPlusEventCallback(void* callback, void* userdata);
+int KYTY_SYSV_ABI  NpRegisterNpReachabilityStateCallback(void* callback, void* userdata);
 int KYTY_SYSV_ABI  NpGetNpId(int user_id, NpId* np_id);
 int KYTY_SYSV_ABI  NpGetOnlineId(int user_id, NpOnlineId* online_id);
 int KYTY_SYSV_ABI  NpCreateAsyncRequest(const NpCreateAsyncRequestParameter* param);

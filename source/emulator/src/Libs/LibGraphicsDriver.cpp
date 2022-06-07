@@ -47,6 +47,7 @@ LIB_DEFINE(InitGraphicsDriver_1)
 	LIB_FUNC("nvEwfYAImTs", Graphics::GraphicsRegisterResource);
 	LIB_FUNC("Fwvh++m9IQI", Graphics::GraphicsGetGpuCoreClockFrequency);
 	LIB_FUNC("jg33rEKLfVs", Graphics::GraphicsIsUserPaEnabled);
+	LIB_FUNC("ln33zjBrfjk", Graphics::GraphicsGetTheTessellationFactorRingBufferBaseAddress);
 }
 
 } // namespace Kyty::Libs

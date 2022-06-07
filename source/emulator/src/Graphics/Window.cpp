@@ -16,7 +16,7 @@
 #include "Emulator/Graphics/Image.h"
 #include "Emulator/Graphics/Utils.h"
 #include "Emulator/Graphics/VideoOut.h"
-#include "Emulator/Loader/Param.h"
+#include "Emulator/Loader/SystemContent.h"
 #include "Emulator/Loader/VirtualMemory.h"
 #include "Emulator/Profiler.h"
 
@@ -2170,7 +2170,7 @@ void WindowUpdateIcon()
 {
 	EXIT_IF(g_window_ctx == nullptr);
 
-	static Image* icon = Loader::ParamSfoGetIcon();
+	static Image* icon = Loader::SystemContentGetIcon();
 
 	if (icon != nullptr)
 	{
@@ -2186,9 +2186,9 @@ void WindowUpdateTitle()
 	static char title[128];
 	static char title_id[12];
 	static char app_ver[8];
-	static bool has_title    = Loader::ParamSfoGetString("TITLE", title, sizeof(title));
-	static bool has_title_id = Loader::ParamSfoGetString("TITLE_ID", title_id, sizeof(title_id));
-	static bool has_app_ver  = Loader::ParamSfoGetString("APP_VER", app_ver, sizeof(app_ver));
+	static bool has_title    = Loader::SystemContentParamSfoGetString("TITLE", title, sizeof(title));
+	static bool has_title_id = Loader::SystemContentParamSfoGetString("TITLE_ID", title_id, sizeof(title_id));
+	static bool has_app_ver  = Loader::SystemContentParamSfoGetString("APP_VER", app_ver, sizeof(app_ver));
 
 	auto fps = String::FromPrintf("%s%s%s%s%s%s[%s] [%s], frame: %d, fps: %f", (has_title ? title : ""), (has_title ? ", " : ""),
 	                              (has_title_id ? title_id : ""), (has_title_id ? ", " : ""), (has_app_ver ? app_ver : ""),

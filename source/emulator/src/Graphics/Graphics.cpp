@@ -18,6 +18,7 @@
 #include "Emulator/Kernel/Pthread.h"
 #include "Emulator/Libs/Errno.h"
 #include "Emulator/Libs/Libs.h"
+#include "Emulator/Loader/VirtualMemory.h"
 
 #include <atomic>
 
@@ -649,6 +650,21 @@ uint64_t KYTY_SYSV_ABI GraphicsGetGpuCoreClockFrequency()
 int KYTY_SYSV_ABI GraphicsIsUserPaEnabled()
 {
 	return 0;
+}
+
+void* KYTY_SYSV_ABI GraphicsGetTheTessellationFactorRingBufferBaseAddress()
+{
+	PRINT_NAME();
+
+	auto addr = Loader::VirtualMemory::AllocAligned(0, 0x20000, Loader::VirtualMemory::Mode::ReadWrite, 256);
+	Loader::VirtualMemory::Free(addr);
+	bool again = Loader::VirtualMemory::AllocFixed(addr, 0x20000, Loader::VirtualMemory::Mode::ReadWrite);
+	EXIT_NOT_IMPLEMENTED(!again);
+	Loader::VirtualMemory::Free(addr);
+
+	printf("\t addr = %016" PRIx64 "\n", addr);
+
+	return reinterpret_cast<void*>(addr);
 }
 
 int KYTY_SYSV_ABI GraphicsRegisterOwner(uint32_t* owner_handle, const char* name)

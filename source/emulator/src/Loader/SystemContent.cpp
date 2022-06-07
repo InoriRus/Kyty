@@ -1,4 +1,4 @@
-#include "Emulator/Loader/Param.h"
+#include "Emulator/Loader/SystemContent.h"
 
 #include "Kyty/Core/ByteBuffer.h"
 #include "Kyty/Core/Common.h"
@@ -52,10 +52,36 @@ private:
 	char*       m_name_tbl         = nullptr;
 };
 
+class PlayGo
+{
+public:
+	PlayGo() = default;
+	virtual ~PlayGo();
+
+	KYTY_CLASS_NO_COPY(PlayGo);
+
+	void Open(const String& file_name);
+	void Close();
+
+	bool IsValid();
+
+	bool GetChunksNum(uint32_t* num);
+
+	void DbgPrint();
+
+private:
+	Core::File  m_f;
+	Core::Mutex m_mutex;
+	bool        m_opened     = false;
+	uint16_t    m_chunks_num = 0;
+};
+
 struct SystemContent
 {
 	String                 psf_path;
 	Psf                    psf;
+	String                 playgo_path;
+	PlayGo                 playgo;
 	String                 icon_path;
 	Libs::Graphics::Image* icon = nullptr;
 };
@@ -247,7 +273,82 @@ bool Psf::GetParamString(const char* name, char* value, size_t value_size)
 	return false;
 }
 
-void ParamSfoLoad(const String& file_name)
+PlayGo::~PlayGo()
+{
+	Close();
+}
+
+void PlayGo::Open(const String& file_name)
+{
+	Core::LockGuard lock(m_mutex);
+
+	Close();
+
+	m_f.Open(file_name, Core::File::Mode::Read);
+
+	if (m_f.IsInvalid())
+	{
+		printf("Can't open %s\n", file_name.C_Str());
+		return;
+	}
+
+	uint32_t magic1 = 0;
+
+	m_f.Read(&magic1, 4);
+
+	if (magic1 != 0x6f676c70)
+	{
+		printf("invalid file: magic1 = %08" PRIx32 "\n", magic1);
+		return;
+	}
+
+	m_f.Seek(10);
+	m_f.Read(&m_chunks_num, 2);
+
+	m_opened = true;
+}
+
+void PlayGo::Close()
+{
+	Core::LockGuard lock(m_mutex);
+
+	if (!m_f.IsInvalid())
+	{
+		m_f.Close();
+	}
+	m_opened = false;
+}
+
+bool PlayGo::IsValid()
+{
+	Core::LockGuard lock(m_mutex);
+
+	return m_opened;
+}
+
+bool PlayGo::GetChunksNum(uint32_t* num)
+{
+	Core::LockGuard lock(m_mutex);
+
+	if (m_opened)
+	{
+		*num = m_chunks_num;
+		return true;
+	}
+	return false;
+}
+
+void PlayGo::DbgPrint()
+{
+	Core::LockGuard lock(m_mutex);
+
+	if (m_opened)
+	{
+		printf("PlayGo: chunks num = %" PRIu16 "\n", m_chunks_num);
+	}
+}
+
+void SystemContentLoadParamSfo(const String& file_name)
 {
 	auto* sc = Core::Singleton<SystemContent>::Instance();
 
@@ -277,9 +378,17 @@ void ParamSfoLoad(const String& file_name)
 	{
 		sc->icon = nullptr;
 	}
+
+	sc->playgo_path = file_name.DirectoryWithoutFilename() + U"playgo-chunk.dat";
+	sc->playgo.Open(sc->playgo_path);
+
+	if (sc->playgo.IsValid())
+	{
+		sc->playgo.DbgPrint();
+	}
 }
 
-bool ParamSfoGetInt(const char* name, int32_t* value)
+bool SystemContentParamSfoGetInt(const char* name, int32_t* value)
 {
 	if (name == nullptr || value == nullptr)
 	{
@@ -291,7 +400,7 @@ bool ParamSfoGetInt(const char* name, int32_t* value)
 	return sc->psf.GetParamInt(name, value);
 }
 
-bool ParamSfoGetString(const char* name, String* value)
+bool SystemContentParamSfoGetString(const char* name, String* value)
 {
 	if (name == nullptr || value == nullptr)
 	{
@@ -303,7 +412,7 @@ bool ParamSfoGetString(const char* name, String* value)
 	return sc->psf.GetParamString(name, value);
 }
 
-bool ParamSfoGetString(const char* name, char* value, size_t value_size)
+bool SystemContentParamSfoGetString(const char* name, char* value, size_t value_size)
 {
 	if (name == nullptr || value == nullptr)
 	{
@@ -315,11 +424,23 @@ bool ParamSfoGetString(const char* name, char* value, size_t value_size)
 	return sc->psf.GetParamString(name, value, value_size);
 }
 
-Libs::Graphics::Image* ParamSfoGetIcon()
+Libs::Graphics::Image* SystemContentGetIcon()
 {
 	auto* sc = Core::Singleton<SystemContent>::Instance();
 
 	return sc->icon;
+}
+
+bool SystemContentGetChunksNum(uint32_t* num)
+{
+	if (num == nullptr)
+	{
+		return false;
+	}
+
+	auto* sc = Core::Singleton<SystemContent>::Instance();
+
+	return sc->playgo.GetChunksNum(num);
 }
 
 } // namespace Kyty::Loader

@@ -5,8 +5,8 @@
 #include "Emulator/Common.h"
 #include "Emulator/Libs/Errno.h"
 #include "Emulator/Libs/Libs.h"
-#include "Emulator/Loader/Param.h"
 #include "Emulator/Loader/SymbolDatabase.h"
+#include "Emulator/Loader/SystemContent.h"
 
 #ifdef KYTY_EMU_ENABLED
 
@@ -84,10 +84,10 @@ int KYTY_SYSV_ABI AppContentAppParamGetInt(uint32_t param_id, int32_t* value)
 			*value = 3;
 			found  = true;
 			break;
-		case 1: found = Loader::ParamSfoGetInt("USER_DEFINED_PARAM_1", value); break;
-		case 2: found = Loader::ParamSfoGetInt("USER_DEFINED_PARAM_2", value); break;
-		case 3: found = Loader::ParamSfoGetInt("USER_DEFINED_PARAM_3", value); break;
-		case 4: found = Loader::ParamSfoGetInt("USER_DEFINED_PARAM_4", value); break;
+		case 1: found = Loader::SystemContentParamSfoGetInt("USER_DEFINED_PARAM_1", value); break;
+		case 2: found = Loader::SystemContentParamSfoGetInt("USER_DEFINED_PARAM_2", value); break;
+		case 3: found = Loader::SystemContentParamSfoGetInt("USER_DEFINED_PARAM_3", value); break;
+		case 4: found = Loader::SystemContentParamSfoGetInt("USER_DEFINED_PARAM_4", value); break;
 		default: EXIT("unknown param_id: %u\n", param_id);
 	}
 

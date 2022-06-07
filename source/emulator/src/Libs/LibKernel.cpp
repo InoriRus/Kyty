@@ -460,6 +460,7 @@ LIB_DEFINE(InitLibKernel_1_Posix)
 	LIB_FUNC("OxhIB8LB-PQ", Posix::pthread_create);
 	LIB_FUNC("h9CcP3J0oVM", Posix::pthread_join);
 	LIB_FUNC("7H0iTOciTLo", Posix::pthread_mutex_lock);
+	LIB_FUNC("K-jXhbt2gn4", Posix::pthread_mutex_trylock);
 	LIB_FUNC("2Z+PpY6CaJg", Posix::pthread_mutex_unlock);
 	LIB_FUNC("ttHNfU+qDBU", Posix::pthread_mutex_init);
 	LIB_FUNC("dQHWEsJtoE4", Posix::pthread_mutexattr_init);
@@ -525,6 +526,7 @@ LIB_DEFINE(InitLibKernel_1_EventFlag)
 {
 	LIB_FUNC("BpFoboUJoZU", EventFlag::KernelCreateEventFlag);
 	LIB_FUNC("JTvBflhYazQ", EventFlag::KernelWaitEventFlag);
+	LIB_FUNC("IOnSvHzqu6A", EventFlag::KernelSetEventFlag);
 }
 
 LIB_DEFINE(InitLibKernel_1_Semaphore)
@@ -557,6 +559,7 @@ LIB_DEFINE(InitLibKernel_1_Pthread)
 	LIB_FUNC("1tKyG7RlMJo", LibKernel::PthreadGetprio);
 	LIB_FUNC("W0Hpm2X0uPE", LibKernel::PthreadSetprio);
 	LIB_FUNC("T72hz6ffq08", LibKernel::PthreadYield);
+	LIB_FUNC("EI-5-jlq2dE", LibKernel::PthreadGetthreadid);
 
 	LIB_FUNC("62KCwEMmzcM", LibKernel::PthreadAttrDestroy);
 	LIB_FUNC("x1X76arYMxU", LibKernel::PthreadAttrGet);
@@ -568,6 +571,7 @@ LIB_DEFINE(InitLibKernel_1_Pthread)
 	LIB_FUNC("txHtngJ+eyc", LibKernel::PthreadAttrGetguardsize);
 	LIB_FUNC("UTXzJbWhhTE", LibKernel::PthreadAttrSetstacksize);
 	LIB_FUNC("-Wreprtu0Qs", LibKernel::PthreadAttrSetdetachstate);
+	LIB_FUNC("El+cQ20DynU", LibKernel::PthreadAttrSetguardsize);
 	LIB_FUNC("eXbUSpEaTsA", LibKernel::PthreadAttrSetinheritsched);
 	LIB_FUNC("DzES9hQF4f4", LibKernel::PthreadAttrSetschedparam);
 	LIB_FUNC("4+h9EzwKF4I", LibKernel::PthreadAttrSetschedpolicy);
@@ -590,8 +594,11 @@ LIB_DEFINE(InitLibKernel_1_Pthread)
 
 	LIB_FUNC("QBi7HCK03hw", LibKernel::KernelClockGettime);
 	LIB_FUNC("ejekcaNQNq0", LibKernel::KernelGettimeofday);
+	LIB_FUNC("-2IRUCO--PM", LibKernel::KernelReadTsc);
 	LIB_FUNC("1j3S3n-tTW4", LibKernel::KernelGetTscFrequency);
 	LIB_FUNC("4J2sUJmuHZQ", LibKernel::KernelGetProcessTime);
+	LIB_FUNC("BNowx2l588E", LibKernel::KernelGetProcessTimeCounterFrequency);
+	LIB_FUNC("fgxnMeTNUtY", LibKernel::KernelGetProcessTimeCounter);
 
 	LIB_FUNC("7H0iTOciTLo", Posix::pthread_mutex_lock);
 	LIB_FUNC("2Z+PpY6CaJg", Posix::pthread_mutex_unlock);

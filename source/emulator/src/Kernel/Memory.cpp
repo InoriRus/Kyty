@@ -619,7 +619,9 @@ int KYTY_SYSV_ABI KernelMapDirectMemory(void** addr, size_t len, int prot, int f
 	EXIT_IF(g_physical_memory == nullptr);
 
 	EXIT_NOT_IMPLEMENTED(addr == nullptr);
-	EXIT_NOT_IMPLEMENTED(flags != 0);
+	EXIT_NOT_IMPLEMENTED(flags != 0 && flags != 0x10);
+
+	bool fixed = (flags == 0x10);
 
 	VirtualMemory::Mode     mode     = VirtualMemory::Mode::NoAccess;
 	Graphics::GpuMemoryMode gpu_mode = Graphics::GpuMemoryMode::NoAccess;
@@ -642,9 +644,24 @@ int KYTY_SYSV_ABI KernelMapDirectMemory(void** addr, size_t len, int prot, int f
 		default: EXIT("unknown prot: %d\n", prot);
 	}
 
-	auto in_addr  = reinterpret_cast<uint64_t>(*addr);
-	auto out_addr = VirtualMemory::AllocAligned(in_addr, len, mode, alignment);
-	*addr         = reinterpret_cast<void*>(out_addr);
+	auto     in_addr  = reinterpret_cast<uint64_t>(*addr);
+	uint64_t out_addr = 0;
+
+	if (fixed)
+	{
+		EXIT_NOT_IMPLEMENTED(in_addr == 0);
+		EXIT_NOT_IMPLEMENTED((in_addr & (alignment - 1)) != 0);
+
+		if (VirtualMemory::AllocFixed(in_addr, len, mode))
+		{
+			out_addr = in_addr;
+		}
+	} else
+	{
+		out_addr = VirtualMemory::AllocAligned(in_addr, len, mode, alignment);
+	}
+
+	*addr = reinterpret_cast<void*>(out_addr);
 
 	printf("\t in_addr  = 0x%016" PRIx64 "\n", in_addr);
 	printf("\t out_addr = 0x%016" PRIx64 "\n", out_addr);

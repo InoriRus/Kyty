@@ -389,6 +389,30 @@ uint64_t AllocAligned(uint64_t address, uint64_t size, Mode mode, uint64_t align
 	return ptr;
 }
 
+bool AllocFixed(uint64_t address, uint64_t size, Mode mode)
+{
+	auto ptr = reinterpret_cast<uintptr_t>(VirtualAlloc(reinterpret_cast<LPVOID>(static_cast<uintptr_t>(address)), size,
+	                                                    static_cast<DWORD>(MEM_COMMIT) | static_cast<DWORD>(MEM_RESERVE),
+	                                                    get_protection_flag(mode)));
+	if (ptr == 0)
+	{
+		auto err = static_cast<uint32_t>(GetLastError());
+
+		printf("VirtualAlloc() failed: 0x%08" PRIx32 "\n", err);
+
+		return false;
+	}
+
+	if (ptr != address)
+	{
+		printf("VirtualAlloc() failed: wrong address\n");
+		VirtualFree(reinterpret_cast<LPVOID>(ptr), 0, MEM_RELEASE);
+		return false;
+	}
+
+	return true;
+}
+
 bool Free(uint64_t address)
 {
 	if (VirtualFree(reinterpret_cast<LPVOID>(static_cast<uintptr_t>(address)), 0, MEM_RELEASE) == 0)

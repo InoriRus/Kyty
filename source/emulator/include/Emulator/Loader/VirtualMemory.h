@@ -101,6 +101,7 @@ void Init();
 
 uint64_t Alloc(uint64_t address, uint64_t size, Mode mode);
 uint64_t AllocAligned(uint64_t address, uint64_t size, Mode mode, uint64_t alignment);
+bool     AllocFixed(uint64_t address, uint64_t size, Mode mode);
 bool     Free(uint64_t address);
 bool     Protect(uint64_t address, uint64_t size, Mode mode, Mode* old_mode = nullptr);
 bool     FlushInstructionCache(uint64_t address, uint64_t size);

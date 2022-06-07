@@ -54,6 +54,8 @@ public:
 	void BufferFlush();
 	void BufferWait();
 
+	void RunLock() { m_run_mutex.Lock(); }
+	void RunUnlock() { m_run_mutex.Unlock(); }
 	void Lock() { m_mutex.Lock(); }
 	void Unlock() { m_mutex.Unlock(); }
 
@@ -130,6 +132,7 @@ private:
 	uint32_t            m_num_instances       = 1;
 
 	Core::Mutex m_mutex;
+	Core::Mutex m_run_mutex;
 
 	CommandBuffer* m_buffer[VK_BUFFERS_NUM] = {};
 	int            m_current_buffer         = -1;
@@ -340,10 +343,10 @@ uint32_t Gpu::MapComputeQueue(uint32_t pipe_id, uint32_t queue_id, uint32_t* rin
 
 	EXIT_NOT_IMPLEMENTED(v >= 64);
 
-	for (int i = 0; i < 8; i++)
-	{
-		EXIT_NOT_IMPLEMENTED(m_compute_ring[pipe_id * 8 + i] != nullptr && m_compute_ring[pipe_id * 8 + i]->IsActive());
-	}
+	//	for (int i = 0; i < 8; i++)
+	//	{
+	//		EXIT_NOT_IMPLEMENTED(m_compute_ring[pipe_id * 8 + i] != nullptr && m_compute_ring[pipe_id * 8 + i]->IsActive());
+	//	}
 
 	auto* ring = GetRing(v + 1);
 
@@ -761,17 +764,21 @@ void GraphicsRing::ThreadBatchRun(void* data)
 	{
 		CmdBatch buf = ring->GetCmdBatch();
 
-		cp->BufferInit();
-		cp->ResetDeCe();
-		cp->SetFlip(buf.flip);
-		cp->SetSumbitId(++seq);
+		cp->RunLock();
+		{
+			cp->BufferInit();
+			cp->ResetDeCe();
+			cp->SetFlip(buf.flip);
+			cp->SetSumbitId(++seq);
 
-		ring->m_job1.Execute([cp, buf](void* /*unused*/) { cp->Run(buf.draw_buffer.data, buf.draw_buffer.num_dw); });
-		ring->m_job2.Execute([cp, buf](void* /*unused*/) { cp->Run(buf.const_buffer.data, buf.const_buffer.num_dw); });
-		ring->m_job1.Wait();
-		ring->m_job2.Wait();
+			ring->m_job1.Execute([cp, buf](void* /*unused*/) { cp->Run(buf.draw_buffer.data, buf.draw_buffer.num_dw); });
+			ring->m_job2.Execute([cp, buf](void* /*unused*/) { cp->Run(buf.const_buffer.data, buf.const_buffer.num_dw); });
+			ring->m_job1.Wait();
+			ring->m_job2.Wait();
 
-		cp->BufferFlush();
+			cp->BufferFlush();
+		}
+		cp->RunUnlock();
 	}
 }
 
@@ -822,14 +829,18 @@ void ComputeRing::ThreadRun(void* data)
 
 		ring->m_mutex.Unlock();
 
-		cp->BufferInit();
-		cp->ResetDeCe();
+		cp->RunLock();
+		{
+			cp->BufferInit();
+			cp->ResetDeCe();
 
-		GraphicsDbgDumpDcb("cc", num_dw, buffer);
+			GraphicsDbgDumpDcb("cc", num_dw, buffer);
 
-		cp->Run(buffer, num_dw);
+			cp->Run(buffer, num_dw);
 
-		cp->BufferFlush();
+			cp->BufferFlush();
+		}
+		cp->RunUnlock();
 
 		ring->m_mutex.Lock();
 
