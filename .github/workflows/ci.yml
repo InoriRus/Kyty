@@ -56,7 +56,7 @@ jobs:
     - name: Install Ubuntu packages
       run: |
         sudo apt-get update
-        sudo apt-get install -y qt5-default
+        sudo apt-get install -y qt5-default qttools5-dev
     - name: Run CMake
       run: cmake -B _Build/_Linux -S source -D CMAKE_BUILD_TYPE=Release -D KYTY_FINAL=1
     - name: Build
