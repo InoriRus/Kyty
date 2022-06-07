@@ -8,8 +8,8 @@ on:
     - '*'
 concurrency: ci-${{ github.ref }}
 jobs:
-  build:
-    name: Build
+  build-windows:
+    name: Build (Windows)
     runs-on: windows-2022
     steps:
     - name: Checkout source
@@ -43,5 +43,17 @@ jobs:
     - name: Upload artifacts
       uses: actions/upload-artifact@v3
       with:
-        name: Kyty
+        name: Kyty (Windows)
         path: _Build/_Gcc/_bin
+  build-linux:
+    name: Build (Linux)
+    runs-on: ubuntu-20.04
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v3
+      with:
+        lfs: true
+    - name: Run CMake
+      run: cmake -B _Build/_Linux -S source -D CMAKE_BUILD_TYPE=Release -D KYTY_FINAL=1
+    - name: Build
+      run: cmake --build _Build/_Linux
