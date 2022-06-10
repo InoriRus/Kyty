@@ -64,6 +64,7 @@ enum class ShaderInstructionType
 	SBufferLoadDwordx8,
 	SCbranchExecz,
 	SCbranchScc0,
+	SCbranchScc1,
 	SCbranchVccz,
 	SCmpEqI32,
 	SCmpEqU32,

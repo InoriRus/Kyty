@@ -414,7 +414,8 @@ bool ShaderCode::IsDiscardBlock(uint32_t pc) const
 				const auto& inst = m_instructions.At(i);
 
 				if (inst.type == ShaderInstructionType::SEndpgm || inst.type == ShaderInstructionType::SCbranchExecz ||
-				    inst.type == ShaderInstructionType::SCbranchScc0 || inst.type == ShaderInstructionType::SCbranchVccz)
+				    inst.type == ShaderInstructionType::SCbranchScc0 || inst.type == ShaderInstructionType::SCbranchScc1 ||
+				    inst.type == ShaderInstructionType::SCbranchVccz)
 				{
 					return false;
 				}
@@ -566,7 +567,9 @@ KYTY_SHADER_PARSER(shader_parse_sopc)
 		case 0x0a: inst.type = ShaderInstructionType::SCmpLtU32; break;
 		case 0x0b: inst.type = ShaderInstructionType::SCmpLeU32; break;
 
-		default: printf("%s", dst->DbgDump().C_Str()); EXIT("unknown sopc opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 "\n", opcode, pc);
+		default:
+			printf("%s", dst->DbgDump().C_Str());
+			EXIT("unknown sopc opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 " (hash0 = 0x%08" PRIx32 ")\n", opcode, pc, dst->GetHash0());
 	}
 
 	dst->GetInstructions().Add(inst);
@@ -597,7 +600,9 @@ KYTY_SHADER_PARSER(shader_parse_sopk)
 			inst.src[0].constant.i = imm;
 			inst.src_num           = 1;
 			break;
-		default: printf("%s", dst->DbgDump().C_Str()); EXIT("unknown sopk opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 "\n", opcode, pc);
+		default:
+			printf("%s", dst->DbgDump().C_Str());
+			EXIT("unknown sopk opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 " (hash0 = 0x%08" PRIx32 ")\n", opcode, pc, dst->GetHash0());
 	}
 
 	dst->GetInstructions().Add(inst);
@@ -630,6 +635,7 @@ KYTY_SHADER_PARSER(shader_parse_sopp)
 			inst.src_num = 0;
 			break;
 		case 0x04: inst.type = ShaderInstructionType::SCbranchScc0; break;
+		case 0x05: inst.type = ShaderInstructionType::SCbranchScc1; break;
 		case 0x06: inst.type = ShaderInstructionType::SCbranchVccz; break;
 		case 0x08: inst.type = ShaderInstructionType::SCbranchExecz; break;
 		case 0x0c:
@@ -639,13 +645,15 @@ KYTY_SHADER_PARSER(shader_parse_sopp)
 			inst.src[0].constant.u = simm;
 			inst.src_num           = 1;
 			break;
-		default: printf("%s", dst->DbgDump().C_Str()); EXIT("unknown sopp opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 "\n", opcode, pc);
+		default:
+			printf("%s", dst->DbgDump().C_Str());
+			EXIT("unknown sopp opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 " (hash0 = 0x%08" PRIx32 ")\n", opcode, pc, dst->GetHash0());
 	}
 
 	dst->GetInstructions().Add(inst);
 
-	if (inst.type == ShaderInstructionType::SCbranchScc0 || inst.type == ShaderInstructionType::SCbranchVccz ||
-	    inst.type == ShaderInstructionType::SCbranchExecz)
+	if (inst.type == ShaderInstructionType::SCbranchScc0 || inst.type == ShaderInstructionType::SCbranchScc1 ||
+	    inst.type == ShaderInstructionType::SCbranchVccz || inst.type == ShaderInstructionType::SCbranchExecz)
 	{
 		dst->GetLabels().Add(ShaderLabel(inst));
 	}
@@ -1170,6 +1178,7 @@ KYTY_SHADER_PARSER(shader_parse_vop3)
 
 	if (opcode >= 0 && opcode <= 0xff)
 	{
+		/* VOPC using VOP3 encoding */
 		inst.format   = ShaderInstructionFormat::SmaskVsrc0Vsrc1;
 		inst.src_num  = 2;
 		inst.dst      = operand_parse(vdst);
@@ -1178,12 +1187,21 @@ KYTY_SHADER_PARSER(shader_parse_vop3)
 
 	if (opcode >= 0x100 && opcode <= 0x13d)
 	{
+		/* VOP2 using VOP3 encoding */
 		inst.format  = ShaderInstructionFormat::SVdstSVsrc0SVsrc1;
 		inst.src_num = 2;
 	}
 
+	if (opcode >= 0x180 && opcode <= 0x1e8)
+	{
+		/* VOP1 using VOP3 encoding */
+		inst.format  = ShaderInstructionFormat::SVdstSVsrc0;
+		inst.src_num = 1;
+	}
+
 	switch (opcode)
 	{
+		/* VOPC using VOP3 encoding */
 		case 0x00: inst.type = ShaderInstructionType::VCmpFF32; break;
 		case 0x01: inst.type = ShaderInstructionType::VCmpLtF32; break;
 		case 0x02: inst.type = ShaderInstructionType::VCmpEqF32; break;
@@ -1221,6 +1239,8 @@ KYTY_SHADER_PARSER(shader_parse_vop3)
 		case 0xd4: inst.type = ShaderInstructionType::VCmpxGtU32; break;
 		case 0xd5: inst.type = ShaderInstructionType::VCmpxNeU32; break;
 		case 0xd6: inst.type = ShaderInstructionType::VCmpxGeU32; break;
+
+		/* VOP2 using VOP3 encoding */
 		case 0x100:
 			inst.type        = ShaderInstructionType::VCndmaskB32;
 			inst.format      = ShaderInstructionFormat::VdstVsrc0Vsrc1Smask2;
@@ -1267,6 +1287,8 @@ KYTY_SHADER_PARSER(shader_parse_vop3)
 			inst.dst2.size = 2;
 			break;
 		case 0x12f: inst.type = ShaderInstructionType::VCvtPkrtzF16F32; break;
+
+		/* VOP3 instructions */
 		case 0x141: inst.type = ShaderInstructionType::VMadF32; break;
 		case 0x143: inst.type = ShaderInstructionType::VMadU32U24; break;
 		case 0x148: inst.type = ShaderInstructionType::VBfeU32; break;
@@ -1290,11 +1312,21 @@ KYTY_SHADER_PARSER(shader_parse_vop3)
 			inst.format  = ShaderInstructionFormat::SVdstSVsrc0SVsrc1;
 			inst.src_num = 2;
 			break;
-		case 0x1aa:
-			inst.type    = ShaderInstructionType::VRcpF32;
-			inst.format  = ShaderInstructionFormat::SVdstSVsrc0;
-			inst.src_num = 1;
-			break;
+
+		/* VOP1 using VOP3 encoding */
+		case 0x1a0: inst.type = ShaderInstructionType::VFractF32; break;
+		case 0x1a1: inst.type = ShaderInstructionType::VTruncF32; break;
+		case 0x1a2: inst.type = ShaderInstructionType::VCeilF32; break;
+		case 0x1a3: inst.type = ShaderInstructionType::VRndneF32; break;
+		case 0x1a4: inst.type = ShaderInstructionType::VFloorF32; break;
+		case 0x1a5: inst.type = ShaderInstructionType::VExpF32; break;
+		case 0x1a7: inst.type = ShaderInstructionType::VLogF32; break;
+		case 0x1aa: inst.type = ShaderInstructionType::VRcpF32; break;
+		case 0x1ae: inst.type = ShaderInstructionType::VRsqF32; break;
+		case 0x1b3: inst.type = ShaderInstructionType::VSqrtF32; break;
+		case 0x1b5: inst.type = ShaderInstructionType::VSinF32; break;
+		case 0x1b6: inst.type = ShaderInstructionType::VCosF32; break;
+
 		default:
 			printf("%s", dst->DbgDump().C_Str());
 			EXIT("unknown vop3 opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 " (hash0 = 0x%08" PRIx32 ")\n", opcode, pc, dst->GetHash0());

@@ -3578,6 +3578,41 @@ KYTY_RECOMPILER_FUNC(Recompile_SCbranchScc0_Label)
 	return true;
 }
 
+KYTY_RECOMPILER_FUNC(Recompile_SCbranchScc1_Label)
+{
+	const auto& inst = code.GetInstructions().At(index);
+
+	EXIT_NOT_IMPLEMENTED(!operand_is_constant(inst.src[0]));
+
+	auto label = ShaderLabel(inst);
+
+	// TODO(): analyze control flow graph
+	bool discard = code.IsDiscardBlock(label.GetDst());
+
+	String label_str = label.ToString();
+
+	static const char32_t* text_variant_a = UR"(
+        %scc_u_<index> = OpLoad %uint %scc
+        %scc_b_<index> = OpIEqual %bool %scc_u_<index> %uint_1
+               OpSelectionMerge %<label> None
+               OpBranchConditional %scc_b_<index> %<label> %t230_<index>
+        %t230_<index> = OpLabel
+)";
+	static const char32_t* text_variant_b = UR"(
+        %scc_u_<index> = OpLoad %uint %scc
+        %scc_b_<index> = OpIEqual %bool %scc_u_<index> %uint_1
+               OpSelectionMerge %t230_<index> None
+               OpBranchConditional %scc_b_<index> %<label> %t230_<index>
+        %t230_<index> = OpLabel
+)";
+
+	*dst_source += String(discard ? text_variant_b : text_variant_a)
+	                   .ReplaceStr(U"<index>", String::FromPrintf("%u", index))
+	                   .ReplaceStr(U"<label>", label_str);
+
+	return true;
+}
+
 KYTY_RECOMPILER_FUNC(Recompile_SCbranchVccz_Label)
 {
 	const auto& inst = code.GetInstructions().At(index);
@@ -5387,6 +5422,7 @@ static RecompilerFunc g_recomp_func[] = {
 
     {Recompile_SCbranchExecz_Label,                        ShaderInstructionType::SCbranchExecz,       ShaderInstructionFormat::Label,                          {U""}},
     {Recompile_SCbranchScc0_Label,                         ShaderInstructionType::SCbranchScc0,        ShaderInstructionFormat::Label,                          {U""}},
+	{Recompile_SCbranchScc1_Label,                         ShaderInstructionType::SCbranchScc1,        ShaderInstructionFormat::Label,                          {U""}},
     {Recompile_SCbranchVccz_Label,                         ShaderInstructionType::SCbranchVccz,        ShaderInstructionFormat::Label,                          {U""}},
 
     {Recompile_SEndpgm_Empty,                              ShaderInstructionType::SEndpgm,             ShaderInstructionFormat::Empty,                          {U""}},

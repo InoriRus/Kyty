@@ -812,7 +812,7 @@ bool GpuMemory::create_maybe_deleted(const Vector<OverlappedBlock>& others, GpuM
 {
 	auto& heap = m_heaps[heap_id];
 
-	if (type == GpuMemoryObjectType::IndexBuffer)
+	if (type == GpuMemoryObjectType::VertexBuffer || type == GpuMemoryObjectType::IndexBuffer)
 	{
 		return std::all_of(others.begin(), others.end(),
 		                   [heap](auto& r)
@@ -821,19 +821,7 @@ bool GpuMemory::create_maybe_deleted(const Vector<OverlappedBlock>& others, GpuM
 			                   const auto&         o      = heap.objects[r.object_id];
 			                   GpuMemoryObjectType o_type = o.info.object.type;
 			                   return ((rel == OverlapType::IsContainedWithin || rel == OverlapType::Crosses) &&
-			                           o_type == GpuMemoryObjectType::IndexBuffer);
-		                   });
-	}
-	if (type == GpuMemoryObjectType::VertexBuffer)
-	{
-		return std::all_of(others.begin(), others.end(),
-		                   [heap](auto& r)
-		                   {
-			                   OverlapType         rel    = r.relation;
-			                   const auto&         o      = heap.objects[r.object_id];
-			                   GpuMemoryObjectType o_type = o.info.object.type;
-			                   return ((rel == OverlapType::IsContainedWithin || rel == OverlapType::Crosses) &&
-			                           o_type == GpuMemoryObjectType::VertexBuffer);
+			                           (o_type == GpuMemoryObjectType::VertexBuffer || o_type == GpuMemoryObjectType::IndexBuffer));
 		                   });
 	}
 	if (type == GpuMemoryObjectType::Texture)
@@ -974,9 +962,15 @@ void* GpuMemory::CreateObject(uint64_t submit_id, GraphicContext* ctx, CommandBu
 				case ObjectsRelation(GpuMemoryObjectType::IndexBuffer, OverlapType::Crosses, GpuMemoryObjectType::IndexBuffer):
 				case ObjectsRelation(GpuMemoryObjectType::IndexBuffer, OverlapType::Contains, GpuMemoryObjectType::IndexBuffer):
 				case ObjectsRelation(GpuMemoryObjectType::IndexBuffer, OverlapType::IsContainedWithin, GpuMemoryObjectType::IndexBuffer):
+				case ObjectsRelation(GpuMemoryObjectType::IndexBuffer, OverlapType::Crosses, GpuMemoryObjectType::VertexBuffer):
+				case ObjectsRelation(GpuMemoryObjectType::IndexBuffer, OverlapType::Contains, GpuMemoryObjectType::VertexBuffer):
+				case ObjectsRelation(GpuMemoryObjectType::IndexBuffer, OverlapType::IsContainedWithin, GpuMemoryObjectType::VertexBuffer):
 				case ObjectsRelation(GpuMemoryObjectType::VertexBuffer, OverlapType::Crosses, GpuMemoryObjectType::VertexBuffer):
 				case ObjectsRelation(GpuMemoryObjectType::VertexBuffer, OverlapType::Contains, GpuMemoryObjectType::VertexBuffer):
 				case ObjectsRelation(GpuMemoryObjectType::VertexBuffer, OverlapType::IsContainedWithin, GpuMemoryObjectType::VertexBuffer):
+				case ObjectsRelation(GpuMemoryObjectType::VertexBuffer, OverlapType::Crosses, GpuMemoryObjectType::IndexBuffer):
+				case ObjectsRelation(GpuMemoryObjectType::VertexBuffer, OverlapType::Contains, GpuMemoryObjectType::IndexBuffer):
+				case ObjectsRelation(GpuMemoryObjectType::VertexBuffer, OverlapType::IsContainedWithin, GpuMemoryObjectType::IndexBuffer):
 				case ObjectsRelation(GpuMemoryObjectType::Texture, OverlapType::Crosses, GpuMemoryObjectType::Texture):
 				case ObjectsRelation(GpuMemoryObjectType::Texture, OverlapType::Contains, GpuMemoryObjectType::Texture):
 				case ObjectsRelation(GpuMemoryObjectType::Texture, OverlapType::IsContainedWithin, GpuMemoryObjectType::Texture):

@@ -145,13 +145,12 @@ static void update_func(GraphicContext* ctx, const uint64_t* params, void* obj, 
 
 	EXIT_NOT_IMPLEMENTED(tile != 8 && tile != 13);
 
-	uint32_t level_sizes[16];
+	TileSizeOffset level_sizes[16];
 
-	TileGetTextureSize(dfmt, nfmt, width, height, pitch, levels, tile, neo, nullptr, level_sizes, nullptr, nullptr);
+	TileGetTextureSize(dfmt, nfmt, width, height, pitch, levels, tile, neo, nullptr, level_sizes, nullptr);
 
 	// dbg_test_mipmaps(ctx, VK_FORMAT_BC3_SRGB_BLOCK, 512, 512);
 
-	uint32_t offset     = 0;
 	uint32_t mip_width  = width;
 	uint32_t mip_height = height;
 	uint32_t mip_pitch  = pitch;
@@ -159,19 +158,17 @@ static void update_func(GraphicContext* ctx, const uint64_t* params, void* obj, 
 	Vector<BufferImageCopy> regions(levels);
 	for (uint32_t i = 0; i < levels; i++)
 	{
-		EXIT_NOT_IMPLEMENTED(level_sizes[i] == 0);
+		EXIT_NOT_IMPLEMENTED(level_sizes[i].size == 0);
 
 		auto mipmap_offset = UtilCalcMipmapOffset(i, width, height);
 
-		regions[i].offset    = offset;
+		regions[i].offset    = level_sizes[i].offset;
 		regions[i].width     = mip_width;
 		regions[i].height    = mip_height;
 		regions[i].pitch     = mip_pitch;
 		regions[i].dst_level = 0;
 		regions[i].dst_x     = mipmap_offset.first;
 		regions[i].dst_y     = mipmap_offset.second;
-
-		offset += level_sizes[i];
 
 		if (mip_width > 1)
 		{

@@ -41,7 +41,7 @@ public:
 	}
 
 	// NOLINTNEXTLINE(google-explicit-constructor,hicpp-explicit-conversions)
-	operator Type const *() const { return &m_ptr[0]; }
+	operator Type const*() const { return &m_ptr[0]; }
 
 	// NOLINTNEXTLINE(google-explicit-constructor,hicpp-explicit-conversions)
 	operator Type*() { return &m_ptr[0]; }
@@ -111,7 +111,7 @@ public:
 	}
 
 	// NOLINTNEXTLINE(google-explicit-constructor,hicpp-explicit-conversions)
-	operator Type const *() const { return &m_ptr[0][0]; }
+	operator Type const*() const { return &m_ptr[0][0]; }
 
 	// NOLINTNEXTLINE(google-explicit-constructor,hicpp-explicit-conversions)
 	operator Type*() { return &m_ptr[0][0]; }
@@ -181,7 +181,7 @@ public:
 	}
 
 	// NOLINTNEXTLINE(google-explicit-constructor,hicpp-explicit-conversions)
-	operator Type const *() const { return &m_ptr[0][0][0]; }
+	operator Type const*() const { return &m_ptr[0][0][0]; }
 
 	// NOLINTNEXTLINE(google-explicit-constructor,hicpp-explicit-conversions)
 	operator Type*() { return &m_ptr[0][0][0]; }
@@ -207,8 +207,8 @@ public:
 	using iterator       = Array2<Type, Num2, Num3>*;
 	using const_iterator = const Array2<Type, Num2, Num3>*;
 
-	iterator begin() { return &m_ptr[0]; }                             // NOLINT(readability-identifier-naming)
-	iterator end() { return &m_ptr[Num1]; }                            // NOLINT(readability-identifier-naming)
+	iterator                     begin() { return &m_ptr[0]; }         // NOLINT(readability-identifier-naming)
+	iterator                     end() { return &m_ptr[Num1]; }        // NOLINT(readability-identifier-naming)
 	[[nodiscard]] const_iterator begin() const { return &m_ptr[0]; }   // NOLINT(readability-identifier-naming)
 	[[nodiscard]] const_iterator end() const { return &m_ptr[Num1]; }  // NOLINT(readability-identifier-naming)
 	[[nodiscard]] const_iterator cbegin() const { return &m_ptr[0]; }  // NOLINT(readability-identifier-naming)
@@ -220,6 +220,6 @@ private:
 
 } // namespace Kyty::Core
 
-#define KYTY_ARRAY_NUM(a) ((int)(sizeof((a)) / sizeof((a)[0])))
+//#define KYTY_ARRAY_NUM(a) ((int)(sizeof((a)) / sizeof((a)[0])))
 
 #endif /* INCLUDE_KYTY_CORE_ARRAYWRAPPER_H_ */
