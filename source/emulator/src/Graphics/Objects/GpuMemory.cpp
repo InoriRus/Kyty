@@ -836,6 +836,18 @@ bool GpuMemory::create_maybe_deleted(const Vector<OverlappedBlock>& others, GpuM
 			                           o_type == GpuMemoryObjectType::Texture);
 		                   });
 	}
+	if (type == GpuMemoryObjectType::RenderTexture)
+	{
+		return std::all_of(others.begin(), others.end(),
+		                   [heap](auto& r)
+		                   {
+			                   OverlapType         rel    = r.relation;
+			                   const auto&         o      = heap.objects[r.object_id];
+			                   GpuMemoryObjectType o_type = o.info.object.type;
+			                   return ((rel == OverlapType::IsContainedWithin || rel == OverlapType::Crosses) &&
+			                           (o_type == GpuMemoryObjectType::RenderTexture || o_type == GpuMemoryObjectType::DepthStencilBuffer));
+		                   });
+	}
 	return false;
 }
 

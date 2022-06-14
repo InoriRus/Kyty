@@ -13,6 +13,7 @@ namespace Kyty::Libs::Graphics {
 enum class RenderTextureFormat : uint64_t
 {
 	Unknown,
+	R8Unorm,
 	R8G8B8A8Unorm,
 	R8G8B8A8Srgb,
 	B8G8R8A8Unorm,

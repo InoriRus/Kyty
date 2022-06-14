@@ -476,46 +476,50 @@ static void uc_print(const char* func, const HW::UserConfig& uc)
 //	EXIT_NOT_IMPLEMENTED(uc.GetPrimType() != 4);
 //}
 
-static void rt_print(const char* func, const HW::RenderTarget& rt)
+static Core::StringList rt_print(const char* func, const HW::RenderTarget& rt)
 {
-	printf("%s\n", func);
+	Core::StringList dst;
 
-	printf("\t base.addr                       = 0x%016" PRIx64 "\n", rt.base.addr);
-	printf("\t pitch.pitch_div8_minus1         = 0x%08" PRIx32 "\n", rt.pitch.pitch_div8_minus1);
-	printf("\t pitch.fmask_pitch_div8_minus1   = 0x%08" PRIx32 "\n", rt.pitch.fmask_pitch_div8_minus1);
-	printf("\t slice.slice_div64_minus1        = 0x%08" PRIx32 "\n", rt.slice.slice_div64_minus1);
-	printf("\t view.base_array_slice_index     = 0x%08" PRIx32 "\n", rt.view.base_array_slice_index);
-	printf("\t view.last_array_slice_index     = 0x%08" PRIx32 "\n", rt.view.last_array_slice_index);
-	printf("\t info.fmask_compression_enable   = %s\n", rt.info.fmask_compression_enable ? "true" : "false");
-	printf("\t info.fmask_compression_mode     = 0x%08" PRIx32 "\n", rt.info.fmask_compression_mode);
-	printf("\t info.cmask_fast_clear_enable    = %s\n", rt.info.cmask_fast_clear_enable ? "true" : "false");
-	printf("\t info.dcc_compression_enable     = %s\n", rt.info.dcc_compression_enable ? "true" : "false");
-	printf("\t info.neo_mode                   = %s\n", rt.info.neo_mode ? "true" : "false");
-	printf("\t info.cmask_tile_mode            = 0x%08" PRIx32 "\n", rt.info.cmask_tile_mode);
-	printf("\t info.cmask_tile_mode_neo        = 0x%08" PRIx32 "\n", rt.info.cmask_tile_mode_neo);
-	printf("\t info.format                     = 0x%08" PRIx32 "\n", rt.info.format);
-	printf("\t info.channel_type               = 0x%08" PRIx32 "\n", rt.info.channel_type);
-	printf("\t info.channel_order              = 0x%08" PRIx32 "\n", rt.info.channel_order);
-	printf("\t attrib.force_dest_alpha_to_one  = %s\n", rt.attrib.force_dest_alpha_to_one ? "true" : "false");
-	printf("\t attrib.tile_mode                = 0x%08" PRIx32 "\n", rt.attrib.tile_mode);
-	printf("\t attrib.fmask_tile_mode          = 0x%08" PRIx32 "\n", rt.attrib.fmask_tile_mode);
-	printf("\t attrib.num_samples              = 0x%08" PRIx32 "\n", rt.attrib.num_samples);
-	printf("\t attrib.num_fragments            = 0x%08" PRIx32 "\n", rt.attrib.num_fragments);
-	printf("\t dcc.max_uncompressed_block_size = 0x%08" PRIx32 "\n", rt.dcc.max_uncompressed_block_size);
-	printf("\t dcc.max_compressed_block_size   = 0x%08" PRIx32 "\n", rt.dcc.max_compressed_block_size);
-	printf("\t dcc.min_compressed_block_size   = 0x%08" PRIx32 "\n", rt.dcc.min_compressed_block_size);
-	printf("\t dcc.color_transform             = 0x%08" PRIx32 "\n", rt.dcc.color_transform);
-	printf("\t dcc.enable_overwrite_combiner   = %s\n", rt.dcc.enable_overwrite_combiner ? "true" : "false");
-	printf("\t dcc.force_independent_blocks    = %s\n", rt.dcc.force_independent_blocks ? "true" : "false");
-	printf("\t cmask.addr                      = 0x%016" PRIx64 "\n", rt.cmask.addr);
-	printf("\t cmask_slice.slice_minus1        = 0x%08" PRIx32 "\n", rt.cmask_slice.slice_minus1);
-	printf("\t fmask.addr                      = 0x%016" PRIx64 "\n", rt.fmask.addr);
-	printf("\t fmask_slice.slice_minus1        = 0x%08" PRIx32 "\n", rt.fmask_slice.slice_minus1);
-	printf("\t clear_word0.word0               = 0x%08" PRIx32 "\n", rt.clear_word0.word0);
-	printf("\t clear_word1.word1               = 0x%08" PRIx32 "\n", rt.clear_word1.word1);
-	printf("\t dcc_addr.addr                   = 0x%016" PRIx64 "\n", rt.dcc_addr.addr);
-	printf("\t size.width                      = 0x%08" PRIx32 "\n", rt.size.width);
-	printf("\t size.height                     = 0x%08" PRIx32 "\n", rt.size.height);
+	dst.Add(String::FromPrintf("%s\n", func));
+
+	dst.Add(String::FromPrintf("\t base.addr                       = 0x%016" PRIx64 "\n", rt.base.addr));
+	dst.Add(String::FromPrintf("\t pitch.pitch_div8_minus1         = 0x%08" PRIx32 "\n", rt.pitch.pitch_div8_minus1));
+	dst.Add(String::FromPrintf("\t pitch.fmask_pitch_div8_minus1   = 0x%08" PRIx32 "\n", rt.pitch.fmask_pitch_div8_minus1));
+	dst.Add(String::FromPrintf("\t slice.slice_div64_minus1        = 0x%08" PRIx32 "\n", rt.slice.slice_div64_minus1));
+	dst.Add(String::FromPrintf("\t view.base_array_slice_index     = 0x%08" PRIx32 "\n", rt.view.base_array_slice_index));
+	dst.Add(String::FromPrintf("\t view.last_array_slice_index     = 0x%08" PRIx32 "\n", rt.view.last_array_slice_index));
+	dst.Add(String::FromPrintf("\t info.fmask_compression_enable   = %s\n", rt.info.fmask_compression_enable ? "true" : "false"));
+	dst.Add(String::FromPrintf("\t info.fmask_compression_mode     = 0x%08" PRIx32 "\n", rt.info.fmask_compression_mode));
+	dst.Add(String::FromPrintf("\t info.cmask_fast_clear_enable    = %s\n", rt.info.cmask_fast_clear_enable ? "true" : "false"));
+	dst.Add(String::FromPrintf("\t info.dcc_compression_enable     = %s\n", rt.info.dcc_compression_enable ? "true" : "false"));
+	dst.Add(String::FromPrintf("\t info.neo_mode                   = %s\n", rt.info.neo_mode ? "true" : "false"));
+	dst.Add(String::FromPrintf("\t info.cmask_tile_mode            = 0x%08" PRIx32 "\n", rt.info.cmask_tile_mode));
+	dst.Add(String::FromPrintf("\t info.cmask_tile_mode_neo        = 0x%08" PRIx32 "\n", rt.info.cmask_tile_mode_neo));
+	dst.Add(String::FromPrintf("\t info.format                     = 0x%08" PRIx32 "\n", rt.info.format));
+	dst.Add(String::FromPrintf("\t info.channel_type               = 0x%08" PRIx32 "\n", rt.info.channel_type));
+	dst.Add(String::FromPrintf("\t info.channel_order              = 0x%08" PRIx32 "\n", rt.info.channel_order));
+	dst.Add(String::FromPrintf("\t attrib.force_dest_alpha_to_one  = %s\n", rt.attrib.force_dest_alpha_to_one ? "true" : "false"));
+	dst.Add(String::FromPrintf("\t attrib.tile_mode                = 0x%08" PRIx32 "\n", rt.attrib.tile_mode));
+	dst.Add(String::FromPrintf("\t attrib.fmask_tile_mode          = 0x%08" PRIx32 "\n", rt.attrib.fmask_tile_mode));
+	dst.Add(String::FromPrintf("\t attrib.num_samples              = 0x%08" PRIx32 "\n", rt.attrib.num_samples));
+	dst.Add(String::FromPrintf("\t attrib.num_fragments            = 0x%08" PRIx32 "\n", rt.attrib.num_fragments));
+	dst.Add(String::FromPrintf("\t dcc.max_uncompressed_block_size = 0x%08" PRIx32 "\n", rt.dcc.max_uncompressed_block_size));
+	dst.Add(String::FromPrintf("\t dcc.max_compressed_block_size   = 0x%08" PRIx32 "\n", rt.dcc.max_compressed_block_size));
+	dst.Add(String::FromPrintf("\t dcc.min_compressed_block_size   = 0x%08" PRIx32 "\n", rt.dcc.min_compressed_block_size));
+	dst.Add(String::FromPrintf("\t dcc.color_transform             = 0x%08" PRIx32 "\n", rt.dcc.color_transform));
+	dst.Add(String::FromPrintf("\t dcc.enable_overwrite_combiner   = %s\n", rt.dcc.enable_overwrite_combiner ? "true" : "false"));
+	dst.Add(String::FromPrintf("\t dcc.force_independent_blocks    = %s\n", rt.dcc.force_independent_blocks ? "true" : "false"));
+	dst.Add(String::FromPrintf("\t cmask.addr                      = 0x%016" PRIx64 "\n", rt.cmask.addr));
+	dst.Add(String::FromPrintf("\t cmask_slice.slice_minus1        = 0x%08" PRIx32 "\n", rt.cmask_slice.slice_minus1));
+	dst.Add(String::FromPrintf("\t fmask.addr                      = 0x%016" PRIx64 "\n", rt.fmask.addr));
+	dst.Add(String::FromPrintf("\t fmask_slice.slice_minus1        = 0x%08" PRIx32 "\n", rt.fmask_slice.slice_minus1));
+	dst.Add(String::FromPrintf("\t clear_word0.word0               = 0x%08" PRIx32 "\n", rt.clear_word0.word0));
+	dst.Add(String::FromPrintf("\t clear_word1.word1               = 0x%08" PRIx32 "\n", rt.clear_word1.word1));
+	dst.Add(String::FromPrintf("\t dcc_addr.addr                   = 0x%016" PRIx64 "\n", rt.dcc_addr.addr));
+	dst.Add(String::FromPrintf("\t size.width                      = 0x%08" PRIx32 "\n", rt.size.width));
+	dst.Add(String::FromPrintf("\t size.height                     = 0x%08" PRIx32 "\n", rt.size.height));
+
+	return dst;
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
@@ -1039,22 +1043,26 @@ static void hw_print(const HW::HardwareContext& hw)
 	const auto& aa   = hw.GetAaSampleControl();
 	const auto& ac   = hw.GetAaConfig();
 
-	printf("HardwareContext\n");
-	printf("\t GetRenderTargetMask()   = 0x%08" PRIx32 "\n", hw.GetRenderTargetMask());
-	printf("\t GetDepthClearValue()    = %f\n", hw.GetDepthClearValue());
-	printf("\t GetStencilClearValue()  = %" PRIu8 "\n", hw.GetStencilClearValue());
-	printf("\t GetLineWidth()          = %f\n", hw.GetLineWidth());
+	if (Kyty::Log::GetDirection() != Kyty::Log::Direction::Silent)
+	{
+		printf("HardwareContext\n");
+		printf("\t GetRenderTargetMask()   = 0x%08" PRIx32 "\n", hw.GetRenderTargetMask());
+		printf("\t GetDepthClearValue()    = %f\n", hw.GetDepthClearValue());
+		printf("\t GetStencilClearValue()  = %" PRIu8 "\n", hw.GetStencilClearValue());
+		printf("\t GetLineWidth()          = %f\n", hw.GetLineWidth());
 
-	rt_print("RenderTraget:", rt);
-	z_print("DepthRenderTraget:", z);
-	vp_print("ScreenViewport:", vp, smc);
-	clip_print("ClipControl:", c);
-	rc_print("RenderControl:", rc);
-	d_print("DepthStencilControlMask:", d, s, sm);
-	mc_print("ModeControl:", mc);
-	bc_print("BlendColorControl:", bc, bclr, cc);
-	eqaa_print("EqaaControl:", eqaa);
-	aa_print("AaSampleControl:", aa, ac);
+		printf("%s", rt_print("RenderTraget:", rt).Concat(U"").C_Str());
+
+		z_print("DepthRenderTraget:", z);
+		vp_print("ScreenViewport:", vp, smc);
+		clip_print("ClipControl:", c);
+		rc_print("RenderControl:", rc);
+		d_print("DepthStencilControlMask:", d, s, sm);
+		mc_print("ModeControl:", mc);
+		bc_print("BlendColorControl:", bc, bclr, cc);
+		eqaa_print("EqaaControl:", eqaa);
+		aa_print("AaSampleControl:", aa, ac);
+	}
 }
 
 void GraphicsRenderInit()
@@ -3828,9 +3836,12 @@ static void FindRenderColorInfo(uint64_t submit_id, CommandBuffer* buffer, const
 		} else if (rt.info.format == 0xa && rt.info.channel_type == 0x6 && rt.info.channel_order == 0x1)
 		{
 			rt_format = RenderTextureFormat::B8G8R8A8Srgb;
+		} else if (rt.info.format == 0x1 && rt.info.channel_type == 0x0 && rt.info.channel_order == 0x0)
+		{
+			rt_format = RenderTextureFormat::R8Unorm;
 		} else
 		{
-			EXIT("unknown format");
+			EXIT("%s\n unknown format\n", rt_print("RenderTarget", rt).Concat(U"").C_Str());
 		}
 
 		// Render to texture

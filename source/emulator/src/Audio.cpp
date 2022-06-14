@@ -1128,9 +1128,12 @@ static void playback_simulate(void* arg)
 
 		EXIT_IF(play_data == nullptr);
 
-		// TODO(): Audio output is not yet implemented, so simulate audio delay
-		Core::Thread::SleepMicro(port->data_delay);
-		play_data->state = Audio3dData::State::Empty;
+		if (play_data != nullptr)
+		{
+			// TODO(): Audio output is not yet implemented, so simulate audio delay
+			Core::Thread::SleepMicro(port->data_delay);
+			play_data->state = Audio3dData::State::Empty;
+		}
 	}
 
 	port->playback_finished = true;

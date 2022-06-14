@@ -6,9 +6,9 @@
 #include "Kyty/Core/Vector.h"
 
 #include "Emulator/Common.h"
+#include "Emulator/Graphics/Shader.h"
 
 #include <algorithm>
-
 #ifdef KYTY_EMU_ENABLED
 
 namespace Kyty::Libs::Graphics {
@@ -57,6 +57,7 @@ enum class ShaderInstructionType
 	SAndn2B64,
 	SAndSaveexecB64,
 	SBfmB32,
+	SBranch,
 	SBufferLoadDword,
 	SBufferLoadDwordx16,
 	SBufferLoadDwordx2,
@@ -66,6 +67,7 @@ enum class ShaderInstructionType
 	SCbranchScc0,
 	SCbranchScc1,
 	SCbranchVccz,
+	SCbranchVccnz,
 	SCmpEqI32,
 	SCmpEqU32,
 	SCmpGeI32,
@@ -260,6 +262,7 @@ enum FormatByte : uint64_t
 	Dmask8, // dmask:0x8
 	Dmask3, // dmask:0x3
 	Dmask5, // dmask:0x5
+	Dmask9, // dmask:0x9
 	Gds,    // gds
 };
 
@@ -308,6 +311,7 @@ enum Format : uint64_t
 	Vdata1VaddrSvSoffsIdxenFloat1       = FormatDefine({D, S0, S1A4, S2, Idxen, Float1}),
 	Vdata2Vaddr3StSsDmask3              = FormatDefine({DA2, S0A3, S1A8, S2A4, Dmask3}),
 	Vdata2Vaddr3StSsDmask5              = FormatDefine({DA2, S0A3, S1A8, S2A4, Dmask5}),
+	Vdata2Vaddr3StSsDmask9              = FormatDefine({DA2, S0A3, S1A8, S2A4, Dmask9}),
 	Vdata2VaddrSvSoffsIdxen             = FormatDefine({DA2, S0, S1A4, S2, Idxen}),
 	Vdata3Vaddr3StSsDmask7              = FormatDefine({DA3, S0A3, S1A8, S2A4, Dmask7}),
 	Vdata3Vaddr4StSsDmask7              = FormatDefine({DA3, S0A4, S1A8, S2A4, Dmask7}),
@@ -418,6 +422,14 @@ struct ShaderDebugPrintf
 	Vector<ShaderOperand> args;
 };
 
+struct ShaderControlFlowBlock
+{
+	uint32_t          pc         = 0;
+	bool              is_discard = false;
+	bool              is_valid   = false;
+	ShaderInstruction last;
+};
+
 class ShaderCode
 {
 public:
@@ -455,9 +467,11 @@ public:
 	[[nodiscard]] uint32_t GetPsEmbeddedId() const { return m_ps_embedded_id; }
 	void                   SetPsEmbeddedId(uint32_t embedded_id) { m_ps_embedded_id = embedded_id; }
 
-	[[nodiscard]] bool                      IsDiscardBlock(uint32_t pc) const;
-	[[nodiscard]] bool                      IsDiscardInstruction(uint32_t index) const;
-	[[nodiscard]] Vector<ShaderInstruction> GetDiscardBlock(uint32_t pc) const;
+	//[[nodiscard]] bool                      IsDiscardBlock(uint32_t pc) const;
+	//[[nodiscard]] bool                      IsDiscardInstruction(uint32_t index) const;
+	//[[nodiscard]] Vector<ShaderInstruction> GetDiscardBlock(uint32_t pc) const;
+	[[nodiscard]] ShaderControlFlowBlock    ReadBlock(uint32_t pc) const;
+	[[nodiscard]] Vector<ShaderInstruction> ReadIntructions(const ShaderControlFlowBlock& block) const;
 
 	[[nodiscard]] uint32_t GetCrc32() const { return m_crc32; }
 	void                   SetCrc32(uint32_t c) { this->m_crc32 = c; }

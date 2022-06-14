@@ -229,6 +229,7 @@ static String dbg_fmt_to_str(const ShaderInstruction& inst)
 		case ShaderInstructionFormat::Vdata1Vaddr3StSsDmask8: return U"Vdata1Vaddr3StSsDmask8"; break;
 		case ShaderInstructionFormat::Vdata2Vaddr3StSsDmask3: return U"Vdata2Vaddr3StSsDmask3"; break;
 		case ShaderInstructionFormat::Vdata2Vaddr3StSsDmask5: return U"Vdata2Vaddr3StSsDmask5"; break;
+		case ShaderInstructionFormat::Vdata2Vaddr3StSsDmask9: return U"Vdata2Vaddr3StSsDmask9"; break;
 		case ShaderInstructionFormat::Vdata3Vaddr3StSsDmask7: return U"Vdata3Vaddr3StSsDmask7"; break;
 		case ShaderInstructionFormat::Vdata3Vaddr4StSsDmask7: return U"Vdata3Vaddr4StSsDmask7"; break;
 		case ShaderInstructionFormat::Vdata4Vaddr3StSsDmaskF: return U"Vdata4Vaddr3StSsDmaskF"; break;
@@ -311,6 +312,7 @@ static String dbg_fmt_print(const ShaderInstruction& inst)
 			case ShaderInstructionFormat::Dmask3: s = U"dmask:0x3"; break;
 			case ShaderInstructionFormat::Dmask5: s = U"dmask:0x5"; break;
 			case ShaderInstructionFormat::Dmask7: s = U"dmask:0x7"; break;
+			case ShaderInstructionFormat::Dmask9: s = U"dmask:0x9"; break;
 			case ShaderInstructionFormat::DmaskF: s = U"dmask:0xf"; break;
 			case ShaderInstructionFormat::Gds: s = U"gds"; break;
 			default: EXIT("unknown code: %u\n", static_cast<uint32_t>(fu));
@@ -385,13 +387,13 @@ String ShaderCode::DbgDump() const
 	return ret;
 }
 
-bool ShaderCode::IsDiscardInstruction(uint32_t index) const
+static bool IsDiscardInstruction(const Vector<ShaderInstruction>& code, uint32_t index)
 {
-	if (!(index == 0 || index + 1 >= m_instructions.Size()))
+	if (!(index == 0 || index + 1 >= code.Size()))
 	{
-		const auto& prev_inst = m_instructions.At(index - 1);
-		const auto& inst      = m_instructions.At(index);
-		const auto& next_inst = m_instructions.At(index + 1);
+		const auto& prev_inst = code.At(index - 1);
+		const auto& inst      = code.At(index);
+		const auto& next_inst = code.At(index + 1);
 
 		return (inst.type == ShaderInstructionType::Exp && inst.format == ShaderInstructionFormat::Mrt0OffOffComprVmDone &&
 		        prev_inst.type == ShaderInstructionType::SMovB64 && prev_inst.format == ShaderInstructionFormat::Sdst2Ssrc02 &&
@@ -401,37 +403,72 @@ bool ShaderCode::IsDiscardInstruction(uint32_t index) const
 	return false;
 }
 
-bool ShaderCode::IsDiscardBlock(uint32_t pc) const
+// bool ShaderCode::IsDiscardBlock(uint32_t pc) const
+//{
+//	auto inst_count = m_instructions.Size();
+//	for (uint32_t index = 0; index < inst_count; index++)
+//	{
+//		const auto& inst = m_instructions.At(index);
+//		if (inst.pc == pc)
+//		{
+//			for (uint32_t i = index; i < inst_count; i++)
+//			{
+//				const auto& inst = m_instructions.At(i);
+//
+//				if (inst.type == ShaderInstructionType::SEndpgm || inst.type == ShaderInstructionType::SCbranchExecz ||
+//				    inst.type == ShaderInstructionType::SCbranchScc0 || inst.type == ShaderInstructionType::SCbranchScc1 ||
+//				    inst.type == ShaderInstructionType::SCbranchVccz)
+//				{
+//					return false;
+//				}
+//
+//				if (IsDiscardInstruction(i))
+//				{
+//					return true;
+//				}
+//			}
+//			return false;
+//		}
+//	}
+//	return false;
+// }
+
+ShaderControlFlowBlock ShaderCode::ReadBlock(uint32_t pc) const
 {
-	auto inst_count = m_instructions.Size();
+	ShaderControlFlowBlock ret;
+	auto                   inst_count = m_instructions.Size();
 	for (uint32_t index = 0; index < inst_count; index++)
 	{
 		const auto& inst = m_instructions.At(index);
 		if (inst.pc == pc)
 		{
+			ret.pc       = pc;
+			ret.is_valid = true;
 			for (uint32_t i = index; i < inst_count; i++)
 			{
 				const auto& inst = m_instructions.At(i);
 
 				if (inst.type == ShaderInstructionType::SEndpgm || inst.type == ShaderInstructionType::SCbranchExecz ||
 				    inst.type == ShaderInstructionType::SCbranchScc0 || inst.type == ShaderInstructionType::SCbranchScc1 ||
-				    inst.type == ShaderInstructionType::SCbranchVccz)
+				    inst.type == ShaderInstructionType::SCbranchVccz || inst.type == ShaderInstructionType::SCbranchVccnz ||
+				    inst.type == ShaderInstructionType::SBranch)
 				{
-					return false;
+					ret.last = inst;
+					break;
 				}
 
-				if (IsDiscardInstruction(i))
+				if (IsDiscardInstruction(m_instructions, i))
 				{
-					return true;
+					ret.is_discard = true;
 				}
 			}
-			return false;
+			break;
 		}
 	}
-	return false;
+	return ret;
 }
 
-Vector<ShaderInstruction> ShaderCode::GetDiscardBlock(uint32_t pc) const
+Vector<ShaderInstruction> ShaderCode::ReadIntructions(const ShaderControlFlowBlock& block) const
 {
 	Vector<ShaderInstruction> ret;
 
@@ -439,7 +476,7 @@ Vector<ShaderInstruction> ShaderCode::GetDiscardBlock(uint32_t pc) const
 	for (uint32_t index = 0; index < inst_count; index++)
 	{
 		const auto& inst = m_instructions.At(index);
-		if (inst.pc == pc)
+		if (inst.pc == block.pc)
 		{
 			for (uint32_t i = index; i < inst_count; i++)
 			{
@@ -447,9 +484,8 @@ Vector<ShaderInstruction> ShaderCode::GetDiscardBlock(uint32_t pc) const
 
 				ret.Add(inst);
 
-				if (IsDiscardInstruction(i))
+				if (inst.pc == block.last.pc)
 				{
-					ret.Add(m_instructions.At(i + 1));
 					break;
 				}
 			}
@@ -459,6 +495,35 @@ Vector<ShaderInstruction> ShaderCode::GetDiscardBlock(uint32_t pc) const
 
 	return ret;
 }
+
+// Vector<ShaderInstruction> ShaderCode::GetDiscardBlock(uint32_t pc) const
+//{
+//	Vector<ShaderInstruction> ret;
+//
+//	auto inst_count = m_instructions.Size();
+//	for (uint32_t index = 0; index < inst_count; index++)
+//	{
+//		const auto& inst = m_instructions.At(index);
+//		if (inst.pc == pc)
+//		{
+//			for (uint32_t i = index; i < inst_count; i++)
+//			{
+//				const auto& inst = m_instructions.At(i);
+//
+//				ret.Add(inst);
+//
+//				if (IsDiscardInstruction(i))
+//				{
+//					ret.Add(m_instructions.At(i + 1));
+//					break;
+//				}
+//			}
+//			break;
+//		}
+//	}
+//
+//	return ret;
+// }
 
 static ShaderOperand operand_parse(uint32_t code)
 {
@@ -634,9 +699,11 @@ KYTY_SHADER_PARSER(shader_parse_sopp)
 			inst.format  = ShaderInstructionFormat::Empty;
 			inst.src_num = 0;
 			break;
+		case 0x02: inst.type = ShaderInstructionType::SBranch; break;
 		case 0x04: inst.type = ShaderInstructionType::SCbranchScc0; break;
 		case 0x05: inst.type = ShaderInstructionType::SCbranchScc1; break;
 		case 0x06: inst.type = ShaderInstructionType::SCbranchVccz; break;
+		case 0x07: inst.type = ShaderInstructionType::SCbranchVccnz; break;
 		case 0x08: inst.type = ShaderInstructionType::SCbranchExecz; break;
 		case 0x0c:
 			inst.type              = ShaderInstructionType::SWaitcnt;
@@ -653,7 +720,8 @@ KYTY_SHADER_PARSER(shader_parse_sopp)
 	dst->GetInstructions().Add(inst);
 
 	if (inst.type == ShaderInstructionType::SCbranchScc0 || inst.type == ShaderInstructionType::SCbranchScc1 ||
-	    inst.type == ShaderInstructionType::SCbranchVccz || inst.type == ShaderInstructionType::SCbranchExecz)
+	    inst.type == ShaderInstructionType::SCbranchVccz || inst.type == ShaderInstructionType::SCbranchVccnz ||
+	    inst.type == ShaderInstructionType::SCbranchExecz || inst.type == ShaderInstructionType::SBranch)
 	{
 		dst->GetLabels().Add(ShaderLabel(inst));
 	}
@@ -1775,6 +1843,12 @@ KYTY_SHADER_PARSER(shader_parse_mimg)
 				{
 					inst.format   = ShaderInstructionFormat::Vdata1Vaddr3StSsDmask8;
 					inst.dst.size = 1;
+					break;
+				}
+				case 0x9:
+				{
+					inst.format   = ShaderInstructionFormat::Vdata2Vaddr3StSsDmask9;
+					inst.dst.size = 2;
 					break;
 				}
 				case 0xf:

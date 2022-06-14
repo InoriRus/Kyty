@@ -2049,23 +2049,14 @@ KYTY_RECOMPILER_FUNC(Recompile_Exp_Mrt0OffOffComprVmDone)
 {
 	EXIT_NOT_IMPLEMENTED(index == 0 || index + 1 >= code.GetInstructions().Size());
 
-	if (!code.IsDiscardInstruction(index))
+	const auto& prev_inst = code.GetInstructions().At(index - 1);
+	const auto& inst      = code.GetInstructions().At(index);
+	auto        block     = code.ReadBlock(prev_inst.pc);
+
+	if (!block.is_discard)
 	{
 		return false;
 	}
-
-	//	const auto& prev_inst = code.GetInstructions().At(index - 1);
-	//	const auto& inst      = code.GetInstructions().At(index);
-	//	const auto& next_inst = code.GetInstructions().At(index + 1);
-	//
-	//	if (!(prev_inst.type == ShaderInstructionType::SMovB64 && prev_inst.format == ShaderInstructionFormat::Sdst2Ssrc02 &&
-	//	      prev_inst.dst.type == ShaderOperandType::ExecLo && prev_inst.src[0].type == ShaderOperandType::IntegerInlineConstant &&
-	//	      prev_inst.src[0].constant.i == 0 && next_inst.type == ShaderInstructionType::SEndpgm))
-	//	{
-	//		return false;
-	//	}
-
-	const auto& inst = code.GetInstructions().At(index);
 
 	const auto* info = spirv->GetPsInputInfo();
 
@@ -2444,6 +2435,65 @@ KYTY_RECOMPILER_FUNC(Recompile_ImageSample_Vdata2Vaddr3StSsDmask5)
          %t47_<index> = OpLoad %float %t46_<index>
                OpStore %<dst_value0> %t47_<index>
          %t54_<index> = OpAccessChain %_ptr_Function_float %temp_v4float %uint_2
+         %t55_<index> = OpLoad %float %t54_<index>
+               OpStore %<dst_value1> %t55_<index>
+)";
+		*dst_source += String(text)
+		                   .ReplaceStr(U"<index>", String::FromPrintf("%u", index))
+		                   .ReplaceStr(U"<src0_value0>", src0_value0.value)
+		                   .ReplaceStr(U"<src0_value1>", src0_value1.value)
+		                   .ReplaceStr(U"<src0_value2>", src0_value2.value)
+		                   .ReplaceStr(U"<src1_value0>", src1_value0.value)
+		                   .ReplaceStr(U"<src2_value0>", src2_value0.value)
+		                   .ReplaceStr(U"<dst_value0>", dst_value0.value)
+		                   .ReplaceStr(U"<dst_value1>", dst_value1.value);
+
+		return true;
+	}
+
+	return false;
+}
+
+KYTY_RECOMPILER_FUNC(Recompile_ImageSample_Vdata2Vaddr3StSsDmask9)
+{
+	const auto& inst      = code.GetInstructions().At(index);
+	const auto* bind_info = spirv->GetBindInfo();
+
+	if (bind_info != nullptr && bind_info->textures2D.textures2d_sampled_num > 0 && bind_info->samplers.samplers_num > 0)
+	{
+		auto dst_value0  = operand_variable_to_str(inst.dst, 0);
+		auto dst_value1  = operand_variable_to_str(inst.dst, 1);
+		auto src0_value0 = operand_variable_to_str(inst.src[0], 0);
+		auto src0_value1 = operand_variable_to_str(inst.src[0], 1);
+		auto src0_value2 = operand_variable_to_str(inst.src[0], 2);
+		auto src1_value0 = operand_variable_to_str(inst.src[1], 0);
+		auto src2_value0 = operand_variable_to_str(inst.src[2], 0);
+
+		EXIT_NOT_IMPLEMENTED(dst_value0.type != SpirvType::Float);
+		EXIT_NOT_IMPLEMENTED(src0_value0.type != SpirvType::Float);
+		EXIT_NOT_IMPLEMENTED(src1_value0.type != SpirvType::Uint);
+		EXIT_NOT_IMPLEMENTED(src2_value0.type != SpirvType::Uint);
+
+		// TODO() check VSKIP
+		// TODO() check LOD_CLAMPED
+
+		static const char32_t* text = UR"(
+         %t24_<index> = OpLoad %uint %<src1_value0>
+         %t26_<index> = OpAccessChain %_ptr_UniformConstant_ImageS %textures2D_S %t24_<index>
+         %t27_<index> = OpLoad %ImageS %t26_<index>
+         %t33_<index> = OpLoad %uint %<src2_value0>
+         %t35_<index> = OpAccessChain %_ptr_UniformConstant_Sampler %samplers %t33_<index>
+         %t36_<index> = OpLoad %Sampler %t35_<index>
+         %t38_<index> = OpSampledImage %SampledImage %t27_<index> %t36_<index>
+         %t39_<index> = OpLoad %float %<src0_value0>
+         %t40_<index> = OpLoad %float %<src0_value1>
+         %t42_<index> = OpCompositeConstruct %v2float %t39_<index> %t40_<index>
+         %t43_<index> = OpImageSampleImplicitLod %v4float %t38_<index> %t42_<index>
+               OpStore %temp_v4float %t43_<index>
+         %t46_<index> = OpAccessChain %_ptr_Function_float %temp_v4float %uint_0
+         %t47_<index> = OpLoad %float %t46_<index>
+               OpStore %<dst_value0> %t47_<index>
+         %t54_<index> = OpAccessChain %_ptr_Function_float %temp_v4float %uint_3
          %t55_<index> = OpLoad %float %t54_<index>
                OpStore %<dst_value1> %t55_<index>
 )";
@@ -3520,22 +3570,41 @@ KYTY_RECOMPILER_FUNC(Recompile_SBufferLoadDwordx16_Sdst16SvSoffset)
 	return false;
 }
 
-KYTY_RECOMPILER_FUNC(Recompile_SCbranchExecz_Label)
+// KYTY_RECOMPILER_FUNC(Recompile_SCbranchExecz_Label)
+//{
+//	const auto& inst = code.GetInstructions().At(index);
+//
+//	EXIT_NOT_IMPLEMENTED(!operand_is_constant(inst.src[0]));
+//
+//	EXIT_NOT_IMPLEMENTED(code.ReadBlock(ShaderLabel(inst).GetDst()).is_discard);
+//
+//	String label = ShaderLabel(inst).ToString();
+//
+//	static const char32_t* text = UR"(
+//         %execz_u_<index> = OpLoad %uint %execz
+//         %execz_b_<index> = OpINotEqual %bool %execz_u_<index> %uint_0
+//                OpSelectionMerge %<label> None
+//                OpBranchConditional %execz_b_<index> %<label> %t230_<index>
+//         %t230_<index> = OpLabel
+//)";
+//
+//	*dst_source += String(text).ReplaceStr(U"<index>", String::FromPrintf("%u", index)).ReplaceStr(U"<label>", label);
+//
+//	return true;
+// }
+
+KYTY_RECOMPILER_FUNC(Recompile_SBranch_Label)
 {
 	const auto& inst = code.GetInstructions().At(index);
 
 	EXIT_NOT_IMPLEMENTED(!operand_is_constant(inst.src[0]));
 
-	EXIT_NOT_IMPLEMENTED(code.IsDiscardBlock(ShaderLabel(inst).GetDst()));
+	EXIT_NOT_IMPLEMENTED(code.ReadBlock(ShaderLabel(inst).GetDst()).is_discard);
 
 	String label = ShaderLabel(inst).ToString();
 
 	static const char32_t* text = UR"(
-        %execz_u_<index> = OpLoad %uint %execz
-        %execz_b_<index> = OpINotEqual %bool %execz_u_<index> %uint_0
-               OpSelectionMerge %<label> None
-               OpBranchConditional %execz_b_<index> %<label> %t230_<index>
-        %t230_<index> = OpLabel
+                OpBranch %<label>
 )";
 
 	*dst_source += String(text).ReplaceStr(U"<index>", String::FromPrintf("%u", index)).ReplaceStr(U"<label>", label);
@@ -3543,110 +3612,197 @@ KYTY_RECOMPILER_FUNC(Recompile_SCbranchExecz_Label)
 	return true;
 }
 
-KYTY_RECOMPILER_FUNC(Recompile_SCbranchScc0_Label)
+/* XXX: Execz, Scc0, Scc1, Vccz, Vccnz */
+KYTY_RECOMPILER_FUNC(Recompile_SCbranch_XXX_Label)
 {
-	const auto& inst = code.GetInstructions().At(index);
+	EXIT_NOT_IMPLEMENTED(index + 1 >= code.GetInstructions().Size());
+
+	const auto& inst      = code.GetInstructions().At(index);
+	const auto& next_inst = code.GetInstructions().At(index + 1);
 
 	EXIT_NOT_IMPLEMENTED(!operand_is_constant(inst.src[0]));
 
-	auto label = ShaderLabel(inst);
-
 	// TODO(): analyze control flow graph
-	bool discard = code.IsDiscardBlock(label.GetDst());
+	auto label            = ShaderLabel(inst);
+	auto dst_block        = code.ReadBlock(label.GetDst());
+	auto next_block       = code.ReadBlock(next_inst.pc);
+	bool discard          = dst_block.is_discard;
+	auto label_next_block = ShaderLabel(next_block.last);
+	auto label_dst_block  = ShaderLabel(dst_block.last);
+
+	bool if_else = next_block.is_valid && !next_block.is_discard && dst_block.is_valid && !dst_block.is_discard &&
+	               ((next_block.last.type == ShaderInstructionType::SBranch && label_next_block.GetDst() >= dst_block.pc &&
+	                 label_next_block.GetDst() <= dst_block.last.pc) ||
+	                (dst_block.last.type == ShaderInstructionType::SBranch && label_dst_block.GetDst() >= next_block.pc &&
+	                 label_dst_block.GetDst() <= next_block.last.pc));
 
 	String label_str = label.ToString();
+	String label_merge =
+	    if_else ? (dst_block.last.type == ShaderInstructionType::SBranch ? label_dst_block.ToString() : label_next_block.ToString()) : U"";
 
+	//	if (condition)
+	//	{
+	//		L1:
+	//		...
+	//	}
+	// L2: /* merge */
+	//	...
 	static const char32_t* text_variant_a = UR"(
-        %scc_u_<index> = OpLoad %uint %scc
-        %scc_b_<index> = OpIEqual %bool %scc_u_<index> %uint_0
+        <param0>
+        <param1>
                OpSelectionMerge %<label> None
-               OpBranchConditional %scc_b_<index> %<label> %t230_<index>
-        %t230_<index> = OpLabel
-)";
-	static const char32_t* text_variant_b = UR"(
-        %scc_u_<index> = OpLoad %uint %scc
-        %scc_b_<index> = OpIEqual %bool %scc_u_<index> %uint_0
-               OpSelectionMerge %t230_<index> None
-               OpBranchConditional %scc_b_<index> %<label> %t230_<index>
+               OpBranchConditional %cc_b_<index> %<label> %t230_<index>
         %t230_<index> = OpLabel
 )";
 
-	*dst_source += String(discard ? text_variant_b : text_variant_a)
+	//	if (condition)
+	//	{
+	//		L2:
+	//		...
+	//		discard;
+	//	}
+	// L1: /* merge */
+	//	...
+	static const char32_t* text_variant_b = UR"(
+        <param0>
+        <param1>
+               OpSelectionMerge %t230_<index> None
+               OpBranchConditional %cc_b_<index> %<label> %t230_<index>
+        %t230_<index> = OpLabel
+)";
+
+	//	if (condition)
+	//	{
+	//		L1:
+	//		...
+	//	} else
+	//	{
+	// 		L2:
+	//		...
+	//	}
+	//	 /* merge */
+	static const char32_t* text_variant_c = UR"(
+        <param0>
+        <param1>
+               OpSelectionMerge %<merge> None
+               OpBranchConditional %cc_b_<index> %<label> %t230_<index>
+        %t230_<index> = OpLabel
+)";
+
+	*dst_source += String(if_else ? text_variant_c : (discard ? text_variant_b : text_variant_a))
+	                   .ReplaceStr(U"<param0>", param[0])
+	                   .ReplaceStr(U"<param1>", param[1])
+	                   .ReplaceStr(U"<merge>", label_merge)
 	                   .ReplaceStr(U"<index>", String::FromPrintf("%u", index))
 	                   .ReplaceStr(U"<label>", label_str);
 
 	return true;
 }
 
-KYTY_RECOMPILER_FUNC(Recompile_SCbranchScc1_Label)
-{
-	const auto& inst = code.GetInstructions().At(index);
+// KYTY_RECOMPILER_FUNC(Recompile_SCbranchScc0_Label)
+//{
+//	const auto& inst = code.GetInstructions().At(index);
+//
+//	EXIT_NOT_IMPLEMENTED(!operand_is_constant(inst.src[0]));
+//
+//	auto label = ShaderLabel(inst);
+//
+//	// TODO(): analyze control flow graph
+//	bool discard = code.ReadBlock(label.GetDst()).is_discard;
+//
+//	String label_str = label.ToString();
+//
+//	static const char32_t* text_variant_a = UR"(
+//         %scc_u_<index> = OpLoad %uint %scc
+//         %scc_b_<index> = OpIEqual %bool %scc_u_<index> %uint_0
+//                OpSelectionMerge %<label> None
+//                OpBranchConditional %scc_b_<index> %<label> %t230_<index>
+//         %t230_<index> = OpLabel
+//)";
+//	static const char32_t* text_variant_b = UR"(
+//         %scc_u_<index> = OpLoad %uint %scc
+//         %scc_b_<index> = OpIEqual %bool %scc_u_<index> %uint_0
+//                OpSelectionMerge %t230_<index> None
+//                OpBranchConditional %scc_b_<index> %<label> %t230_<index>
+//         %t230_<index> = OpLabel
+//)";
+//
+//	*dst_source += String(discard ? text_variant_b : text_variant_a)
+//	                   .ReplaceStr(U"<index>", String::FromPrintf("%u", index))
+//	                   .ReplaceStr(U"<label>", label_str);
+//
+//	return true;
+// }
 
-	EXIT_NOT_IMPLEMENTED(!operand_is_constant(inst.src[0]));
-
-	auto label = ShaderLabel(inst);
-
-	// TODO(): analyze control flow graph
-	bool discard = code.IsDiscardBlock(label.GetDst());
-
-	String label_str = label.ToString();
-
-	static const char32_t* text_variant_a = UR"(
-        %scc_u_<index> = OpLoad %uint %scc
-        %scc_b_<index> = OpIEqual %bool %scc_u_<index> %uint_1
-               OpSelectionMerge %<label> None
-               OpBranchConditional %scc_b_<index> %<label> %t230_<index>
-        %t230_<index> = OpLabel
-)";
-	static const char32_t* text_variant_b = UR"(
-        %scc_u_<index> = OpLoad %uint %scc
-        %scc_b_<index> = OpIEqual %bool %scc_u_<index> %uint_1
-               OpSelectionMerge %t230_<index> None
-               OpBranchConditional %scc_b_<index> %<label> %t230_<index>
-        %t230_<index> = OpLabel
-)";
-
-	*dst_source += String(discard ? text_variant_b : text_variant_a)
-	                   .ReplaceStr(U"<index>", String::FromPrintf("%u", index))
-	                   .ReplaceStr(U"<label>", label_str);
-
-	return true;
-}
-
-KYTY_RECOMPILER_FUNC(Recompile_SCbranchVccz_Label)
-{
-	const auto& inst = code.GetInstructions().At(index);
-
-	EXIT_NOT_IMPLEMENTED(!operand_is_constant(inst.src[0]));
-
-	auto label = ShaderLabel(inst);
-
-	// TODO(): analyze control flow graph
-	bool discard = code.IsDiscardBlock(label.GetDst());
-
-	String label_str = label.ToString();
-
-	static const char32_t* text_variant_a = UR"(
-        %vcc_lo_u_<index> = OpLoad %uint %vcc_lo
-        %vcc_lo_b_<index> = OpIEqual %bool %vcc_lo_u_<index> %uint_0
-               OpSelectionMerge %<label> None
-               OpBranchConditional %vcc_lo_b_<index> %<label> %t230_<index>
-        %t230_<index> = OpLabel
-)";
-	static const char32_t* text_variant_b = UR"(
-        %vcc_lo_u_<index> = OpLoad %uint %vcc_lo
-        %vcc_lo_b_<index> = OpIEqual %bool %vcc_lo_u_<index> %uint_0
-               OpSelectionMerge %t230_<index> None
-               OpBranchConditional %vcc_lo_b_<index> %<label> %t230_<index>
-        %t230_<index> = OpLabel
-)";
-
-	*dst_source += String(discard ? text_variant_b : text_variant_a)
-	                   .ReplaceStr(U"<index>", String::FromPrintf("%u", index))
-	                   .ReplaceStr(U"<label>", label_str);
-
-	return true;
-}
+// KYTY_RECOMPILER_FUNC(Recompile_SCbranchScc1_Label)
+//{
+//	const auto& inst = code.GetInstructions().At(index);
+//
+//	EXIT_NOT_IMPLEMENTED(!operand_is_constant(inst.src[0]));
+//
+//	auto label = ShaderLabel(inst);
+//
+//	// TODO(): analyze control flow graph
+//	bool discard = code.ReadBlock(label.GetDst()).is_discard;
+//
+//	String label_str = label.ToString();
+//
+//	static const char32_t* text_variant_a = UR"(
+//         %scc_u_<index> = OpLoad %uint %scc
+//         %scc_b_<index> = OpIEqual %bool %scc_u_<index> %uint_1
+//                OpSelectionMerge %<label> None
+//                OpBranchConditional %scc_b_<index> %<label> %t230_<index>
+//         %t230_<index> = OpLabel
+//)";
+//	static const char32_t* text_variant_b = UR"(
+//         %scc_u_<index> = OpLoad %uint %scc
+//         %scc_b_<index> = OpIEqual %bool %scc_u_<index> %uint_1
+//                OpSelectionMerge %t230_<index> None
+//                OpBranchConditional %scc_b_<index> %<label> %t230_<index>
+//         %t230_<index> = OpLabel
+//)";
+//
+//	*dst_source += String(discard ? text_variant_b : text_variant_a)
+//	                   .ReplaceStr(U"<index>", String::FromPrintf("%u", index))
+//	                   .ReplaceStr(U"<label>", label_str);
+//
+//	return true;
+// }
+//
+// KYTY_RECOMPILER_FUNC(Recompile_SCbranchVccz_Label)
+//{
+//	const auto& inst = code.GetInstructions().At(index);
+//
+//	EXIT_NOT_IMPLEMENTED(!operand_is_constant(inst.src[0]));
+//
+//	auto label = ShaderLabel(inst);
+//
+//	// TODO(): analyze control flow graph
+//	bool discard = code.ReadBlock(label.GetDst()).is_discard;
+//
+//	String label_str = label.ToString();
+//
+//	static const char32_t* text_variant_a = UR"(
+//         %vcc_lo_u_<index> = OpLoad %uint %vcc_lo
+//         %vcc_lo_b_<index> = OpIEqual %bool %vcc_lo_u_<index> %uint_0
+//                OpSelectionMerge %<label> None
+//                OpBranchConditional %vcc_lo_b_<index> %<label> %t230_<index>
+//         %t230_<index> = OpLabel
+//)";
+//	static const char32_t* text_variant_b = UR"(
+//         %vcc_lo_u_<index> = OpLoad %uint %vcc_lo
+//         %vcc_lo_b_<index> = OpIEqual %bool %vcc_lo_u_<index> %uint_0
+//                OpSelectionMerge %t230_<index> None
+//                OpBranchConditional %vcc_lo_b_<index> %<label> %t230_<index>
+//         %t230_<index> = OpLabel
+//)";
+//
+//	*dst_source += String(discard ? text_variant_b : text_variant_a)
+//	                   .ReplaceStr(U"<index>", String::FromPrintf("%u", index))
+//	                   .ReplaceStr(U"<label>", label_str);
+//
+//	return true;
+// }
 
 KYTY_RECOMPILER_FUNC(Recompile_SEndpgm_Empty)
 {
@@ -5407,6 +5563,7 @@ static RecompilerFunc g_recomp_func[] = {
     {Recompile_ImageSample_Vdata1Vaddr3StSsDmask8,         ShaderInstructionType::ImageSample,         ShaderInstructionFormat::Vdata1Vaddr3StSsDmask8,         {U""}},
     {Recompile_ImageSample_Vdata2Vaddr3StSsDmask3,         ShaderInstructionType::ImageSample,         ShaderInstructionFormat::Vdata2Vaddr3StSsDmask3,         {U""}},
     {Recompile_ImageSample_Vdata2Vaddr3StSsDmask5,         ShaderInstructionType::ImageSample,         ShaderInstructionFormat::Vdata2Vaddr3StSsDmask5,         {U""}},
+	{Recompile_ImageSample_Vdata2Vaddr3StSsDmask9,         ShaderInstructionType::ImageSample,         ShaderInstructionFormat::Vdata2Vaddr3StSsDmask9,         {U""}},
     {Recompile_ImageSample_Vdata3Vaddr3StSsDmask7,         ShaderInstructionType::ImageSample,         ShaderInstructionFormat::Vdata3Vaddr3StSsDmask7,         {U""}},
     {Recompile_ImageSample_Vdata4Vaddr3StSsDmaskF,         ShaderInstructionType::ImageSample,         ShaderInstructionFormat::Vdata4Vaddr3StSsDmaskF,         {U""}},
     {Recompile_ImageSampleLz_Vdata3Vaddr3StSsDmask7,       ShaderInstructionType::ImageSampleLz,       ShaderInstructionFormat::Vdata3Vaddr3StSsDmask7,         {U""}},
@@ -5420,10 +5577,12 @@ static RecompilerFunc g_recomp_func[] = {
     {Recompile_SBufferLoadDwordx8_Sdst8SvSoffset,          ShaderInstructionType::SBufferLoadDwordx8,  ShaderInstructionFormat::Sdst8SvSoffset,                 {U""}},
     {Recompile_SBufferLoadDwordx16_Sdst16SvSoffset,        ShaderInstructionType::SBufferLoadDwordx16, ShaderInstructionFormat::Sdst16SvSoffset,                {U""}},
 
-    {Recompile_SCbranchExecz_Label,                        ShaderInstructionType::SCbranchExecz,       ShaderInstructionFormat::Label,                          {U""}},
-    {Recompile_SCbranchScc0_Label,                         ShaderInstructionType::SCbranchScc0,        ShaderInstructionFormat::Label,                          {U""}},
-	{Recompile_SCbranchScc1_Label,                         ShaderInstructionType::SCbranchScc1,        ShaderInstructionFormat::Label,                          {U""}},
-    {Recompile_SCbranchVccz_Label,                         ShaderInstructionType::SCbranchVccz,        ShaderInstructionFormat::Label,                          {U""}},
+    {Recompile_SCbranch_XXX_Label,                         ShaderInstructionType::SCbranchExecz,       ShaderInstructionFormat::Label,                          {U"%cc_u_<index> = OpLoad %uint %execz",  U"%cc_b_<index> = OpINotEqual %bool %cc_u_<index> %uint_0"}},
+    {Recompile_SCbranch_XXX_Label,                         ShaderInstructionType::SCbranchScc0,        ShaderInstructionFormat::Label,                          {U"%cc_u_<index> = OpLoad %uint %scc",    U"%cc_b_<index> = OpIEqual    %bool %cc_u_<index> %uint_0"}},
+	{Recompile_SCbranch_XXX_Label,                         ShaderInstructionType::SCbranchScc1,        ShaderInstructionFormat::Label,                          {U"%cc_u_<index> = OpLoad %uint %scc",    U"%cc_b_<index> = OpIEqual    %bool %cc_u_<index> %uint_1"}},
+    {Recompile_SCbranch_XXX_Label,                         ShaderInstructionType::SCbranchVccz,        ShaderInstructionFormat::Label,                          {U"%cc_u_<index> = OpLoad %uint %vcc_lo", U"%cc_b_<index> = OpIEqual    %bool %cc_u_<index> %uint_0"}},
+	{Recompile_SCbranch_XXX_Label,                         ShaderInstructionType::SCbranchVccnz,       ShaderInstructionFormat::Label,                          {U"%cc_u_<index> = OpLoad %uint %vcc_lo", U"%cc_b_<index> = OpINotEqual %bool %cc_u_<index> %uint_0"}},
+	{Recompile_SBranch_Label,                              ShaderInstructionType::SBranch,             ShaderInstructionFormat::Label,                          {U""}},
 
     {Recompile_SEndpgm_Empty,                              ShaderInstructionType::SEndpgm,             ShaderInstructionFormat::Empty,                          {U""}},
 
@@ -6669,9 +6828,11 @@ void Spirv::WriteLabel(int index)
                    %<label> = OpLabel
 		)";
 
-				bool discard = m_code.IsDiscardBlock(label.GetDst());
+				bool discard = m_code.ReadBlock(label.GetDst()).is_discard;
 
-				bool skip_branch = (discard || (instructions.At(index - 1).type == ShaderInstructionType::SEndpgm && labels_num == 0));
+				bool skip_branch = (discard || ((instructions.At(index - 1).type == ShaderInstructionType::SEndpgm ||
+				                                 instructions.At(index - 1).type == ShaderInstructionType::SBranch) &&
+				                                labels_num == 0));
 
 				m_source += String(text)
 				                .ReplaceStr(U"<branch>", (skip_branch ? U"" : U"OpBranch %<label>"))
@@ -6692,8 +6853,8 @@ void Spirv::ModifyCode()
 {
 	struct DiscardLabel
 	{
-		uint32_t pc  = 0;
-		int      num = 0;
+		ShaderControlFlowBlock block;
+		int                    num = 0;
 	};
 	const auto&          labels = m_code.GetLabels();
 	Vector<DiscardLabel> dls;
@@ -6711,18 +6872,21 @@ void Spirv::ModifyCode()
 				}
 			}
 			EXIT_IF(num == 0);
-			if (num > 1 && m_code.IsDiscardBlock(pc))
+			if (num > 1)
 			{
-				if (!dls.Contains(pc, [](auto d, auto pc) { return d.pc == pc; }))
+				if (auto block = m_code.ReadBlock(pc); block.is_discard)
 				{
-					dls.Add(DiscardLabel({pc, num - 1}));
+					if (!dls.Contains(pc, [](auto d, auto pc) { return d.block.pc == pc; }))
+					{
+						dls.Add(DiscardLabel({block, num - 1}));
+					}
 				}
 			}
 		}
 	}
 	for (const auto& dl: dls)
 	{
-		auto block = m_code.GetDiscardBlock(dl.pc);
+		auto block = m_code.ReadIntructions(dl.block);
 		for (int i = 0; i < dl.num; i++)
 		{
 			// Duplicate discard block if there are different branches with the same label
