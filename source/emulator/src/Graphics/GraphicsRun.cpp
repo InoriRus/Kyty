@@ -514,9 +514,9 @@ void CommandProcessor::BufferInit()
 		{
 			EXIT_IF(buf != nullptr);
 
-			buf = new CommandBuffer;
+			buf = new CommandBuffer(m_queue);
 			buf->SetParent(this);
-			buf->SetQueue(m_queue);
+			// buf->SetQueue(m_queue);
 		}
 
 		m_current_buffer = 0;

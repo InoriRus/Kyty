@@ -1302,13 +1302,153 @@ static bool CheckFormat(VkPhysicalDevice device, VkFormat format, bool tile, VkF
 	return false;
 }
 
+struct QueueInfo
+{
+	uint32_t family   = 0;
+	uint32_t index    = 0;
+	bool     graphics = false;
+	bool     compute  = false;
+	bool     transfer = false;
+	bool     present  = false;
+};
+
+struct VulkanQueues
+{
+	uint32_t          family_count = 0;
+	Vector<uint32_t>  family_used;
+	Vector<QueueInfo> available;
+	Vector<QueueInfo> graphics;
+	Vector<QueueInfo> compute;
+	Vector<QueueInfo> transfer;
+	Vector<QueueInfo> present;
+};
+
+static void VulkanDumpQueues(const VulkanQueues& qs)
+{
+	printf("Queues selected:\n");
+	printf("\t family_count = %u\n", qs.family_count);
+	Core::StringList nums;
+	for (auto u: qs.family_used)
+	{
+		nums.Add(String::FromPrintf("%u", u));
+	}
+	printf("\t family_used = [%s]\n", nums.Concat(U", ").C_Str());
+	printf("\t graphics:\n");
+	for (const auto& q: qs.graphics)
+	{
+		printf("\t\t family = %u, index = %u\n", q.family, q.index);
+	}
+	printf("\t compute:\n");
+	for (const auto& q: qs.compute)
+	{
+		printf("\t\t family = %u, index = %u\n", q.family, q.index);
+	}
+	printf("\t transfer:\n");
+	for (const auto& q: qs.transfer)
+	{
+		printf("\t\t family = %u, index = %u\n", q.family, q.index);
+	}
+	printf("\t present:\n");
+	for (const auto& q: qs.present)
+	{
+		printf("\t\t family = %u, index = %u\n", q.family, q.index);
+	}
+}
+
+static VulkanQueues VulkanFindQueues(VkPhysicalDevice device, VkSurfaceKHR surface, uint32_t graphics_num, uint32_t compute_num,
+                                     uint32_t transfer_num, uint32_t present_num)
+{
+	EXIT_IF(device == nullptr);
+	EXIT_IF(surface == nullptr);
+
+	VulkanQueues qs;
+
+	uint32_t queue_family_count = 0;
+	vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, nullptr);
+	Vector<VkQueueFamilyProperties> queue_families(queue_family_count);
+	vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, queue_families.GetData());
+
+	qs.family_count = queue_family_count;
+
+	uint32_t family = 0;
+	for (auto& f: queue_families)
+	{
+		VkBool32 presentation_supported = VK_FALSE;
+		vkGetPhysicalDeviceSurfaceSupportKHR(device, family, surface, &presentation_supported);
+
+		printf("\tqueue family: %s [count = %u], [present = %s]\n", string_VkQueueFlags(f.queueFlags).c_str(), f.queueCount,
+		       (presentation_supported == VK_TRUE ? "true" : "false"));
+
+		for (uint32_t i = 0; i < f.queueCount; i++)
+		{
+			QueueInfo info;
+			info.family   = family;
+			info.index    = i;
+			info.graphics = (f.queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0;
+			info.compute  = (f.queueFlags & VK_QUEUE_COMPUTE_BIT) != 0;
+			info.transfer = (f.queueFlags & VK_QUEUE_TRANSFER_BIT) != 0;
+			info.present  = (presentation_supported == VK_TRUE);
+
+			qs.available.Add(info);
+		}
+
+		qs.family_used.Add(0);
+
+		family++;
+	}
+
+	for (uint32_t i = 0; i < graphics_num; i++)
+	{
+		if (auto index = qs.available.Find(true, [](auto& q, auto& b) { return q.graphics == b; }); qs.available.IndexValid(index))
+		{
+			qs.family_used[qs.available.At(index).family]++;
+			qs.graphics.Add(qs.available.At(index));
+			qs.available.RemoveAt(index);
+		}
+	}
+
+	for (uint32_t i = 0; i < compute_num; i++)
+	{
+		if (auto index = qs.available.Find(true, [](auto& q, auto& b) { return q.compute == b; }); qs.available.IndexValid(index))
+		{
+			qs.family_used[qs.available.At(index).family]++;
+			qs.compute.Add(qs.available.At(index));
+			qs.available.RemoveAt(index);
+		}
+	}
+
+	for (uint32_t i = 0; i < transfer_num; i++)
+	{
+		if (auto index = qs.available.Find(true, [](auto& q, auto& b) { return q.transfer == b; }); qs.available.IndexValid(index))
+		{
+			qs.family_used[qs.available.At(index).family]++;
+			qs.transfer.Add(qs.available.At(index));
+			qs.available.RemoveAt(index);
+		}
+	}
+
+	for (uint32_t i = 0; i < present_num; i++)
+	{
+		if (auto index = qs.available.Find(true, [](auto& q, auto& b) { return q.present == b; }); qs.available.IndexValid(index))
+		{
+			qs.family_used[qs.available.At(index).family]++;
+			qs.present.Add(qs.available.At(index));
+			qs.available.RemoveAt(index);
+		}
+	}
+
+	return qs;
+}
+
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-static VkPhysicalDevice VulkanFindPhysicalDevice(VkInstance instance, VkSurfaceKHR surface, VkQueueFlags queue_family, uint32_t queue_count,
-                                                 const Vector<const char*>& device_extensions,
-                                                 SurfaceCapabilities*       r /*, uint32_t image_count*/)
+static void VulkanFindPhysicalDevice(VkInstance instance, VkSurfaceKHR surface, const Vector<const char*>& device_extensions,
+                                     SurfaceCapabilities* out_capabilities, VkPhysicalDevice* out_device, VulkanQueues* out_queues)
 {
 	EXIT_IF(instance == nullptr);
 	EXIT_IF(surface == nullptr);
+	EXIT_IF(out_capabilities == nullptr);
+	EXIT_IF(out_device == nullptr);
+	EXIT_IF(out_queues == nullptr);
 
 	uint32_t devices_count = 0;
 	vkEnumeratePhysicalDevices(instance, &devices_count, nullptr);
@@ -1319,10 +1459,11 @@ static VkPhysicalDevice VulkanFindPhysicalDevice(VkInstance instance, VkSurfaceK
 	vkEnumeratePhysicalDevices(instance, &devices_count, devices.GetData());
 
 	VkPhysicalDevice best_device = nullptr;
+	VulkanQueues     best_queues;
 
 	for (const auto& device: devices)
 	{
-		bool skip_device = true;
+		bool skip_device = false;
 
 		VkPhysicalDeviceProperties device_properties {};
 		VkPhysicalDeviceFeatures2  device_features2 {};
@@ -1339,35 +1480,21 @@ static VkPhysicalDevice VulkanFindPhysicalDevice(VkInstance instance, VkSurfaceK
 
 		printf("Vulkan device: %s\n", device_properties.deviceName);
 
-		uint32_t queue_family_count = 0;
-		vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, nullptr);
+		auto qs = VulkanFindQueues(device, surface, GraphicContext::QUEUE_GFX_NUM, GraphicContext::QUEUE_COMPUTE_NUM,
+		                           GraphicContext::QUEUE_UTIL_NUM, GraphicContext::QUEUE_PRESENT_NUM);
 
-		Vector<VkQueueFamilyProperties> queue_families(queue_family_count);
-		vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, queue_families.GetData());
+		VulkanDumpQueues(qs);
 
-		for (auto& f: queue_families)
+		if (qs.graphics.Size() != GraphicContext::QUEUE_GFX_NUM ||
+		    !(qs.compute.Size() >= 1 && qs.compute.Size() <= GraphicContext::QUEUE_COMPUTE_NUM) ||
+		    qs.transfer.Size() != GraphicContext::QUEUE_UTIL_NUM || qs.present.Size() != GraphicContext::QUEUE_PRESENT_NUM)
 		{
-			printf("\tqueue family: %s [count = %u]\n", string_VkQueueFlags(f.queueFlags).c_str(), f.queueCount);
-		}
-
-		Vector<uint32_t> indexes;
-		queue_families.FindAll(
-		    queue_family, [queue_count](auto f, auto bit) { return (f.queueFlags & bit) != 0 && f.queueCount >= queue_count; }, &indexes);
-		for (auto index: indexes)
-		{
-			VkBool32 presentation_supported = VK_FALSE;
-			vkGetPhysicalDeviceSurfaceSupportKHR(device, index, surface, &presentation_supported);
-
-			if (presentation_supported == VK_TRUE)
-			{
-				skip_device = false;
-				break;
-			}
+			printf("Not enough queues\n");
+			skip_device = true;
 		}
 
 		if (color_write_ext.colorWriteEnable != VK_TRUE)
 		{
-
 			printf("colorWriteEnable is not supported\n");
 			skip_device = true;
 		}
@@ -1420,9 +1547,9 @@ static VkPhysicalDevice VulkanFindPhysicalDevice(VkInstance instance, VkSurfaceK
 
 		if (!skip_device)
 		{
-			VulkanGetSurfaceCapabilities(device, surface, r);
+			VulkanGetSurfaceCapabilities(device, surface, out_capabilities);
 
-			if ((r->capabilities.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT) == 0)
+			if ((out_capabilities->capabilities.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT) == 0)
 			{
 				printf("Surface cannot be destination of blit\n");
 				skip_device = true;
@@ -1530,68 +1657,47 @@ static VkPhysicalDevice VulkanFindPhysicalDevice(VkInstance instance, VkSurfaceK
 			continue;
 		}
 
-		if (best_device == nullptr)
+		if (best_device == nullptr || device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
 		{
 			best_device = device;
-		}
-
-		if (device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
-		{
-			best_device = device;
+			best_queues = qs;
 		}
 	}
 
-	return best_device;
+	*out_device = best_device;
+	*out_queues = best_queues;
 }
 
 static VkDevice VulkanCreateDevice(VkPhysicalDevice physical_device, VkSurfaceKHR surface, const VulkanExtensions* r,
-                                   VkQueueFlags queue_family, uint32_t queue_count, uint32_t* queue_family_index,
-                                   const Vector<const char*>& device_extensions)
+                                   const VulkanQueues& queues, const Vector<const char*>& device_extensions)
 {
 	EXIT_IF(physical_device == nullptr);
 	EXIT_IF(r == nullptr);
-	EXIT_IF(queue_family_index == nullptr);
 	EXIT_IF(surface == nullptr);
 
-	Vector<float> queue_priority(queue_count);
-	for (auto& f: queue_priority)
+	Vector<VkDeviceQueueCreateInfo> queue_create_info(queues.family_count);
+	Vector<Vector<float>>           queue_priority(queues.family_count);
+	uint32_t                        queue_create_info_num = 0;
+
+	for (uint32_t i = 0; i < queues.family_count; i++)
 	{
-		f = 1.0f;
-	}
-
-	uint32_t queue_family_count = 0;
-	vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_count, nullptr);
-
-	Vector<VkQueueFamilyProperties> queue_families(queue_family_count);
-	vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_count, queue_families.GetData());
-
-	Vector<uint32_t> indexes;
-	queue_families.FindAll(
-	    queue_family, [queue_count](auto f, auto bit) { return (f.queueFlags & bit) != 0 && f.queueCount >= queue_count; }, &indexes);
-
-	*queue_family_index = queue_families.Size() + 1;
-
-	for (auto index: indexes)
-	{
-		VkBool32 presentation_supported = VK_FALSE;
-		vkGetPhysicalDeviceSurfaceSupportKHR(physical_device, index, surface, &presentation_supported);
-
-		if (presentation_supported == VK_TRUE)
+		if (queues.family_used[i] != 0)
 		{
-			*queue_family_index = index;
-			break;
+			for (uint32_t pi = 0; pi < queues.family_used[i]; pi++)
+			{
+				queue_priority[queue_create_info_num].Add(1.0f);
+			}
+
+			queue_create_info[queue_create_info_num].sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+			queue_create_info[queue_create_info_num].pNext            = nullptr;
+			queue_create_info[queue_create_info_num].flags            = 0;
+			queue_create_info[queue_create_info_num].queueFamilyIndex = i;
+			queue_create_info[queue_create_info_num].queueCount       = queues.family_used[i];
+			queue_create_info[queue_create_info_num].pQueuePriorities = queue_priority[queue_create_info_num].GetDataConst();
+
+			queue_create_info_num++;
 		}
 	}
-
-	EXIT_IF(!queue_families.IndexValid(*queue_family_index));
-
-	VkDeviceQueueCreateInfo queue_create_info {};
-	queue_create_info.sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-	queue_create_info.pNext            = nullptr;
-	queue_create_info.flags            = 0;
-	queue_create_info.queueFamilyIndex = *queue_family_index;
-	queue_create_info.queueCount       = queue_count;
-	queue_create_info.pQueuePriorities = queue_priority.GetDataConst();
 
 	VkPhysicalDeviceFeatures device_features {};
 	device_features.fragmentStoresAndAtomics = VK_TRUE;
@@ -1607,8 +1713,8 @@ static VkDevice VulkanCreateDevice(VkPhysicalDevice physical_device, VkSurfaceKH
 	create_info.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 	create_info.pNext                   = &color_write_ext;
 	create_info.flags                   = 0;
-	create_info.pQueueCreateInfos       = &queue_create_info;
-	create_info.queueCreateInfoCount    = 1;
+	create_info.pQueueCreateInfos       = queue_create_info.GetDataConst();
+	create_info.queueCreateInfoCount    = queue_create_info_num;
 	create_info.enabledLayerCount       = (r->enable_validation_layers ? r->required_layers.Size() : 0);
 	create_info.ppEnabledLayerNames     = (r->enable_validation_layers ? r->required_layers.GetDataConst() : nullptr);
 	create_info.enabledExtensionCount   = device_extensions.Size();
@@ -1902,17 +2008,36 @@ static VKAPI_ATTR VkResult VKAPI_CALL VulkanCreateDebugUtilsMessengerEXT(VkInsta
 	return swapchain;
 }
 
-static void VulkanCreateQueues(GraphicContext* ctx)
+static void VulkanCreateQueues(GraphicContext* ctx, const VulkanQueues& queues)
 {
 	EXIT_IF(ctx == nullptr);
 	EXIT_IF(ctx->device == nullptr);
-	EXIT_IF(ctx->queue_family_index == static_cast<uint32_t>(-1));
+	EXIT_IF(queues.graphics.Size() != 1);
+	EXIT_IF(queues.transfer.Size() != 1);
+	EXIT_IF(queues.present.Size() != 1);
+	EXIT_IF(!(queues.compute.Size() >= 1 && queues.compute.Size() <= GraphicContext::QUEUE_COMPUTE_NUM));
 
-	for (int i = 0; i < GraphicContext::QUEUES_NUM; i++)
+	auto get_queue = [ctx](int id, const QueueInfo& info, bool with_mutex = false)
 	{
-		EXIT_IF(ctx->queue[i] != nullptr);
-		vkGetDeviceQueue(ctx->device, ctx->queue_family_index, i, &ctx->queue[i]);
-		EXIT_NOT_IMPLEMENTED(ctx->queue[i] == nullptr);
+		ctx->queues[id].family = info.family;
+		ctx->queues[id].index  = info.index;
+		EXIT_IF(ctx->queues[id].vk_queue != nullptr);
+		vkGetDeviceQueue(ctx->device, ctx->queues[id].family, ctx->queues[id].index, &ctx->queues[id].vk_queue);
+		EXIT_NOT_IMPLEMENTED(ctx->queues[id].vk_queue == nullptr);
+		if (with_mutex)
+		{
+			ctx->queues[id].mutex = new Core::Mutex;
+		}
+	};
+
+	get_queue(GraphicContext::QUEUE_GFX, queues.graphics.At(0));
+	get_queue(GraphicContext::QUEUE_UTIL, queues.transfer.At(0));
+	get_queue(GraphicContext::QUEUE_PRESENT, queues.present.At(0));
+
+	for (int id = 0; id < GraphicContext::QUEUE_COMPUTE_NUM; id++)
+	{
+		bool with_mutex = (GraphicContext::QUEUE_COMPUTE_NUM == queues.compute.Size());
+		get_queue(GraphicContext::QUEUE_COMPUTE_START + id, queues.compute.At(id % queues.compute.Size()), with_mutex);
 	}
 }
 
@@ -2063,9 +2188,11 @@ static void VulkanCreate(WindowContext* ctx)
 
 	ctx->surface_capabilities = new SurfaceCapabilities {};
 
-	ctx->graphic_ctx.physical_device =
-	    VulkanFindPhysicalDevice(ctx->graphic_ctx.instance, ctx->surface, VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT,
-	                             GraphicContext::QUEUES_NUM, device_extensions, ctx->surface_capabilities);
+	VulkanQueues queues;
+
+	VulkanFindPhysicalDevice(ctx->graphic_ctx.instance, ctx->surface, device_extensions, ctx->surface_capabilities,
+	                         &ctx->graphic_ctx.physical_device, &queues);
+
 	if (ctx->graphic_ctx.physical_device == nullptr)
 	{
 		EXIT("Could not find suitable device");
@@ -2079,15 +2206,13 @@ static void VulkanCreate(WindowContext* ctx)
 	memcpy(ctx->device_name, device_properties.deviceName, sizeof(ctx->device_name));
 	memcpy(ctx->processor_name, Loader::GetSystemInfo().ProcessorName.C_Str(), sizeof(ctx->processor_name));
 
-	ctx->graphic_ctx.device =
-	    VulkanCreateDevice(ctx->graphic_ctx.physical_device, ctx->surface, &r, VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT,
-	                       GraphicContext::QUEUES_NUM, &ctx->graphic_ctx.queue_family_index, device_extensions);
+	ctx->graphic_ctx.device = VulkanCreateDevice(ctx->graphic_ctx.physical_device, ctx->surface, &r, queues, device_extensions);
 	if (ctx->graphic_ctx.device == nullptr)
 	{
 		EXIT("Could not create device");
 	}
 
-	VulkanCreateQueues(&ctx->graphic_ctx);
+	VulkanCreateQueues(&ctx->graphic_ctx, queues);
 
 	ctx->swapchain = VulkanCreateSwapchain(&ctx->graphic_ctx, 2);
 }
@@ -2238,8 +2363,8 @@ void WindowDrawBuffer(VideoOutVulkanImage* image)
 	EXIT_IF(blt_src_image == nullptr);
 	EXIT_IF(blt_dst_image == nullptr);
 
-	CommandBuffer buffer;
-	buffer.SetQueue(GraphicContext::QUEUE_PRESENT);
+	CommandBuffer buffer(GraphicContext::QUEUE_PRESENT);
+	// buffer.SetQueue(GraphicContext::QUEUE_PRESENT);
 
 	EXIT_NOT_IMPLEMENTED(buffer.IsInvalid());
 
@@ -2280,7 +2405,11 @@ void WindowDrawBuffer(VideoOutVulkanImage* image)
 	present.waitSemaphoreCount = 1;
 	present.pResults           = nullptr;
 
-	result = vkQueuePresentKHR(g_window_ctx->graphic_ctx.queue[GraphicContext::QUEUE_PRESENT], &present);
+	const auto& queue = g_window_ctx->graphic_ctx.queues[GraphicContext::QUEUE_PRESENT];
+
+	EXIT_IF(queue.mutex != nullptr);
+
+	result = vkQueuePresentKHR(queue.vk_queue, &present);
 	EXIT_NOT_IMPLEMENTED(result != VK_SUCCESS);
 
 	WindowUpdateTitle();

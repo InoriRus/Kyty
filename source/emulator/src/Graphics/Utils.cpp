@@ -333,8 +333,8 @@ void UtilFillImage(GraphicContext* ctx, VulkanImage* dst_image, const void* src_
 	std::memcpy(data, src_data, size);
 	VulkanUnmapMemory(ctx, &staging_buffer.memory);
 
-	CommandBuffer buffer;
-	buffer.SetQueue(GraphicContext::QUEUE_UTIL);
+	CommandBuffer buffer(GraphicContext::QUEUE_UTIL);
+	// buffer.SetQueue(GraphicContext::QUEUE_UTIL);
 
 	EXIT_NOT_IMPLEMENTED(buffer.IsInvalid());
 
@@ -360,8 +360,8 @@ void UtilFillBuffer(GraphicContext* ctx, void* dst_data, uint64_t size, uint32_t
 	staging_buffer.memory.property = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
 	VulkanCreateBuffer(ctx, size, &staging_buffer);
 
-	CommandBuffer buffer;
-	buffer.SetQueue(GraphicContext::QUEUE_UTIL);
+	CommandBuffer buffer(GraphicContext::QUEUE_UTIL);
+	// buffer.SetQueue(GraphicContext::QUEUE_UTIL);
 
 	EXIT_NOT_IMPLEMENTED(buffer.IsInvalid());
 
@@ -381,8 +381,8 @@ void UtilFillBuffer(GraphicContext* ctx, void* dst_data, uint64_t size, uint32_t
 
 void UtilSetDepthLayoutOptimal(DepthStencilVulkanImage* image)
 {
-	CommandBuffer buffer;
-	buffer.SetQueue(GraphicContext::QUEUE_UTIL);
+	CommandBuffer buffer(GraphicContext::QUEUE_UTIL);
+	// buffer.SetQueue(GraphicContext::QUEUE_UTIL);
 
 	EXIT_NOT_IMPLEMENTED(buffer.IsInvalid());
 
@@ -406,8 +406,8 @@ void UtilSetDepthLayoutOptimal(DepthStencilVulkanImage* image)
 
 void UtilSetImageLayoutOptimal(VulkanImage* image)
 {
-	CommandBuffer buffer;
-	buffer.SetQueue(GraphicContext::QUEUE_UTIL);
+	CommandBuffer buffer(GraphicContext::QUEUE_UTIL);
+	// buffer.SetQueue(GraphicContext::QUEUE_UTIL);
 
 	EXIT_NOT_IMPLEMENTED(buffer.IsInvalid());
 
@@ -440,8 +440,8 @@ void UtilFillImage(GraphicContext* ctx, VulkanImage* image, const void* src_data
 	std::memcpy(data, src_data, size);
 	VulkanUnmapMemory(ctx, &staging_buffer.memory);
 
-	CommandBuffer buffer;
-	buffer.SetQueue(GraphicContext::QUEUE_UTIL);
+	CommandBuffer buffer(GraphicContext::QUEUE_UTIL);
+	// buffer.SetQueue(GraphicContext::QUEUE_UTIL);
 
 	EXIT_NOT_IMPLEMENTED(buffer.IsInvalid());
 
@@ -459,8 +459,8 @@ void UtilFillImage(GraphicContext* ctx, const Vector<ImageImageCopy>& regions, V
 	EXIT_IF(ctx == nullptr);
 	EXIT_IF(dst_image == nullptr);
 
-	CommandBuffer buffer;
-	buffer.SetQueue(GraphicContext::QUEUE_UTIL);
+	CommandBuffer buffer(GraphicContext::QUEUE_UTIL);
+	// buffer.SetQueue(GraphicContext::QUEUE_UTIL);
 
 	EXIT_NOT_IMPLEMENTED(buffer.IsInvalid());
 
@@ -478,8 +478,8 @@ void UtilCopyBuffer(VulkanBuffer* src_buffer, VulkanBuffer* dst_buffer, uint64_t
 	EXIT_IF(dst_buffer == nullptr);
 	EXIT_IF(dst_buffer->buffer == nullptr);
 
-	CommandBuffer buffer;
-	buffer.SetQueue(GraphicContext::QUEUE_UTIL);
+	CommandBuffer buffer(GraphicContext::QUEUE_UTIL);
+	// buffer.SetQueue(GraphicContext::QUEUE_UTIL);
 
 	EXIT_NOT_IMPLEMENTED(buffer.IsInvalid());
 

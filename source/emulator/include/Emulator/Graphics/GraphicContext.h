@@ -38,23 +38,33 @@ struct VulkanCommandPool
 	uint32_t         buffers_count = 0;
 };
 
+struct VulkanQueueInfo
+{
+	Core::Mutex* mutex    = nullptr;
+	uint32_t     family   = static_cast<uint32_t>(-1);
+	uint32_t     index    = static_cast<uint32_t>(-1);
+	VkQueue      vk_queue = nullptr;
+};
+
 struct GraphicContext
 {
 	static constexpr int QUEUES_NUM          = 11;
 	static constexpr int QUEUE_GFX           = 8;
+	static constexpr int QUEUE_GFX_NUM       = 1;
 	static constexpr int QUEUE_UTIL          = 9;
+	static constexpr int QUEUE_UTIL_NUM      = 1;
 	static constexpr int QUEUE_PRESENT       = 10;
+	static constexpr int QUEUE_PRESENT_NUM   = 1;
 	static constexpr int QUEUE_COMPUTE_START = 0;
 	static constexpr int QUEUE_COMPUTE_NUM   = 8;
 
-	uint32_t                 screen_width       = 0;
-	uint32_t                 screen_height      = 0;
-	VkInstance               instance           = nullptr;
-	VkDebugUtilsMessengerEXT debug_messenger    = nullptr;
-	VkPhysicalDevice         physical_device    = nullptr;
-	VkDevice                 device             = nullptr;
-	uint32_t                 queue_family_index = static_cast<uint32_t>(-1);
-	VkQueue                  queue[QUEUES_NUM]  = {};
+	uint32_t                 screen_width    = 0;
+	uint32_t                 screen_height   = 0;
+	VkInstance               instance        = nullptr;
+	VkDebugUtilsMessengerEXT debug_messenger = nullptr;
+	VkPhysicalDevice         physical_device = nullptr;
+	VkDevice                 device          = nullptr;
+	VulkanQueueInfo          queues[QUEUES_NUM];
 };
 
 struct VulkanMemory

@@ -434,31 +434,28 @@ class CommandPool
 {
 public:
 	CommandPool() = default;
-	~CommandPool()
+	~CommandPool() // NOLINT
 	{
-		if (m_pool != nullptr)
-		{
-			// TODO(): check if destructor is called from std::_Exit()
-			// Delete();
-		}
+		// TODO(): check if destructor is called from std::_Exit()
+		// DeleteAll();
 	}
 
 	KYTY_CLASS_NO_COPY(CommandPool);
 
-	VulkanCommandPool* GetPool()
+	VulkanCommandPool* GetPool(int id)
 	{
-		if (m_pool == nullptr)
+		if (m_pool[id] == nullptr)
 		{
-			Create();
+			Create(id);
 		}
-		return m_pool;
+		return m_pool[id];
 	}
 
 private:
-	void Create();
-	void Delete();
+	void Create(int id);
+	void DeleteAll();
 
-	VulkanCommandPool* m_pool = nullptr;
+	VulkanCommandPool* m_pool[GraphicContext::QUEUES_NUM] = {};
 };
 
 static RenderContext*           g_render_ctx = nullptr;
@@ -1190,60 +1187,61 @@ VulkanBuffer* GdsBuffer::GetBuffer(GraphicContext* ctx)
 	return m_buffer;
 }
 
-void CommandPool::Create()
+void CommandPool::Create(int id)
 {
 	auto* ctx = g_render_ctx->GetGraphicCtx();
 
-	EXIT_IF(m_pool != nullptr);
+	EXIT_IF(id < 0 || id >= GraphicContext::QUEUES_NUM);
+	EXIT_IF(m_pool[id] != nullptr);
 
-	m_pool = new VulkanCommandPool;
+	m_pool[id] = new VulkanCommandPool;
 
 	EXIT_IF(ctx == nullptr);
 	EXIT_IF(ctx->device == nullptr);
-	EXIT_IF(ctx->queue_family_index == static_cast<uint32_t>(-1));
-	EXIT_IF(m_pool->pool != nullptr);
-	EXIT_IF(m_pool->buffers != nullptr);
-	EXIT_IF(m_pool->fences != nullptr);
-	EXIT_IF(m_pool->semaphores != nullptr);
-	EXIT_IF(m_pool->buffers_count != 0);
+	EXIT_IF(ctx->queues[id].family == static_cast<uint32_t>(-1));
+	EXIT_IF(m_pool[id]->pool != nullptr);
+	EXIT_IF(m_pool[id]->buffers != nullptr);
+	EXIT_IF(m_pool[id]->fences != nullptr);
+	EXIT_IF(m_pool[id]->semaphores != nullptr);
+	EXIT_IF(m_pool[id]->buffers_count != 0);
 
 	VkCommandPoolCreateInfo pool_info {};
 	pool_info.sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 	pool_info.pNext            = nullptr;
-	pool_info.queueFamilyIndex = ctx->queue_family_index;
+	pool_info.queueFamilyIndex = ctx->queues[id].family;
 	pool_info.flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 
-	vkCreateCommandPool(ctx->device, &pool_info, nullptr, &m_pool->pool);
+	vkCreateCommandPool(ctx->device, &pool_info, nullptr, &m_pool[id]->pool);
 
-	EXIT_NOT_IMPLEMENTED(m_pool->pool == nullptr);
+	EXIT_NOT_IMPLEMENTED(m_pool[id]->pool == nullptr);
 
-	m_pool->buffers_count = 4;
-	m_pool->buffers       = new VkCommandBuffer[m_pool->buffers_count];
-	m_pool->fences        = new VkFence[m_pool->buffers_count];
-	m_pool->semaphores    = new VkSemaphore[m_pool->buffers_count];
-	m_pool->busy          = new bool[m_pool->buffers_count];
+	m_pool[id]->buffers_count = 4;
+	m_pool[id]->buffers       = new VkCommandBuffer[m_pool[id]->buffers_count];
+	m_pool[id]->fences        = new VkFence[m_pool[id]->buffers_count];
+	m_pool[id]->semaphores    = new VkSemaphore[m_pool[id]->buffers_count];
+	m_pool[id]->busy          = new bool[m_pool[id]->buffers_count];
 
 	VkCommandBufferAllocateInfo alloc_info {};
 	alloc_info.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-	alloc_info.commandPool        = m_pool->pool;
+	alloc_info.commandPool        = m_pool[id]->pool;
 	alloc_info.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	alloc_info.commandBufferCount = m_pool->buffers_count;
+	alloc_info.commandBufferCount = m_pool[id]->buffers_count;
 
-	if (vkAllocateCommandBuffers(ctx->device, &alloc_info, m_pool->buffers) != VK_SUCCESS)
+	if (vkAllocateCommandBuffers(ctx->device, &alloc_info, m_pool[id]->buffers) != VK_SUCCESS)
 	{
 		EXIT("Can't allocate command buffers");
 	}
 
-	for (uint32_t i = 0; i < m_pool->buffers_count; i++)
+	for (uint32_t i = 0; i < m_pool[id]->buffers_count; i++)
 	{
-		m_pool->busy[i] = false;
+		m_pool[id]->busy[i] = false;
 
 		VkFenceCreateInfo fence_info {};
 		fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 		fence_info.pNext = nullptr;
 		fence_info.flags = 0;
 
-		if (vkCreateFence(ctx->device, &fence_info, nullptr, &m_pool->fences[i]) != VK_SUCCESS)
+		if (vkCreateFence(ctx->device, &fence_info, nullptr, &m_pool[id]->fences[i]) != VK_SUCCESS)
 		{
 			EXIT("Can't create fence");
 		}
@@ -1253,42 +1251,47 @@ void CommandPool::Create()
 		semaphore_info.pNext = nullptr;
 		semaphore_info.flags = 0;
 
-		if (vkCreateSemaphore(ctx->device, &semaphore_info, nullptr, &m_pool->semaphores[i]) != VK_SUCCESS)
+		if (vkCreateSemaphore(ctx->device, &semaphore_info, nullptr, &m_pool[id]->semaphores[i]) != VK_SUCCESS)
 		{
 			EXIT("Can't create semaphore");
 		}
 
-		EXIT_IF(m_pool->buffers[i] == nullptr);
-		EXIT_IF(m_pool->fences[i] == nullptr);
-		EXIT_IF(m_pool->semaphores[i] == nullptr);
+		EXIT_IF(m_pool[id]->buffers[i] == nullptr);
+		EXIT_IF(m_pool[id]->fences[i] == nullptr);
+		EXIT_IF(m_pool[id]->semaphores[i] == nullptr);
 	}
 }
 
-void CommandPool::Delete()
+void CommandPool::DeleteAll()
 {
 	auto* ctx = g_render_ctx->GetGraphicCtx();
 
-	EXIT_IF(m_pool == nullptr);
-	EXIT_IF(ctx == nullptr);
-	EXIT_IF(ctx->device == nullptr);
-
-	for (uint32_t i = 0; i < m_pool->buffers_count; i++)
+	for (auto& pool: m_pool)
 	{
-		vkDestroySemaphore(ctx->device, m_pool->semaphores[i], nullptr);
-		vkDestroyFence(ctx->device, m_pool->fences[i], nullptr);
+		if (pool != nullptr)
+		{
+			EXIT_IF(ctx == nullptr);
+			EXIT_IF(ctx->device == nullptr);
+
+			for (uint32_t i = 0; i < pool->buffers_count; i++)
+			{
+				vkDestroySemaphore(ctx->device, pool->semaphores[i], nullptr);
+				vkDestroyFence(ctx->device, pool->fences[i], nullptr);
+			}
+
+			vkFreeCommandBuffers(ctx->device, pool->pool, pool->buffers_count, pool->buffers);
+
+			vkDestroyCommandPool(ctx->device, pool->pool, nullptr);
+
+			delete[] pool->semaphores;
+			delete[] pool->fences;
+			delete[] pool->buffers;
+			delete[] pool->busy;
+
+			delete pool;
+			pool = nullptr;
+		}
 	}
-
-	vkFreeCommandBuffers(ctx->device, m_pool->pool, m_pool->buffers_count, m_pool->buffers);
-
-	vkDestroyCommandPool(ctx->device, m_pool->pool, nullptr);
-
-	delete[] m_pool->semaphores;
-	delete[] m_pool->fences;
-	delete[] m_pool->buffers;
-	delete[] m_pool->busy;
-
-	delete m_pool;
-	m_pool = nullptr;
 }
 
 VulkanFramebuffer* FramebufferCache::CreateFramebuffer(RenderColorInfo* color, RenderDepthInfo* depth)
@@ -5049,7 +5052,7 @@ void CommandBuffer::Allocate()
 {
 	EXIT_IF(!IsInvalid());
 
-	m_pool = g_command_pool.GetPool();
+	m_pool = g_command_pool.GetPool(m_queue);
 
 	Core::LockGuard lock(m_pool->mutex);
 
@@ -5130,9 +5133,19 @@ void CommandBuffer::Execute()
 
 	EXIT_IF(m_queue < 0 || m_queue >= GraphicContext::QUEUES_NUM);
 
-	auto* queue = g_render_ctx->GetGraphicCtx()->queue[m_queue];
+	const auto& queue = g_render_ctx->GetGraphicCtx()->queues[m_queue];
 
-	auto result = vkQueueSubmit(queue, 1, &submit_info, fence);
+	if (queue.mutex != nullptr)
+	{
+		queue.mutex->Lock();
+	}
+
+	auto result = vkQueueSubmit(queue.vk_queue, 1, &submit_info, fence);
+
+	if (queue.mutex != nullptr)
+	{
+		queue.mutex->Unlock();
+	}
 
 	m_execute = true;
 
@@ -5159,9 +5172,19 @@ void CommandBuffer::ExecuteWithSemaphore()
 
 	EXIT_IF(m_queue < 0 || m_queue >= GraphicContext::QUEUES_NUM);
 
-	auto* queue = g_render_ctx->GetGraphicCtx()->queue[m_queue];
+	const auto& queue = g_render_ctx->GetGraphicCtx()->queues[m_queue];
 
-	auto result = vkQueueSubmit(queue, 1, &submit_info, fence);
+	if (queue.mutex != nullptr)
+	{
+		queue.mutex->Lock();
+	}
+
+	auto result = vkQueueSubmit(queue.vk_queue, 1, &submit_info, fence);
+
+	if (queue.mutex != nullptr)
+	{
+		queue.mutex->Lock();
+	}
 
 	m_execute = true;
 

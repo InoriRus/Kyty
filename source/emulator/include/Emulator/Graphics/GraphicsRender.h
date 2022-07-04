@@ -30,7 +30,7 @@ struct RenderColorInfo;
 class CommandBuffer
 {
 public:
-	CommandBuffer() { Allocate(); }
+	explicit CommandBuffer(int queue): m_queue(queue) { Allocate(); }
 	virtual ~CommandBuffer() { Free(); }
 
 	void              SetParent(CommandProcessor* parent) { m_parent = parent; }
@@ -55,9 +55,6 @@ public:
 	VulkanCommandPool*     GetPool() { return m_pool; }
 	[[nodiscard]] bool     IsExecute() const { return m_execute; }
 
-	void SetQueue(int queue) { m_queue = queue; }
-
-	// void CommandProcessorWait();
 
 private:
 	VulkanCommandPool* m_pool    = nullptr;
