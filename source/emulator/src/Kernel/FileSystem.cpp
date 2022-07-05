@@ -557,11 +557,12 @@ int64_t KYTY_SYSV_ABI KernelPread(int d, void* buf, size_t nbytes, int64_t offse
 	file->mutex.Lock();
 
 	bool     is_invalid = file->f.IsInvalid();
-	auto     pos        = file->f.Tell();
 	uint32_t bytes_read = 0;
-	file->f.Seek(offset);
+	if(file->f.Tell() != offset){
+		file->f.Seek(offset);
+	}
+
 	file->f.Read(buf, static_cast<uint32_t>(nbytes), &bytes_read);
-	file->f.Seek(pos);
 
 	file->mutex.Unlock();
 
