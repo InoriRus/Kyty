@@ -18,7 +18,7 @@
 #include <vulkan/vk_enum_string_helper.h>
 
 //#define XXH_INLINE_ALL
-#include <xxhash/xxhash.h>
+#include <xxhash/xxh3.h>
 
 #ifdef KYTY_EMU_ENABLED
 
@@ -583,7 +583,7 @@ static uint64_t calc_hash(const uint8_t* buf, uint64_t size)
 {
 	KYTY_PROFILER_FUNCTION();
 
-	return (size > 0 && buf != nullptr ? XXH64(buf, size, 0) : 0);
+	return (size > 0 && buf != nullptr ? XXH3_64bits(buf, size) : 0);
 }
 
 static uint64_t get_current_time()
