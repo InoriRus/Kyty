@@ -13,7 +13,6 @@
 
 namespace Kyty::Libs::Graphics {
 
-class CommandProcessor;
 
 enum LabelStatus
 {
@@ -40,7 +39,7 @@ struct Label
 	VkEvent           event  = nullptr;
 	LabelStatus       status = LabelStatus::New;
 	LabelCallbacks    callbacks;
-	CommandProcessor* cp = nullptr;
+	CommandBuffer*    cb     = nullptr;
 };
 
 class LabelManager
@@ -70,6 +69,7 @@ private:
 
 	Core::Mutex    m_mutex;
 	Core::CondVar  m_cond_var;
+	bool m_cond_flag = false;
 	Vector<Label*> m_labels;
 };
 
@@ -82,37 +82,35 @@ void LabelManager::ThreadRun(void* data)
 	for (;;)
 	{
 		manager->m_mutex.Lock();
-
-		int active_count = 0;
-
+		while (!manager->m_cond_flag)
+		{
+			manager->m_cond_var.Wait(&manager->m_mutex);
+		}
+		manager->m_cond_flag = false;
 		Vector<Label*>         deleted_labels;
-		Vector<LabelCallbacks> fired_labels;
 
 		for (auto& label: manager->m_labels)
 		{
 			if (label->status == LabelStatus::Active || label->status == LabelStatus::ActiveDeleted)
 			{
-				active_count++;
-
-				if (vkGetEventStatus(label->device, label->event) == VK_EVENT_SET)
+				auto status = vkGetEventStatus(label->device, label->event);
+				// May return reset -> try again (~1 time)
+				while (status == VK_EVENT_RESET)
+				{
+					label->cb->WaitForFence();
+					status = vkGetEventStatus(label->device, label->event);
+				}
+				
+				if (status == VK_EVENT_SET)
 				{
 					if (label->status == LabelStatus::ActiveDeleted)
 					{
 						deleted_labels.Add(label);
 					}
-
-					label->status = LabelStatus::NotActive;
-
-					fired_labels.Add(label->callbacks);
 				}
 			}
 		}
-
-		if (active_count == 0)
-		{
-			manager->m_cond_var.Wait(&manager->m_mutex);
-		}
-
+		
 		for (auto& label: deleted_labels)
 		{
 			bool removed = manager->Remove(label);
@@ -126,38 +124,42 @@ void LabelManager::ThreadRun(void* data)
 			Destroy(label);
 		}
 
-		for (auto& label: fired_labels)
+		for (auto& label: manager->m_labels)
 		{
+			if (label->status != LabelStatus::Active){
+				continue;
+			}
+			label->status = LabelStatus::NotActive;
+
+			auto callback = label->callbacks;
 			bool write = true;
 
-			if (label.callback_1 != nullptr)
+			if (callback.callback_1 != nullptr)
 			{
-				write = label.callback_1(label.args);
+				write = callback.callback_1(callback.args);
 			}
 
-			if (write && label.dst_gpu_addr64 != nullptr)
+			if (write && callback.dst_gpu_addr64 != nullptr)
 			{
-				*label.dst_gpu_addr64 = label.value64;
+				*callback.dst_gpu_addr64 = callback.value64;
 
 				printf(FG_BRIGHT_GREEN "EndOfPipe Signal!!! [0x%016" PRIx64 "] <- 0x%016" PRIx64 "\n" FG_DEFAULT,
-				       reinterpret_cast<uint64_t>(label.dst_gpu_addr64), label.value64);
+				       reinterpret_cast<uint64_t>(callback.dst_gpu_addr64), callback.value64);
 			}
 
-			if (write && label.dst_gpu_addr32 != nullptr)
+			if (write && callback.dst_gpu_addr32 != nullptr)
 			{
-				*label.dst_gpu_addr32 = label.value32;
+				*callback.dst_gpu_addr32 = callback.value32;
 
 				printf(FG_BRIGHT_GREEN "EndOfPipe Signal!!! [0x%016" PRIx64 "] <- 0x%08" PRIx32 "\n" FG_DEFAULT,
-				       reinterpret_cast<uint64_t>(label.dst_gpu_addr32), label.value32);
+				       reinterpret_cast<uint64_t>(callback.dst_gpu_addr32), callback.value32);
 			}
 
-			if (label.callback_2 != nullptr)
+			if (callback.callback_2 != nullptr)
 			{
-				label.callback_2(label.args);
+				callback.callback_2(callback.args);
 			}
 		}
-
-		Core::Thread::SleepMicro(100);
 	}
 }
 
@@ -166,9 +168,7 @@ Label* LabelManager::Create64(GraphicContext* ctx, uint64_t* dst_gpu_addr, uint6
 {
 	EXIT_IF(ctx == nullptr);
 	EXIT_IF(args == nullptr);
-
-	Core::LockGuard lock(m_mutex);
-
+	
 	auto* label = new Label;
 
 	label->status                   = LabelStatus::New;
@@ -180,7 +180,7 @@ Label* LabelManager::Create64(GraphicContext* ctx, uint64_t* dst_gpu_addr, uint6
 	label->device                   = ctx->device;
 	label->callbacks.callback_1     = callback_1;
 	label->callbacks.callback_2     = callback_2;
-	label->cp                       = nullptr;
+	label->cb                       = nullptr;
 
 	for (int i = 0; i < LABEL_ARGS_MAX; i++)
 	{
@@ -192,11 +192,14 @@ Label* LabelManager::Create64(GraphicContext* ctx, uint64_t* dst_gpu_addr, uint6
 	create_info.pNext = nullptr;
 	create_info.flags = 0;
 
-	vkCreateEvent(ctx->device, &create_info, nullptr, &label->event);
+	{
+		Core::LockGuard lock(m_mutex);
+		vkCreateEvent(ctx->device, &create_info, nullptr, &label->event);
 
-	EXIT_NOT_IMPLEMENTED(label->event == nullptr);
+		EXIT_NOT_IMPLEMENTED(label->event == nullptr);
 
-	m_labels.Add(label);
+		m_labels.Add(label);
+	}
 
 	return label;
 }
@@ -206,8 +209,6 @@ Label* LabelManager::Create32(GraphicContext* ctx, uint32_t* dst_gpu_addr, uint3
 {
 	EXIT_IF(ctx == nullptr);
 	EXIT_IF(args == nullptr);
-
-	Core::LockGuard lock(m_mutex);
 
 	auto* label = new Label;
 
@@ -220,7 +221,7 @@ Label* LabelManager::Create32(GraphicContext* ctx, uint32_t* dst_gpu_addr, uint3
 	label->device                   = ctx->device;
 	label->callbacks.callback_1     = callback_1;
 	label->callbacks.callback_2     = callback_2;
-	label->cp                       = nullptr;
+	label->cb                       = nullptr;
 
 	for (int i = 0; i < LABEL_ARGS_MAX; i++)
 	{
@@ -232,12 +233,14 @@ Label* LabelManager::Create32(GraphicContext* ctx, uint32_t* dst_gpu_addr, uint3
 	create_info.pNext = nullptr;
 	create_info.flags = 0;
 
-	vkCreateEvent(ctx->device, &create_info, nullptr, &label->event);
+	{
+		Core::LockGuard lock(m_mutex);
+		vkCreateEvent(ctx->device, &create_info, nullptr, &label->event);
 
-	EXIT_NOT_IMPLEMENTED(label->event == nullptr);
+		EXIT_NOT_IMPLEMENTED(label->event == nullptr);
 
-	m_labels.Add(label);
-
+		m_labels.Add(label);
+	}
 	return label;
 }
 
@@ -246,7 +249,7 @@ bool LabelManager::Remove(Label* label)
 	EXIT_IF(label == nullptr);
 	EXIT_IF(label->event == nullptr);
 	EXIT_IF(label->device == nullptr);
-
+	
 	Core::LockGuard lock(m_mutex);
 
 	auto index = m_labels.Find(label);
@@ -261,7 +264,7 @@ bool LabelManager::Remove(Label* label)
 
 		return false;
 	}
-
+	
 	m_labels.RemoveAt(index);
 
 	return true;
@@ -272,10 +275,10 @@ void LabelManager::Destroy(Label* label)
 	EXIT_IF(label == nullptr);
 	EXIT_IF(label->event == nullptr);
 	EXIT_IF(label->device == nullptr);
-	EXIT_IF(label->cp == nullptr);
+	EXIT_IF(label->cb == nullptr);
 
 	// All submitted commands that refer to event must have completed execution
-	GraphicsRunCommandProcessorWait(label->cp);
+	GraphicsRunCommandProcessorWait(label->cb->GetParent());
 
 	vkDestroyEvent(label->device, label->event, nullptr);
 
@@ -298,27 +301,27 @@ void LabelManager::Set(CommandBuffer* buffer, Label* label)
 	EXIT_IF(label->event == nullptr);
 	EXIT_IF(label->device == nullptr);
 
-	Core::LockGuard lock(m_mutex);
+	{
+		Core::LockGuard lock(m_mutex);
+		auto index = m_labels.Find(label);
 
-	auto index = m_labels.Find(label);
+		EXIT_NOT_IMPLEMENTED(!m_labels.IndexValid(index));
 
-	EXIT_NOT_IMPLEMENTED(!m_labels.IndexValid(index));
+		EXIT_NOT_IMPLEMENTED(label->status != LabelStatus::New && label->status != LabelStatus::NotActive);
 
-	EXIT_NOT_IMPLEMENTED(label->status != LabelStatus::New && label->status != LabelStatus::NotActive);
+		label->status = LabelStatus::Active;
 
-	label->status = LabelStatus::Active;
+		EXIT_IF(label->event == nullptr);
 
-	EXIT_IF(label->event == nullptr);
+		label->cb = buffer;
+		auto* vk_buffer = buffer->GetPool()->buffers[buffer->GetIndex()];
 
-	label->cp = buffer->GetParent();
-
-	auto* vk_buffer = buffer->GetPool()->buffers[buffer->GetIndex()];
-
-	EXIT_NOT_IMPLEMENTED(vk_buffer == nullptr);
-
-	vkResetEvent(label->device, label->event);
-	vkCmdSetEvent(vk_buffer, label->event, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
-
+		EXIT_NOT_IMPLEMENTED(vk_buffer == nullptr);
+		
+		vkResetEvent(label->device, label->event);
+		vkCmdSetEvent(vk_buffer, label->event, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+		m_cond_flag = true;
+	}
 	m_cond_var.Signal();
 }
 
