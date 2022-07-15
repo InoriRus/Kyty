@@ -507,11 +507,14 @@ LIB_DEFINE(InitLibKernel_1_Mem)
 	LIB_FUNC("cQke9UuBQOk", Memory::KernelMunmap);
 	LIB_FUNC("pO96TwzOm5E", Memory::KernelGetDirectMemorySize);
 	LIB_FUNC("rTXw65xmLIA", Memory::KernelAllocateDirectMemory);
+	LIB_FUNC("B+vc2AO2Zrc", Memory::KernelAllocateMainDirectMemory);
 	LIB_FUNC("L-Q3LEjIbgA", Memory::KernelMapDirectMemory);
+	LIB_FUNC("NcaWUxfMNIQ", Memory::KernelMapNamedDirectMemory);
 	LIB_FUNC("MBuItvba6z8", Memory::KernelReleaseDirectMemory);
 	LIB_FUNC("WFcfL2lzido", Memory::KernelQueryMemoryProtection);
 	LIB_FUNC("BHouLQzh0X0", Memory::KernelDirectMemoryQuery);
 	LIB_FUNC("aNz11fnnzi4", Memory::KernelAvailableFlexibleMemorySize);
+	LIB_FUNC("vSMAm3cxYTY", Memory::KernelMprotect);
 }
 
 LIB_DEFINE(InitLibKernel_1_Equeue)

@@ -42,6 +42,9 @@ static void init_names()
 		g_r_names[R_PS_EMBEDDED]       = "R_PS_EMBEDDED";
 		g_r_names[R_VS_UPDATE]         = "R_VS_UPDATE";
 		g_r_names[R_PS_UPDATE]         = "R_PS_UPDATE";
+		g_r_names[R_CX_REGS]           = "R_CX_REGS";
+		g_r_names[R_SH_REGS]           = "R_SH_REGS";
+		g_r_names[R_UC_REGS]           = "R_UC_REGS";
 
 		g_names[IT_NOP]                       = "IT_NOP";
 		g_names[IT_SET_BASE]                  = "IT_SET_BASE";

@@ -78,15 +78,24 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 	auto width        = params[VideoOutBufferObject::PARAM_WIDTH];
 	auto height       = params[VideoOutBufferObject::PARAM_HEIGHT];
 
-	EXIT_NOT_IMPLEMENTED(pixel_format != 0x80000000);
+	// EXIT_NOT_IMPLEMENTED(pixel_format != 0x80000000);
 	EXIT_NOT_IMPLEMENTED(width == 0);
 	EXIT_NOT_IMPLEMENTED(height == 0);
 
 	auto* vk_obj = new VideoOutVulkanImage;
 
+	VkFormat vk_format = VK_FORMAT_UNDEFINED;
+
+	switch (pixel_format)
+	{
+		case static_cast<uint64_t>(VideoOutBufferFormat::R8G8B8A8Srgb): vk_format = VK_FORMAT_R8G8B8A8_SRGB; break;
+		case static_cast<uint64_t>(VideoOutBufferFormat::B8G8R8A8Srgb): vk_format = VK_FORMAT_B8G8R8A8_SRGB; break;
+		default: EXIT("unknown format: %" PRIu64 "\n", pixel_format);
+	}
+
 	vk_obj->extent.width  = width;
 	vk_obj->extent.height = height;
-	vk_obj->format        = VK_FORMAT_B8G8R8A8_SRGB;
+	vk_obj->format        = vk_format;
 	vk_obj->image         = nullptr;
 	vk_obj->layout        = VK_IMAGE_LAYOUT_UNDEFINED;
 

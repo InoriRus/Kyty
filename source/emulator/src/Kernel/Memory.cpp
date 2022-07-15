@@ -576,6 +576,36 @@ int KYTY_SYSV_ABI KernelAllocateDirectMemory(int64_t search_start, int64_t searc
 	return OK;
 }
 
+int KYTY_SYSV_ABI KernelAllocateMainDirectMemory(size_t len, size_t alignment, int memory_type, int64_t* phys_addr_out)
+{
+	PRINT_NAME();
+
+	EXIT_IF(g_physical_memory == nullptr);
+
+	printf("\t len          = 0x%016" PRIx64 "\n", len);
+	printf("\t alignment    = 0x%016" PRIx64 "\n", alignment);
+	printf("\t memory_type  = %d\n", memory_type);
+
+	if (len == 0 || phys_addr_out == nullptr)
+	{
+		return KERNEL_ERROR_EINVAL;
+	}
+
+	uint64_t addr = 0;
+	if (!g_physical_memory->Alloc(0, UINT64_MAX, len, alignment, &addr, memory_type))
+	{
+		printf(FG_RED "\t[Fail]\n" FG_DEFAULT);
+		return KERNEL_ERROR_EAGAIN;
+	}
+
+	*phys_addr_out = static_cast<int64_t>(addr);
+
+	printf("\tphys_addr    = %016" PRIx64 "\n", addr);
+	printf(FG_GREEN "\t[Ok]\n" FG_DEFAULT);
+
+	return OK;
+}
+
 int KYTY_SYSV_ABI KernelReleaseDirectMemory(int64_t start, size_t len)
 {
 	PRINT_NAME();
@@ -697,6 +727,16 @@ int KYTY_SYSV_ABI KernelMapDirectMemory(void** addr, size_t len, int prot, int f
 	return OK;
 }
 
+int KYTY_SYSV_ABI KernelMapNamedDirectMemory(void** addr, size_t len, int prot, int flags, off_t direct_memory_start, size_t alignment,
+                                             const char* name)
+{
+	PRINT_NAME();
+
+	printf("\t name = %s\n", name);
+
+	return KernelMapDirectMemory(addr, len, prot, flags, direct_memory_start, alignment);
+}
+
 int KYTY_SYSV_ABI KernelQueryMemoryProtection(void* addr, void** start, void** end, int* prot)
 {
 	PRINT_NAME();
@@ -745,6 +785,46 @@ int KYTY_SYSV_ABI KernelAvailableFlexibleMemorySize(size_t* size)
 	*size = g_flexible_memory->Available();
 
 	printf("\t *size = 0x%016" PRIx64 "\n", *size);
+
+	return OK;
+}
+
+int KYTY_SYSV_ABI KernelMprotect(const void* addr, size_t len, int prot)
+{
+	PRINT_NAME();
+
+	auto vaddr = reinterpret_cast<uint64_t>(addr);
+
+	printf("\t addr = 0x%016" PRIx64 "\n", vaddr);
+	printf("\t len  = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(len));
+
+	VirtualMemory::Mode     mode     = VirtualMemory::Mode::NoAccess;
+	Graphics::GpuMemoryMode gpu_mode = Graphics::GpuMemoryMode::NoAccess;
+
+	switch (prot)
+	{
+		case 0x11:
+			mode     = VirtualMemory::Mode::Read;
+			gpu_mode = Graphics::GpuMemoryMode::Read;
+			break;
+		case 0x12:
+			mode     = VirtualMemory::Mode::ReadWrite;
+			gpu_mode = Graphics::GpuMemoryMode::Read;
+			break;
+		default: EXIT("unknown prot: %d\n", prot);
+	}
+
+	VirtualMemory::Mode old_mode {};
+	bool                ok = VirtualMemory::Protect(vaddr, len, mode, &old_mode);
+
+	EXIT_NOT_IMPLEMENTED(!ok);
+
+	if (gpu_mode != Graphics::GpuMemoryMode::NoAccess)
+	{
+		Graphics::GpuMemorySetAllocatedRange(vaddr, len);
+	}
+
+	printf("\t prot: %s -> %s\n", Core::EnumName(old_mode).C_Str(), Core::EnumName(mode).C_Str());
 
 	return OK;
 }

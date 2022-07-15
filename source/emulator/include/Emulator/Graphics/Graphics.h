@@ -19,6 +19,8 @@ KYTY_SUBSYSTEM_DEFINE(Graphics);
 
 void GraphicsDbgDumpDcb(const char* type, uint32_t num_dw, uint32_t* cmd_buffer);
 
+namespace Gen4 {
+
 int KYTY_SYSV_ABI      GraphicsSetVsShader(uint32_t* cmd, uint64_t size, const HW::VsStageRegisters* vs_regs, uint32_t shader_modifier);
 int KYTY_SYSV_ABI      GraphicsUpdateVsShader(uint32_t* cmd, uint64_t size, const HW::VsStageRegisters* vs_regs, uint32_t shader_modifier);
 int KYTY_SYSV_ABI      GraphicsSetPsShader(uint32_t* cmd, uint64_t size, const uint32_t* ps_regs);
@@ -66,6 +68,39 @@ int KYTY_SYSV_ABI GraphicsRegisterResource(uint32_t* resource_handle, uint32_t o
 int KYTY_SYSV_ABI GraphicsUnregisterAllResourcesForOwner(uint32_t owner_handle);
 int KYTY_SYSV_ABI GraphicsUnregisterOwnerAndResources(uint32_t owner_handle);
 int KYTY_SYSV_ABI GraphicsUnregisterResource(uint32_t resource_handle);
+
+} // namespace Gen4
+
+namespace Gen5 {
+
+struct Shader;
+struct CommandBuffer;
+struct ShaderRegister;
+
+int KYTY_SYSV_ABI       GraphicsInit(uint32_t* state, uint32_t ver);
+void* KYTY_SYSV_ABI     GraphicsGetRegisterDefaults2(uint32_t ver);
+void* KYTY_SYSV_ABI     GraphicsGetRegisterDefaults2Internal(uint32_t ver);
+int KYTY_SYSV_ABI       GraphicsCreateShader(Shader** dst, void* header, const volatile void* code);
+uint32_t* KYTY_SYSV_ABI GraphicsDcbResetQueue(CommandBuffer* buf, uint32_t op, uint32_t state);
+uint32_t* KYTY_SYSV_ABI GraphicsDcbWaitUntilSafeForRendering(CommandBuffer* buf, uint32_t video_out_handle, uint32_t display_buffer_index);
+uint32_t* KYTY_SYSV_ABI GraphicsDcbSetCxRegistersIndirect(CommandBuffer* buf, const volatile ShaderRegister* regs, uint32_t num_regs);
+uint32_t* KYTY_SYSV_ABI GraphicsDcbSetShRegistersIndirect(CommandBuffer* buf, const volatile ShaderRegister* regs, uint32_t num_regs);
+uint32_t* KYTY_SYSV_ABI GraphicsDcbSetUcRegistersIndirect(CommandBuffer* buf, const volatile ShaderRegister* regs, uint32_t num_regs);
+uint32_t* KYTY_SYSV_ABI GraphicsDcbSetIndexSize(CommandBuffer* buf, uint8_t index_size, uint8_t cache_policy);
+uint32_t* KYTY_SYSV_ABI GraphicsDcbDrawIndexAuto(CommandBuffer* buf, uint32_t index_count, uint64_t modifier);
+int KYTY_SYSV_ABI       GraphicsSetCxRegIndirectPatchSetAddress(uint32_t* cmd, const volatile ShaderRegister* regs);
+int KYTY_SYSV_ABI       GraphicsSetShRegIndirectPatchSetAddress(uint32_t* cmd, const volatile ShaderRegister* regs);
+int KYTY_SYSV_ABI       GraphicsSetUcRegIndirectPatchSetAddress(uint32_t* cmd, const volatile ShaderRegister* regs);
+int KYTY_SYSV_ABI       GraphicsSetCxRegIndirectPatchAddRegisters(uint32_t* cmd, uint32_t num_regs);
+int KYTY_SYSV_ABI       GraphicsSetShRegIndirectPatchAddRegisters(uint32_t* cmd, uint32_t num_regs);
+int KYTY_SYSV_ABI       GraphicsSetUcRegIndirectPatchAddRegisters(uint32_t* cmd, uint32_t num_regs);
+int KYTY_SYSV_ABI       GraphicsCreatePrimState(ShaderRegister* cx_regs, ShaderRegister* uc_regs, const Shader* hs, const Shader* gs,
+                                                uint32_t prim_type);
+int KYTY_SYSV_ABI       GraphicsCreateInterpolantMapping(ShaderRegister* regs, const Shader* gs, const Shader* ps);
+uint32_t* KYTY_SYSV_ABI GraphicsCbSetShRegisterRangeDirect(CommandBuffer* buf, uint32_t offset, const uint32_t* values,
+                                                           uint32_t num_values);
+int KYTY_SYSV_ABI       GraphicsGetDataPacketPayloadAddress(uint32_t** addr, uint32_t* cmd, int type);
+} // namespace Gen5
 
 } // namespace Kyty::Libs::Graphics
 

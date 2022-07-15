@@ -11,7 +11,7 @@ The project is in its early stage.
 Licensed under the MIT license.
 
 ---
-Graphics for PS5 is not yet implemented
+Graphics for PS5 is under development.
 
 It is possible to run some simple games for PS4
 

@@ -10,6 +10,13 @@
 
 namespace Kyty::Libs::Graphics {
 
+enum class VideoOutBufferFormat : uint64_t
+{
+	Unknown,
+	R8G8B8A8Srgb,
+	B8G8R8A8Srgb,
+};
+
 class VideoOutBufferObject: public GpuObject
 {
 public:
@@ -20,9 +27,9 @@ public:
 	static constexpr int PARAM_NEO    = 4;
 	static constexpr int PARAM_PITCH  = 5;
 
-	explicit VideoOutBufferObject(uint32_t pixel_format, uint32_t width, uint32_t height, bool tiled, bool neo, uint32_t pitch)
+	explicit VideoOutBufferObject(VideoOutBufferFormat pixel_format, uint32_t width, uint32_t height, bool tiled, bool neo, uint32_t pitch)
 	{
-		params[PARAM_FORMAT] = pixel_format;
+		params[PARAM_FORMAT] = static_cast<uint64_t>(pixel_format);
 		params[PARAM_WIDTH]  = width;
 		params[PARAM_HEIGHT] = height;
 		params[PARAM_TILED]  = tiled ? 1 : 0;

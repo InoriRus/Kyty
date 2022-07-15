@@ -16,6 +16,8 @@ class File;
 #define KYTY_PM4(len, op, r)                                                                                                               \
 	(0xC0000000u | (((static_cast<uint16_t>(len) - 2u) & 0x3fffu) << 16u) | (((op)&0xffu) << 8u) | (((r)&0x3fu) << 2u))
 
+#define KYTY_PM4_LEN(cmd_id) ((((cmd_id) >> 16u) & 0x3fffu) + 2u)
+
 namespace Kyty::Libs::Graphics::Pm4 {
 
 constexpr uint32_t IT_NOP                       = 0x10;
@@ -84,6 +86,9 @@ constexpr uint32_t R_VS_EMBEDDED       = 0x0D;
 constexpr uint32_t R_PS_EMBEDDED       = 0x0E;
 constexpr uint32_t R_VS_UPDATE         = 0x0F;
 constexpr uint32_t R_PS_UPDATE         = 0x10;
+constexpr uint32_t R_SH_REGS           = 0x11;
+constexpr uint32_t R_CX_REGS           = 0x12;
+constexpr uint32_t R_UC_REGS           = 0x13;
 
 constexpr uint32_t DB_RENDER_CONTROL                                = 0x0;
 constexpr uint32_t DB_RENDER_CONTROL_DEPTH_CLEAR_ENABLE_SHIFT       = 0;
@@ -107,9 +112,8 @@ constexpr uint32_t DB_DEPTH_VIEW_SLICE_START_MASK  = 0x7FF;
 constexpr uint32_t DB_DEPTH_VIEW_SLICE_MAX_SHIFT   = 13;
 constexpr uint32_t DB_DEPTH_VIEW_SLICE_MAX_MASK    = 0x7FF;
 
-constexpr uint32_t DB_HTILE_DATA_BASE                 = 0x5;
-constexpr uint32_t DB_HTILE_DATA_BASE_BASE_256B_SHIFT = 0;
-constexpr uint32_t DB_HTILE_DATA_BASE_BASE_256B_MASK  = 0xFFFFFFFF;
+constexpr uint32_t DB_HTILE_DATA_BASE = 0x5;
+constexpr uint32_t DB_DEPTH_SIZE_XY   = 0x7;
 
 constexpr uint32_t DB_STENCIL_CLEAR             = 0xA;
 constexpr uint32_t DB_STENCIL_CLEAR_CLEAR_SHIFT = 0;
@@ -167,18 +171,15 @@ constexpr uint32_t DB_STENCIL_INFO_TILE_MODE_INDEX_MASK       = 0x7;
 constexpr uint32_t DB_STENCIL_INFO_TILE_STENCIL_DISABLE_SHIFT = 29;
 constexpr uint32_t DB_STENCIL_INFO_TILE_STENCIL_DISABLE_MASK  = 0x1;
 
-constexpr uint32_t DB_Z_READ_BASE                        = 0x12;
-constexpr uint32_t DB_Z_READ_BASE_BASE_256B_SHIFT        = 0;
-constexpr uint32_t DB_Z_READ_BASE_BASE_256B_MASK         = 0xFFFFFFFF;
-constexpr uint32_t DB_STENCIL_READ_BASE                  = 0x13;
-constexpr uint32_t DB_STENCIL_READ_BASE_BASE_256B_SHIFT  = 0;
-constexpr uint32_t DB_STENCIL_READ_BASE_BASE_256B_MASK   = 0xFFFFFFFF;
-constexpr uint32_t DB_Z_WRITE_BASE                       = 0x14;
-constexpr uint32_t DB_Z_WRITE_BASE_BASE_256B_SHIFT       = 0;
-constexpr uint32_t DB_Z_WRITE_BASE_BASE_256B_MASK        = 0xFFFFFFFF;
-constexpr uint32_t DB_STENCIL_WRITE_BASE                 = 0x15;
-constexpr uint32_t DB_STENCIL_WRITE_BASE_BASE_256B_SHIFT = 0;
-constexpr uint32_t DB_STENCIL_WRITE_BASE_BASE_256B_MASK  = 0xFFFFFFFF;
+constexpr uint32_t DB_Z_READ_BASE           = 0x12;
+constexpr uint32_t DB_STENCIL_READ_BASE     = 0x13;
+constexpr uint32_t DB_Z_WRITE_BASE          = 0x14;
+constexpr uint32_t DB_STENCIL_WRITE_BASE    = 0x15;
+constexpr uint32_t DB_Z_READ_BASE_HI        = 0x1A;
+constexpr uint32_t DB_STENCIL_READ_BASE_HI  = 0x1B;
+constexpr uint32_t DB_Z_WRITE_BASE_HI       = 0x1C;
+constexpr uint32_t DB_STENCIL_WRITE_BASE_HI = 0x1D;
+constexpr uint32_t DB_HTILE_DATA_BASE_HI    = 0x1E;
 
 constexpr uint32_t DB_DEPTH_SIZE                       = 0x16;
 constexpr uint32_t DB_DEPTH_SIZE_PITCH_TILE_MAX_SHIFT  = 0;
@@ -345,6 +346,8 @@ constexpr uint32_t PA_SC_MODE_CNTL_0_VPORT_SCISSOR_ENABLE_MASK  = 0x1;
 constexpr uint32_t PA_SC_MODE_CNTL_0_LINE_STIPPLE_ENABLE_SHIFT  = 2;
 constexpr uint32_t PA_SC_MODE_CNTL_0_LINE_STIPPLE_ENABLE_MASK   = 0x1;
 
+constexpr uint32_t VGT_GS_OUT_PRIM_TYPE = 0x29B;
+
 constexpr uint32_t DB_HTILE_SURFACE                               = 0x2AF;
 constexpr uint32_t DB_HTILE_SURFACE_LINEAR_SHIFT                  = 0;
 constexpr uint32_t DB_HTILE_SURFACE_LINEAR_MASK                   = 0x1;
@@ -377,8 +380,22 @@ constexpr uint32_t PA_SC_AA_CONFIG_MSAA_EXPOSED_SAMPLES_MASK   = 0x7;
 
 constexpr uint32_t PA_SC_AA_SAMPLE_LOCS_PIXEL_X0Y0_0 = 0x2FE;
 
-constexpr uint32_t CB_COLOR0_BASE = 0x318;
-constexpr uint32_t CB_COLOR0_INFO = 0x31C;
+constexpr uint32_t CB_COLOR0_BASE           = 0x318;
+constexpr uint32_t CB_COLOR0_VIEW           = 0x31B;
+constexpr uint32_t CB_COLOR0_INFO           = 0x31C;
+constexpr uint32_t CB_COLOR0_ATTRIB         = 0x31D;
+constexpr uint32_t CB_COLOR0_DCC_CONTROL    = 0x31E;
+constexpr uint32_t CB_COLOR0_CMASK          = 0x31F;
+constexpr uint32_t CB_COLOR0_FMASK          = 0x321;
+constexpr uint32_t CB_COLOR0_CLEAR_WORD0    = 0x323;
+constexpr uint32_t CB_COLOR0_CLEAR_WORD1    = 0x324;
+constexpr uint32_t CB_COLOR0_DCC_BASE       = 0x325;
+constexpr uint32_t CB_COLOR0_BASE_EXT       = 0x390;
+constexpr uint32_t CB_COLOR0_CMASK_BASE_EXT = 0x398;
+constexpr uint32_t CB_COLOR0_FMASK_BASE_EXT = 0x3A0;
+constexpr uint32_t CB_COLOR0_DCC_BASE_EXT   = 0x3A8;
+constexpr uint32_t CB_COLOR0_ATTRIB2        = 0x3B0;
+constexpr uint32_t CB_COLOR0_ATTRIB3        = 0x3B8;
 
 constexpr uint32_t SPI_SHADER_PGM_RSRC1_PS             = 0xA;
 constexpr uint32_t SPI_SHADER_PGM_RSRC1_PS_VGPRS_SHIFT = 0;
@@ -428,6 +445,12 @@ constexpr uint32_t COMPUTE_PGM_RSRC2_LDS_SIZE_MASK        = 0x1FF;
 
 constexpr uint32_t COMPUTE_USER_DATA_0  = 0x240;
 constexpr uint32_t COMPUTE_USER_DATA_15 = 0x24F;
+
+/* User config registers */
+
+constexpr uint32_t GE_CNTL         = 0x25b;
+constexpr uint32_t GE_USER_VGPR_EN = 0x262;
+constexpr uint32_t PRIMITIVE_TYPE  = 0x242;
 
 void DumpPm4PacketStream(Core::File* file, uint32_t* cmd_buffer, uint32_t start_dw, uint32_t num_dw);
 

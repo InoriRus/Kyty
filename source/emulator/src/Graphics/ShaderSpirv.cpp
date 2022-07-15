@@ -6153,6 +6153,8 @@ void Spirv::WriteAnnotations()
 			{
 				for (uint32_t i = 0; i < m_ps_input_info->input_num; i++)
 				{
+					EXIT_NOT_IMPLEMENTED((m_ps_input_info->interpolator_settings[i] & ~static_cast<uint32_t>(0x1f)) != 0);
+
 					vars.Add(String::FromPrintf("OpDecorate %%attr%d Location %d", i, m_ps_input_info->interpolator_settings[i]));
 				}
 				if (m_ps_input_info->ps_pos_xy)

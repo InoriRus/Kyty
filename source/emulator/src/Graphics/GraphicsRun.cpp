@@ -1408,14 +1408,6 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_depth_render_target)
 			z.stencil_info.tile_mode_index      = KYTY_PM4_GET(buffer[1], DB_STENCIL_INFO, TILE_MODE_INDEX);
 			z.stencil_info.tile_stencil_disable = KYTY_PM4_GET(buffer[1], DB_STENCIL_INFO, TILE_STENCIL_DISABLE);
 
-			//			if (Config::IsNeo())
-			//			{
-			//				EXIT_NOT_IMPLEMENTED((buffer[2] & 0xffu) != 0);
-			//				EXIT_NOT_IMPLEMENTED((buffer[3] & 0xffu) != 0);
-			//				EXIT_NOT_IMPLEMENTED((buffer[4] & 0xffu) != 0);
-			//				EXIT_NOT_IMPLEMENTED((buffer[5] & 0xffu) != 0);
-			//			}
-
 			z.z_read_base_addr        = static_cast<uint64_t>(buffer[2]) << 8u;
 			z.stencil_read_base_addr  = static_cast<uint64_t>(buffer[3]) << 8u;
 			z.z_write_base_addr       = static_cast<uint64_t>(buffer[4]) << 8u;
@@ -2200,7 +2192,7 @@ KYTY_CP_OP_PARSER(cp_op_set_uconfig_reg)
 
 	switch (cmd_offset & 0x1fffu)
 	{
-		case 0x0242:
+		case Pm4::PRIMITIVE_TYPE:
 			cp->GetUcfg()->SetPrimitiveType(buffer[1]);
 			return 2;
 			break;

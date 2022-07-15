@@ -50,15 +50,31 @@ struct VideoOutResolutionStatus
 
 struct VideoOutBufferAttribute
 {
-	uint32_t pixelFormat;
-	uint32_t tilingMode;
-	uint32_t aspectRatio;
+	uint32_t pixel_format;
+	uint32_t tiling_mode;
+	uint32_t aspect_ratio;
 	uint32_t width;
 	uint32_t height;
-	uint32_t pitchInPixel;
+	uint32_t pitch_in_pixel;
 	uint32_t option;
 	uint32_t reserved0;
 	uint64_t reserved1;
+};
+
+struct VideoOutBufferAttribute2
+{
+	uint32_t reserved0;
+	uint32_t tiling_mode;
+	uint32_t aspect_ratio;
+	uint32_t width;
+	uint32_t height;
+	uint32_t pitch_in_pixel;
+	uint64_t option;
+	uint64_t pixel_format;
+	uint64_t dcc_cb_register_clear_color;
+	uint32_t dcc_control;
+	uint32_t pad0;
+	uint64_t reserved1[3];
 };
 
 struct VideoOutFlipStatus
@@ -85,16 +101,32 @@ struct VideoOutVblankStatus
 	uint8_t  pad1[7]     = {};
 };
 
+struct VideoOutBuffers
+{
+	const void* data;
+	const void* metadata;
+	const void* reserved[2];
+};
+
+union VideoOutBufferAttributeUnion
+{
+	VideoOutBufferAttribute  gen4;
+	VideoOutBufferAttribute2 gen5;
+};
+
 struct VideoOutBufferSet
 {
-	VideoOutBufferAttribute attr        = {};
-	int                     start_index = 0;
-	int                     num         = 0;
+	VideoOutBufferAttributeUnion attr;
+
+	bool gen5        = false;
+	int  start_index = 0;
+	int  num         = 0;
+	int  set_id      = 0;
 };
 
 struct VideoOutBufferInfo
 {
-	void*                          buffer        = nullptr;
+	const void*                    buffer        = nullptr;
 	Graphics::VideoOutVulkanImage* buffer_vulkan = nullptr;
 	uint64_t                       buffer_size   = 0;
 	uint64_t                       buffer_pitch  = 0;
@@ -114,8 +146,8 @@ struct VideoOutConfig
 	VideoOutVblankStatus             pre_vblank_status;
 	VideoOutVblankStatus             vblank_status;
 	VideoOutBufferInfo               buffers[16];
-	VideoOutBufferSet                buffers_sets[16];
-	int                              buffers_sets_num = 0;
+	Vector<VideoOutBufferSet>        buffers_sets;
+	int                              buffers_sets_seq = 0;
 };
 
 class FlipQueue
@@ -159,7 +191,7 @@ public:
 	void            Close(int handle);
 	VideoOutConfig* Get(int handle);
 
-	VideoOutBufferImageInfo FindImage(void* buffer);
+	VideoOutBufferImageInfo FindImage(const void* buffer);
 
 	void Init(uint32_t width, uint32_t height);
 
@@ -189,21 +221,30 @@ private:
 
 static VideoOutContext* g_video_out_context = nullptr;
 
-static void calc_buffer_size(const VideoOutBufferAttribute* attribute, uint64_t* out_size, uint64_t* out_align, uint64_t* out_pitch)
+static void calc_buffer_size(const VideoOutBufferAttribute* attribute, const VideoOutBufferAttribute2* attribute2, uint64_t* out_size,
+                             uint64_t* out_align, uint64_t* out_pitch)
 {
 	EXIT_IF(out_size == nullptr);
 	EXIT_IF(out_pitch == nullptr);
+	EXIT_IF((attribute == nullptr && attribute2 == nullptr) || (attribute != nullptr && attribute2 != nullptr));
 
-	bool     tile   = attribute->tilingMode == 0;
-	bool     neo    = Config::IsNeo();
-	uint32_t width  = attribute->width;
-	uint32_t height = attribute->height;
-	uint32_t pitch  = attribute->pitchInPixel;
+	bool     tile   = (attribute2 != nullptr ? (attribute2->tiling_mode == 0) : (attribute->tiling_mode == 0));
+	bool     neo    = (attribute2 != nullptr ? true : Config::IsNeo());
+	uint32_t width  = (attribute2 != nullptr ? attribute2->width : attribute->width);
+	uint32_t height = (attribute2 != nullptr ? attribute2->height : attribute->height);
+	uint32_t pitch  = (attribute2 != nullptr ? attribute2->width : attribute->pitch_in_pixel);
 
-	// EXIT_NOT_IMPLEMENTED(attribute->width != attribute->pitchInPixel);
-	EXIT_NOT_IMPLEMENTED(attribute->option != 0);
-	EXIT_NOT_IMPLEMENTED(attribute->aspectRatio != 0);
-	EXIT_NOT_IMPLEMENTED(attribute->pixelFormat != 0x80000000);
+	if (attribute2 != nullptr)
+	{
+		EXIT_NOT_IMPLEMENTED(attribute2->option != 0);
+		EXIT_NOT_IMPLEMENTED(attribute2->aspect_ratio != 0);
+		EXIT_NOT_IMPLEMENTED(attribute2->pixel_format != 0x8000000000000000ULL && attribute2->pixel_format != 0x8000000022000000ULL);
+	} else
+	{
+		EXIT_NOT_IMPLEMENTED(attribute->option != 0);
+		EXIT_NOT_IMPLEMENTED(attribute->aspect_ratio != 0);
+		EXIT_NOT_IMPLEMENTED(attribute->pixel_format != 0x80000000 && attribute->pixel_format != 0x80002200);
+	}
 
 	Graphics::TileSizeAlign size32 {};
 	Graphics::TileGetVideoOutSize(width, height, pitch, tile, neo, &size32);
@@ -305,17 +346,17 @@ void VideoOutContext::Close(int handle)
 
 	m_video_out_ctx[handle].flip_rate = 0;
 
-	for (int i = 0; i < 16; i++)
+	for (auto& buffer: m_video_out_ctx[handle].buffers)
 	{
-		m_video_out_ctx[handle].buffers[i].buffer           = nullptr;
-		m_video_out_ctx[handle].buffers[i].buffer_vulkan    = nullptr;
-		m_video_out_ctx[handle].buffers[i].buffer_size      = 0;
-		m_video_out_ctx[handle].buffers[i].set_id           = 0;
-		m_video_out_ctx[handle].buffers_sets[i].num         = 0;
-		m_video_out_ctx[handle].buffers_sets[i].start_index = 0;
+		buffer.buffer        = nullptr;
+		buffer.buffer_vulkan = nullptr;
+		buffer.buffer_size   = 0;
+		buffer.set_id        = 0;
 	}
 
-	m_video_out_ctx[handle].buffers_sets_num = 0;
+	m_video_out_ctx[handle].buffers_sets.Clear();
+
+	m_video_out_ctx[handle].buffers_sets_seq = 0;
 }
 
 VideoOutConfig* VideoOutContext::Get(int handle)
@@ -382,7 +423,7 @@ void VideoOutContext::VblankEnd()
 	}
 }
 
-VideoOutBufferImageInfo VideoOutContext::FindImage(void* buffer)
+VideoOutBufferImageInfo VideoOutContext::FindImage(const void* buffer)
 {
 	VideoOutBufferImageInfo ret;
 
@@ -392,16 +433,16 @@ VideoOutBufferImageInfo VideoOutContext::FindImage(void* buffer)
 	{
 		if (ctx.opened)
 		{
-			for (int i = 0; i < ctx.buffers_sets_num; i++)
+			for (const auto& set: ctx.buffers_sets)
 			{
-				for (int j = ctx.buffers_sets[i].start_index; j < ctx.buffers_sets[i].num; j++)
+				for (int j = set.start_index; j < set.num; j++)
 				{
 					if (ctx.buffers[j].buffer == buffer)
 					{
 						ret.image        = ctx.buffers[j].buffer_vulkan;
 						ret.buffer_size  = ctx.buffers[j].buffer_size;
 						ret.buffer_pitch = ctx.buffers[j].buffer_pitch;
-						ret.index        = j - ctx.buffers_sets[i].start_index;
+						ret.index        = j - set.start_index;
 						goto END;
 					}
 				}
@@ -591,21 +632,50 @@ KYTY_SYSV_ABI void VideoOutSetBufferAttribute(VideoOutBufferAttribute* attribute
 
 	EXIT_NOT_IMPLEMENTED(attribute == nullptr);
 
-	printf("\tpixel_format   = %08" PRIx32 "\n", pixel_format);
-	printf("\ttiling_mode    = %" PRIu32 "\n", tiling_mode);
-	printf("\taspect_ratio   = %" PRIu32 "\n", aspect_ratio);
-	printf("\twidth          = %" PRIu32 "\n", width);
-	printf("\theight         = %" PRIu32 "\n", height);
-	printf("\tpitch_in_pixel = %" PRIu32 "\n", pitch_in_pixel);
+	printf("\t pixel_format   = %08" PRIx32 "\n", pixel_format);
+	printf("\t tiling_mode    = %" PRIu32 "\n", tiling_mode);
+	printf("\t aspect_ratio   = %" PRIu32 "\n", aspect_ratio);
+	printf("\t width          = %" PRIu32 "\n", width);
+	printf("\t height         = %" PRIu32 "\n", height);
+	printf("\t pitch_in_pixel = %" PRIu32 "\n", pitch_in_pixel);
 
 	memset(attribute, 0, sizeof(VideoOutBufferAttribute));
 
-	attribute->pixelFormat  = pixel_format;
-	attribute->tilingMode   = tiling_mode;
-	attribute->aspectRatio  = aspect_ratio;
-	attribute->width        = width;
-	attribute->height       = height;
-	attribute->pitchInPixel = pitch_in_pixel;
+	attribute->pixel_format   = pixel_format;
+	attribute->tiling_mode    = tiling_mode;
+	attribute->aspect_ratio   = aspect_ratio;
+	attribute->width          = width;
+	attribute->height         = height;
+	attribute->pitch_in_pixel = pitch_in_pixel;
+}
+
+KYTY_SYSV_ABI void VideoOutSetBufferAttribute2(VideoOutBufferAttribute2* attribute, uint64_t pixel_format, uint32_t tiling_mode,
+                                               uint32_t width, uint32_t height, uint64_t option, uint32_t dcc_control,
+                                               uint64_t dcc_cb_register_clear_color)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(attribute == nullptr);
+
+	printf("\t pixel_format                = %016" PRIx64 "\n", pixel_format);
+	printf("\t tiling_mode                 = %" PRIu32 "\n", tiling_mode);
+	printf("\t width                       = %" PRIu32 "\n", width);
+	printf("\t height                      = %" PRIu32 "\n", height);
+	printf("\t option                      = %016" PRIx64 "\n", option);
+	printf("\t dcc_control                 = %08" PRIx32 "\n", dcc_control);
+	printf("\t dcc_cb_register_clear_color = %016" PRIx64 "\n", dcc_cb_register_clear_color);
+
+	memset(attribute, 0, sizeof(VideoOutBufferAttribute2));
+
+	attribute->tiling_mode                 = tiling_mode;
+	attribute->aspect_ratio                = 0;
+	attribute->width                       = width;
+	attribute->height                      = height;
+	attribute->pitch_in_pixel              = 0;
+	attribute->option                      = option;
+	attribute->pixel_format                = pixel_format;
+	attribute->dcc_cb_register_clear_color = dcc_cb_register_clear_color;
+	attribute->dcc_control                 = dcc_control;
 }
 
 KYTY_SYSV_ABI int VideoOutSetFlipRate(int handle, int rate)
@@ -771,6 +841,92 @@ KYTY_SYSV_ABI int VideoOutAddVblankEvent(LibKernel::EventQueue::KernelEqueue eq,
 	return result;
 }
 
+static int register_buffers_internal(VideoOutConfig* ctx, int set_id, int start_index, const void* const* addresses, int buffer_num,
+                                     const VideoOutBufferAttribute* attribute, const VideoOutBufferAttribute2* attribute2)
+{
+	Graphics::WindowWaitForGraphicInitialized();
+	Graphics::GraphicsRenderCreateContext();
+
+	uint64_t buffer_size  = 0;
+	uint64_t buffer_align = 0;
+	uint64_t buffer_pitch = 0;
+	calc_buffer_size(attribute, attribute2, &buffer_size, &buffer_align, &buffer_pitch);
+
+	EXIT_NOT_IMPLEMENTED(buffer_size == 0);
+	EXIT_NOT_IMPLEMENTED(buffer_pitch == 0);
+
+	VideoOutBufferSet new_set {};
+
+	new_set.start_index = start_index;
+	new_set.num         = buffer_num;
+	new_set.set_id      = set_id;
+	if (attribute2 != nullptr)
+	{
+		new_set.attr.gen5 = *attribute2;
+		new_set.gen5      = true;
+	} else
+	{
+		new_set.attr.gen4 = *attribute;
+		new_set.gen5      = false;
+	}
+
+	ctx->buffers_sets.Add(new_set);
+
+	bool     tile   = (attribute2 != nullptr ? (attribute2->tiling_mode == 0) : (attribute->tiling_mode == 0));
+	bool     neo    = (attribute2 != nullptr ? true : Config::IsNeo());
+	uint32_t width  = (attribute2 != nullptr ? attribute2->width : attribute->width);
+	uint32_t height = (attribute2 != nullptr ? attribute2->height : attribute->height);
+
+	Graphics::VideoOutBufferFormat format = Graphics::VideoOutBufferFormat::Unknown;
+
+	if (attribute2 != nullptr)
+	{
+		if (attribute2->pixel_format == 0x8000000000000000ULL)
+		{
+			format = Graphics::VideoOutBufferFormat::B8G8R8A8Srgb;
+		} else if (attribute2->pixel_format == 0x8000000022000000ULL)
+		{
+			format = Graphics::VideoOutBufferFormat::R8G8B8A8Srgb;
+		}
+	} else
+	{
+		if (attribute->pixel_format == 0x80000000)
+		{
+			format = Graphics::VideoOutBufferFormat::B8G8R8A8Srgb;
+		} else if (attribute->pixel_format == 0x80002200)
+		{
+			format = Graphics::VideoOutBufferFormat::R8G8B8A8Srgb;
+		}
+	}
+
+	Graphics::VideoOutBufferObject vulkan_buffer_info(format, width, height, tile, neo, buffer_pitch);
+
+	for (int i = 0; i < buffer_num; i++)
+	{
+		if (ctx->buffers[i + start_index].buffer != nullptr)
+		{
+			return VIDEO_OUT_ERROR_SLOT_OCCUPIED;
+		}
+
+		EXIT_NOT_IMPLEMENTED((reinterpret_cast<uint64_t>(addresses[i]) & (buffer_align - 1u)) != 0);
+
+		ctx->buffers[i + start_index].set_id        = set_id;
+		ctx->buffers[i + start_index].buffer        = addresses[i];
+		ctx->buffers[i + start_index].buffer_size   = buffer_size;
+		ctx->buffers[i + start_index].buffer_pitch  = buffer_pitch;
+		ctx->buffers[i + start_index].buffer_vulkan = static_cast<Graphics::VideoOutVulkanImage*>(Graphics::GpuMemoryCreateObject(
+		    0, g_video_out_context->GetGraphicCtx(), nullptr, reinterpret_cast<uint64_t>(addresses[i]), buffer_size, vulkan_buffer_info));
+
+		EXIT_NOT_IMPLEMENTED(ctx->buffers[i + start_index].buffer_vulkan == nullptr);
+
+		printf("\tbuffers[%d] = %016" PRIx64 "\n", i + start_index, reinterpret_cast<uint64_t>(addresses[i]));
+	}
+
+	// Graphics::GpuMemoryDbgDump();
+
+	return OK;
+}
+
 KYTY_SYSV_ABI int VideoOutRegisterBuffers(int handle, int start_index, void* const* addresses, int buffer_num,
                                           const VideoOutBufferAttribute* attribute)
 {
@@ -795,71 +951,84 @@ KYTY_SYSV_ABI int VideoOutRegisterBuffers(int handle, int start_index, void* con
 		return VIDEO_OUT_ERROR_INVALID_VALUE;
 	}
 
-	Graphics::WindowWaitForGraphicInitialized();
-	Graphics::GraphicsRenderCreateContext();
+	int set_id = ctx->buffers_sets_seq++;
 
-	int set_index = ctx->buffers_sets_num++;
+	printf("\t start_index    = %d\n", start_index);
+	printf("\t buffer_num     = %d\n", buffer_num);
+	printf("\t pixel_format   = 0x%08" PRIx32 "\n", attribute->pixel_format);
+	printf("\t tiling_mode    = %" PRIu32 "\n", attribute->tiling_mode);
+	printf("\t aspect_ratio   = %" PRIu32 "\n", attribute->aspect_ratio);
+	printf("\t width          = %" PRIu32 "\n", attribute->width);
+	printf("\t height         = %" PRIu32 "\n", attribute->height);
+	printf("\t pitch_in_pixel = %" PRIu32 "\n", attribute->pitch_in_pixel);
+	printf("\t option         = %" PRIu32 "\n", attribute->option);
 
-	if (set_index > 15)
-	{
-		return VIDEO_OUT_ERROR_NO_EMPTY_SLOT;
-	}
-
-	printf("\tstart_index = %d\n", start_index);
-	printf("\tbuffer_num = %d\n", buffer_num);
-	printf("\tpixel_format   = 0x%08" PRIx32 "\n", attribute->pixelFormat);
-	printf("\ttiling_mode    = %" PRIu32 "\n", attribute->tilingMode);
-	printf("\taspect_ratio   = %" PRIu32 "\n", attribute->aspectRatio);
-	printf("\twidth          = %" PRIu32 "\n", attribute->width);
-	printf("\theight         = %" PRIu32 "\n", attribute->height);
-	printf("\tpitch_in_pixel = %" PRIu32 "\n", attribute->pitchInPixel);
-	printf("\toption = %" PRIu32 "\n", attribute->option);
-
-	EXIT_NOT_IMPLEMENTED(attribute->pixelFormat != 0x80000000);
-	EXIT_NOT_IMPLEMENTED(attribute->tilingMode != 0);
-	EXIT_NOT_IMPLEMENTED(attribute->aspectRatio != 0);
-	EXIT_NOT_IMPLEMENTED(attribute->pitchInPixel != attribute->width);
+	// EXIT_NOT_IMPLEMENTED(attribute->pixel_format != 0x80000000);
+	EXIT_NOT_IMPLEMENTED(attribute->tiling_mode != 0);
+	EXIT_NOT_IMPLEMENTED(attribute->aspect_ratio != 0);
+	EXIT_NOT_IMPLEMENTED(attribute->pitch_in_pixel != attribute->width);
 	EXIT_NOT_IMPLEMENTED(attribute->option != 0);
 
-	uint64_t buffer_size  = 0;
-	uint64_t buffer_align = 0;
-	uint64_t buffer_pitch = 0;
-	calc_buffer_size(attribute, &buffer_size, &buffer_align, &buffer_pitch);
+	int result = register_buffers_internal(ctx, set_id, start_index, addresses, buffer_num, attribute, nullptr);
 
-	EXIT_NOT_IMPLEMENTED(buffer_size == 0);
-	EXIT_NOT_IMPLEMENTED(buffer_pitch == 0);
+	return (result == OK ? set_id : result);
+}
 
-	ctx->buffers_sets[set_index].start_index = start_index;
-	ctx->buffers_sets[set_index].num         = buffer_num;
-	ctx->buffers_sets[set_index].attr        = *attribute;
+KYTY_SYSV_ABI int VideoOutRegisterBuffers2(int handle, int set_index, int buffer_index_start, const VideoOutBuffers* buffers,
+                                           int buffer_num, const VideoOutBufferAttribute2* attribute, int category, void* option)
+{
+	PRINT_NAME();
 
-	Graphics::VideoOutBufferObject vulkan_buffer_info(attribute->pixelFormat, attribute->width, attribute->height,
-	                                                  (attribute->tilingMode == 0), Config::IsNeo(), buffer_pitch);
+	EXIT_IF(g_video_out_context == nullptr);
+
+	auto* ctx = g_video_out_context->Get(handle);
+
+	if (buffers == nullptr)
+	{
+		return VIDEO_OUT_ERROR_INVALID_ADDRESS;
+	}
+
+	if (attribute == nullptr)
+	{
+		return VIDEO_OUT_ERROR_INVALID_OPTION;
+	}
+
+	if (buffer_index_start < 0 || buffer_index_start > 15 || buffer_num < 1 || buffer_num > 16 || buffer_index_start + buffer_num > 15)
+	{
+		return VIDEO_OUT_ERROR_INVALID_VALUE;
+	}
+
+	printf("\t start_index    = %d\n", buffer_index_start);
+	printf("\t buffer_num     = %d\n", buffer_num);
+	printf("\t set_index      = %d\n", set_index);
+	printf("\t pixel_format   = 0x%016" PRIx64 "\n", attribute->pixel_format);
+	printf("\t tiling_mode    = %" PRIu32 "\n", attribute->tiling_mode);
+	printf("\t aspect_ratio   = %" PRIu32 "\n", attribute->aspect_ratio);
+	printf("\t width          = %" PRIu32 "\n", attribute->width);
+	printf("\t height         = %" PRIu32 "\n", attribute->height);
+	printf("\t pitch_in_pixel = %" PRIu32 "\n", attribute->pitch_in_pixel);
+	printf("\t option         = %" PRIu64 "\n", attribute->option);
+
+	// EXIT_NOT_IMPLEMENTED(attribute->pixel_format != 0x80000000);
+	EXIT_NOT_IMPLEMENTED(option != nullptr);
+	EXIT_NOT_IMPLEMENTED(category != 0);
+	EXIT_NOT_IMPLEMENTED(attribute->tiling_mode != 0);
+	EXIT_NOT_IMPLEMENTED(attribute->aspect_ratio != 0);
+	EXIT_NOT_IMPLEMENTED(attribute->pitch_in_pixel != 0);
+	EXIT_NOT_IMPLEMENTED(attribute->option != 0);
+	EXIT_NOT_IMPLEMENTED(attribute->dcc_cb_register_clear_color != 0);
+	EXIT_NOT_IMPLEMENTED(attribute->dcc_control != 0);
+
+	Vector<const void*> addresses(buffer_num);
 
 	for (int i = 0; i < buffer_num; i++)
 	{
-		if (ctx->buffers[i + start_index].buffer != nullptr)
-		{
-			return VIDEO_OUT_ERROR_SLOT_OCCUPIED;
-		}
+		EXIT_NOT_IMPLEMENTED(buffers[i].metadata != nullptr);
 
-		EXIT_NOT_IMPLEMENTED((reinterpret_cast<uint64_t>(addresses[i]) & (buffer_align - 1u)) != 0);
-
-		ctx->buffers[i + start_index].set_id        = set_index;
-		ctx->buffers[i + start_index].buffer        = addresses[i];
-		ctx->buffers[i + start_index].buffer_size   = buffer_size;
-		ctx->buffers[i + start_index].buffer_pitch  = buffer_pitch;
-		ctx->buffers[i + start_index].buffer_vulkan = static_cast<Graphics::VideoOutVulkanImage*>(Graphics::GpuMemoryCreateObject(
-		    0, g_video_out_context->GetGraphicCtx(), nullptr, reinterpret_cast<uint64_t>(addresses[i]), buffer_size, vulkan_buffer_info));
-
-		EXIT_NOT_IMPLEMENTED(ctx->buffers[i + start_index].buffer_vulkan == nullptr);
-
-		printf("\tbuffers[%d] = %016" PRIx64 "\n", i + start_index, reinterpret_cast<uint64_t>(addresses[i]));
+		addresses[i] = buffers[i].data;
 	}
 
-	// Graphics::GpuMemoryDbgDump();
-
-	return set_index;
+	return register_buffers_internal(ctx, set_index, buffer_index_start, addresses.GetDataConst(), buffer_num, nullptr, attribute);
 }
 
 VideoOutBufferImageInfo VideoOutGetImage(uint64_t addr)

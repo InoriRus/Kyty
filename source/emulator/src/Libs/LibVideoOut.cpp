@@ -7,6 +7,8 @@
 
 namespace Kyty::Libs {
 
+namespace LibGen4 {
+
 LIB_VERSION("VideoOut", 1, "VideoOut", 0, 0);
 
 LIB_DEFINE(InitVideoOut_1)
@@ -25,6 +27,29 @@ LIB_DEFINE(InitVideoOut_1)
 	LIB_FUNC("SbU3dwp80lQ", VideoOut::VideoOutGetFlipStatus);
 	LIB_FUNC("1FZBKy8HeNU", VideoOut::VideoOutGetVblankStatus);
 	LIB_FUNC("MTxxrOCeSig", VideoOut::VideoOutSetWindowModeMargins);
+}
+
+} // namespace LibGen4
+
+namespace LibGen5 {
+
+LIB_VERSION("VideoOut", 1, "VideoOut", 1, 1);
+
+LIB_DEFINE(InitVideoOut_1)
+{
+	PRINT_NAME_ENABLE(true);
+
+	LIB_FUNC("Up36PTk687E", VideoOut::VideoOutOpen);
+	LIB_FUNC("PjS5uASwcV8", VideoOut::VideoOutSetBufferAttribute2);
+	LIB_FUNC("rKBUtgRrtbk", VideoOut::VideoOutRegisterBuffers2);
+}
+
+} // namespace LibGen5
+
+LIB_DEFINE(InitVideoOut_1)
+{
+	LibGen4::InitVideoOut_1(s);
+	LibGen5::InitVideoOut_1(s);
 }
 
 } // namespace Kyty::Libs
