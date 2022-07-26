@@ -138,9 +138,10 @@ public:
 	KYTY_CLASS_NO_COPY(PipelineCache);
 
 	VulkanPipeline* CreatePipeline(VulkanFramebuffer* framebuffer, RenderColorInfo* color, RenderDepthInfo* depth,
-	                               const ShaderVertexInputInfo* vs_input_info, HW::HardwareContext* ctx,
+	                               const ShaderVertexInputInfo* vs_input_info, HW::Context* ctx, HW::Shader* sh_ctx,
 	                               const ShaderPixelInputInfo* ps_input_info, VkPrimitiveTopology topology);
-	VulkanPipeline* CreatePipeline(const ShaderComputeInputInfo* input_info, const HW::ComputeShaderInfo* cs_regs);
+	VulkanPipeline* CreatePipeline(const ShaderComputeInputInfo* input_info, const HW::ComputeShaderInfo* cs_regs,
+	                               const HW::ShaderRegisters* sh_regs);
 	void            DeletePipeline(VulkanPipeline* pipeline);
 	void            DeletePipelines(VulkanFramebuffer* framebuffer);
 	void            DeleteAllPipelines();
@@ -468,10 +469,14 @@ static void uc_print(const char* func, const HW::UserConfig& uc)
 	printf("\t GetPrimType()  = 0x%08" PRIx32 "\n", uc.GetPrimType());
 }
 
-// void uc_check(const UserConfig& uc)
-//{
-//	EXIT_NOT_IMPLEMENTED(uc.GetPrimType() != 4);
-//}
+static void uc_check(const HW::UserConfig& /*uc*/) {}
+
+static void sh_print(const char* func, const HW::Shader& /*uc*/)
+{
+	printf("%s\n", func);
+}
+
+static void sh_check(const HW::Shader& /*uc*/) {}
 
 static Core::StringList rt_print(const char* func, const HW::RenderTarget& rt)
 {
@@ -679,14 +684,14 @@ static void clip_print(const char* func, const HW::ClipControl& c)
 {
 	printf("%s\n", func);
 
-	printf("\t user_clip_planes                    = 0x%08" PRIx32 "\n", c.user_clip_planes);
-	printf("\t user_clip_plane_mode                = 0x%08" PRIx32 "\n", c.user_clip_plane_mode);
-	printf("\t clip_space                          = 0x%08" PRIx32 "\n", c.clip_space);
-	printf("\t vertex_kill_mode                    = 0x%08" PRIx32 "\n", c.vertex_kill_mode);
-	printf("\t min_z_clip_enable                   = 0x%08" PRIx32 "\n", c.min_z_clip_enable);
-	printf("\t max_z_clip_enable                   = 0x%08" PRIx32 "\n", c.max_z_clip_enable);
+	printf("\t user_clip_planes                    = 0x%02" PRIx8 "\n", c.user_clip_planes);
+	printf("\t user_clip_plane_mode                = 0x%02" PRIx8 "\n", c.user_clip_plane_mode);
+	printf("\t dx_clip_space                       = %s\n", c.dx_clip_space ? "true" : "false");
+	printf("\t vertex_kill_any                     = %s\n", c.vertex_kill_any ? "true" : "false");
+	printf("\t min_z_clip_disable                  = %s\n", c.min_z_clip_disable ? "true" : "false");
+	printf("\t max_z_clip_disable                  = %s\n", c.max_z_clip_disable ? "true" : "false");
 	printf("\t user_clip_plane_negate_y            = %s\n", c.user_clip_plane_negate_y ? "true" : "false");
-	printf("\t clip_enable                         = %s\n", c.clip_enable ? "true" : "false");
+	printf("\t clip_disable                        = %s\n", c.clip_disable ? "true" : "false");
 	printf("\t user_clip_plane_cull_only           = %s\n", c.user_clip_plane_cull_only ? "true" : "false");
 	printf("\t cull_on_clipping_error_disable      = %s\n", c.cull_on_clipping_error_disable ? "true" : "false");
 	printf("\t linear_attribute_clip_enable        = %s\n", c.linear_attribute_clip_enable ? "true" : "false");
@@ -697,12 +702,12 @@ static void clip_check(const HW::ClipControl& c)
 {
 	EXIT_NOT_IMPLEMENTED(c.user_clip_planes != 0);
 	EXIT_NOT_IMPLEMENTED(c.user_clip_plane_mode != 0);
-	EXIT_NOT_IMPLEMENTED(c.clip_space != 0);
-	EXIT_NOT_IMPLEMENTED(c.vertex_kill_mode != 0);
-	EXIT_NOT_IMPLEMENTED(c.min_z_clip_enable != 0);
-	EXIT_NOT_IMPLEMENTED(c.max_z_clip_enable != 0);
+	EXIT_NOT_IMPLEMENTED(c.dx_clip_space != false);
+	EXIT_NOT_IMPLEMENTED(c.vertex_kill_any != false);
+	EXIT_NOT_IMPLEMENTED(c.min_z_clip_disable != false);
+	EXIT_NOT_IMPLEMENTED(c.max_z_clip_disable != false);
 	EXIT_NOT_IMPLEMENTED(c.user_clip_plane_negate_y != false);
-	EXIT_NOT_IMPLEMENTED(c.clip_enable != false);
+	EXIT_NOT_IMPLEMENTED(c.clip_disable != false);
 	EXIT_NOT_IMPLEMENTED(c.user_clip_plane_cull_only != false);
 	EXIT_NOT_IMPLEMENTED(c.cull_on_clipping_error_disable != false);
 	EXIT_NOT_IMPLEMENTED(c.linear_attribute_clip_enable != false);
@@ -986,7 +991,7 @@ static void vp_check(const HW::ScreenViewport& vp, const HW::ScanModeControl& sm
 	EXIT_NOT_IMPLEMENTED(vp.viewports[0].viewport_scissor_window_offset_enable != false);
 }
 
-static void hw_check(const HW::HardwareContext& hw)
+static void hw_check(const HW::Context& hw)
 {
 	const auto& rt   = hw.GetRenderTarget(0);
 	const auto& bc   = hw.GetBlendControl(0);
@@ -1021,7 +1026,7 @@ static void hw_check(const HW::HardwareContext& hw)
 	// EXIT_NOT_IMPLEMENTED(hw.GetStencilClearValue() != 0);
 }
 
-static void hw_print(const HW::HardwareContext& hw)
+static void hw_print(const HW::Context& hw)
 {
 	const auto& rt   = hw.GetRenderTarget(0);
 	const auto& bc   = hw.GetBlendControl(0);
@@ -1042,7 +1047,7 @@ static void hw_print(const HW::HardwareContext& hw)
 
 	if (Kyty::Log::GetDirection() != Kyty::Log::Direction::Silent)
 	{
-		printf("HardwareContext\n");
+		printf("Context\n");
 		printf("\t GetRenderTargetMask()   = 0x%08" PRIx32 "\n", hw.GetRenderTargetMask());
 		printf("\t GetDepthClearValue()    = %f\n", hw.GetDepthClearValue());
 		printf("\t GetStencilClearValue()  = %" PRIu8 "\n", hw.GetStencilClearValue());
@@ -2345,7 +2350,7 @@ VulkanPipeline* PipelineCache::Find(const Pipeline& p) const
 }
 
 VulkanPipeline* PipelineCache::CreatePipeline(VulkanFramebuffer* framebuffer, RenderColorInfo* color, RenderDepthInfo* depth,
-                                              const ShaderVertexInputInfo* vs_input_info, HW::HardwareContext* ctx,
+                                              const ShaderVertexInputInfo* vs_input_info, HW::Context* ctx, HW::Shader* sh_ctx,
                                               const ShaderPixelInputInfo* ps_input_info, VkPrimitiveTopology topology)
 {
 	KYTY_PROFILER_BLOCK("PipelineCache::CreatePipeline(Gfx)", profiler::colors::DeepOrangeA200);
@@ -2356,8 +2361,9 @@ VulkanPipeline* PipelineCache::CreatePipeline(VulkanFramebuffer* framebuffer, Re
 
 	Core::LockGuard lock(m_mutex);
 
-	const auto&               vs_regs    = ctx->GetVs();
-	const auto&               ps_regs    = ctx->GetPs();
+	const auto&               vs_regs    = sh_ctx->GetVs();
+	const auto&               ps_regs    = sh_ctx->GetPs();
+	const auto&               sh_regs    = ctx->GetShaderRegisters();
 	const HW::BlendColor&     bclr       = ctx->GetBlendColor();
 	const HW::ScreenViewport& vp         = ctx->GetScreenViewport();
 	const auto&               bc         = ctx->GetBlendControl(0);
@@ -2445,8 +2451,8 @@ VulkanPipeline* PipelineCache::CreatePipeline(VulkanFramebuffer* framebuffer, Re
 		return found;
 	}
 
-	auto vs_code = ShaderParseVS(&vs_regs);
-	auto ps_code = ShaderParsePS(&ps_regs);
+	auto vs_code = ShaderParseVS(&vs_regs, &sh_regs);
+	auto ps_code = ShaderParsePS(&ps_regs, &sh_regs);
 
 	auto vs_shader = ShaderRecompileVS(vs_code, vs_input_info);
 	auto ps_shader = ShaderRecompilePS(ps_code, ps_input_info);
@@ -2497,11 +2503,13 @@ VulkanPipeline* PipelineCache::CreatePipeline(VulkanFramebuffer* framebuffer, Re
 	return p.pipeline;
 }
 
-VulkanPipeline* PipelineCache::CreatePipeline(const ShaderComputeInputInfo* input_info, const HW::ComputeShaderInfo* cs_regs)
+VulkanPipeline* PipelineCache::CreatePipeline(const ShaderComputeInputInfo* input_info, const HW::ComputeShaderInfo* cs_regs,
+                                              const HW::ShaderRegisters* sh_regs)
 {
 	KYTY_PROFILER_BLOCK("PipelineCache::CreatePipeline(Compute)", profiler::colors::RedA100);
 
 	EXIT_IF(cs_regs == nullptr);
+	EXIT_IF(sh_regs == nullptr);
 
 	Core::LockGuard lock(m_mutex);
 
@@ -2530,7 +2538,7 @@ VulkanPipeline* PipelineCache::CreatePipeline(const ShaderComputeInputInfo* inpu
 		return found;
 	}
 
-	auto cs_code = ShaderParseCS(cs_regs);
+	auto cs_code = ShaderParseCS(cs_regs, sh_regs);
 
 	auto cs_shader = ShaderRecompileCS(cs_code, input_info);
 	EXIT_IF(cs_shader.IsEmpty());
@@ -3612,7 +3620,7 @@ void GraphicsRenderDepthStencilBarrier(CommandBuffer* buffer, uint64_t vaddr, ui
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-static void FindRenderDepthInfo(uint64_t submit_id, CommandBuffer* /*buffer*/, const HW::HardwareContext& hw, RenderDepthInfo* r)
+static void FindRenderDepthInfo(uint64_t submit_id, CommandBuffer* /*buffer*/, const HW::Context& hw, RenderDepthInfo* r)
 {
 	KYTY_PROFILER_FUNCTION();
 
@@ -3772,7 +3780,7 @@ static void FindRenderDepthInfo(uint64_t submit_id, CommandBuffer* /*buffer*/, c
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-static void FindRenderColorInfo(uint64_t submit_id, CommandBuffer* buffer, const HW::HardwareContext& hw, RenderColorInfo* r)
+static void FindRenderColorInfo(uint64_t submit_id, CommandBuffer* buffer, const HW::Context& hw, RenderColorInfo* r)
 {
 	KYTY_PROFILER_FUNCTION();
 
@@ -4313,7 +4321,7 @@ static void SetDynamicParams(VkCommandBuffer vk_buffer, VulkanPipeline* pipeline
 	}
 }
 
-void GraphicsRenderDrawIndex(uint64_t submit_id, CommandBuffer* buffer, HW::HardwareContext* ctx, HW::UserConfig* ucfg,
+void GraphicsRenderDrawIndex(uint64_t submit_id, CommandBuffer* buffer, HW::Context* ctx, HW::UserConfig* ucfg, HW::Shader* sh_ctx,
                              uint32_t index_type_and_size, uint32_t index_count, const void* index_addr, uint32_t flags, uint32_t type)
 {
 	KYTY_PROFILER_FUNCTION();
@@ -4326,17 +4334,21 @@ void GraphicsRenderDrawIndex(uint64_t submit_id, CommandBuffer* buffer, HW::Hard
 
 	Core::LockGuard lock(g_render_ctx->GetMutex());
 
-	if (const auto& vs = ctx->GetVs(); !vs.vs_embedded && ShaderIsDisabled(vs.vs_regs.GetGpuAddress()))
+	if (const auto& vs = sh_ctx->GetVs(); !vs.vs_embedded && ShaderIsDisabled(vs.vs_regs.GetGpuAddress()))
 	{
 		return;
 	}
 
-	if (const auto& ps = ctx->GetPs(); !ps.ps_embedded && ShaderIsDisabled(ps.ps_regs.data_addr))
+	if (const auto& ps = sh_ctx->GetPs(); !ps.ps_embedded && ShaderIsDisabled(ps.ps_regs.data_addr))
 	{
 		return;
 	}
+
+	sh_print("GraphicsRenderDrawIndex():Shader:", *sh_ctx);
+	sh_check(*sh_ctx);
 
 	uc_print("GraphicsRenderDrawIndex():UserConfig:", *ucfg);
+	uc_check(*ucfg);
 
 	hw_print(*ctx);
 	hw_check(*ctx);
@@ -4394,12 +4406,12 @@ void GraphicsRenderDrawIndex(uint64_t submit_id, CommandBuffer* buffer, HW::Hard
 	auto* vk_buffer = buffer->GetPool()->buffers[buffer->GetIndex()];
 
 	ShaderVertexInputInfo vs_input_info;
-	ShaderGetInputInfoVS(&ctx->GetVs(), &vs_input_info);
+	ShaderGetInputInfoVS(&sh_ctx->GetVs(), &ctx->GetShaderRegisters(), &vs_input_info);
 
 	ShaderPixelInputInfo ps_input_info;
-	ShaderGetInputInfoPS(&ctx->GetPs(), &vs_input_info, &ps_input_info);
+	ShaderGetInputInfoPS(&sh_ctx->GetPs(), &ctx->GetShaderRegisters(), &vs_input_info, &ps_input_info);
 
-	auto* pipeline = g_render_ctx->GetPipelineCache()->CreatePipeline(framebuffer, &color_info, &depth_info, &vs_input_info, ctx,
+	auto* pipeline = g_render_ctx->GetPipelineCache()->CreatePipeline(framebuffer, &color_info, &depth_info, &vs_input_info, ctx, sh_ctx,
 	                                                                  &ps_input_info, topology);
 
 	// EXIT_NOT_IMPLEMENTED(vs_input_info.buffers_num > 1);
@@ -4459,7 +4471,7 @@ void GraphicsRenderDrawIndex(uint64_t submit_id, CommandBuffer* buffer, HW::Hard
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-void GraphicsRenderDrawIndexAuto(uint64_t submit_id, CommandBuffer* buffer, HW::HardwareContext* ctx, HW::UserConfig* ucfg,
+void GraphicsRenderDrawIndexAuto(uint64_t submit_id, CommandBuffer* buffer, HW::Context* ctx, HW::UserConfig* ucfg, HW::Shader* sh_ctx,
                                  uint32_t index_count, uint32_t flags)
 {
 	KYTY_PROFILER_FUNCTION();
@@ -4470,17 +4482,21 @@ void GraphicsRenderDrawIndexAuto(uint64_t submit_id, CommandBuffer* buffer, HW::
 
 	Core::LockGuard lock(g_render_ctx->GetMutex());
 
-	if (const auto& vs = ctx->GetVs(); !vs.vs_embedded && ShaderIsDisabled(vs.vs_regs.GetGpuAddress()))
+	if (const auto& vs = sh_ctx->GetVs(); !vs.vs_embedded && ShaderIsDisabled(vs.vs_regs.GetGpuAddress()))
 	{
 		return;
 	}
 
-	if (const auto& ps = ctx->GetPs(); !ps.ps_embedded && ShaderIsDisabled(ps.ps_regs.data_addr))
+	if (const auto& ps = sh_ctx->GetPs(); !ps.ps_embedded && ShaderIsDisabled(ps.ps_regs.data_addr))
 	{
 		return;
 	}
+
+	sh_print("GraphicsRenderDrawIndexAuto():Shader:", *sh_ctx);
+	sh_check(*sh_ctx);
 
 	uc_print("GraphicsRenderDrawIndexAuto():UserConfig:", *ucfg);
+	uc_check(*ucfg);
 
 	hw_print(*ctx);
 	hw_check(*ctx);
@@ -4515,16 +4531,17 @@ void GraphicsRenderDrawIndexAuto(uint64_t submit_id, CommandBuffer* buffer, HW::
 		default: EXIT("unknown primitive type: %u\n", ucfg->GetPrimType());
 	}
 
-	const auto& vertex_shader_info = ctx->GetVs();
-	const auto& pixel_shader_info  = ctx->GetPs();
+	const auto& vertex_shader_info = sh_ctx->GetVs();
+	const auto& pixel_shader_info  = sh_ctx->GetPs();
+	const auto& shader_regs        = ctx->GetShaderRegisters();
 
 	ShaderVertexInputInfo vs_input_info;
-	ShaderGetInputInfoVS(&vertex_shader_info, &vs_input_info);
+	ShaderGetInputInfoVS(&vertex_shader_info, &shader_regs, &vs_input_info);
 
 	ShaderPixelInputInfo ps_input_info;
-	ShaderGetInputInfoPS(&pixel_shader_info, &vs_input_info, &ps_input_info);
+	ShaderGetInputInfoPS(&pixel_shader_info, &shader_regs, &vs_input_info, &ps_input_info);
 
-	auto* pipeline = g_render_ctx->GetPipelineCache()->CreatePipeline(framebuffer, &color_info, &depth_info, &vs_input_info, ctx,
+	auto* pipeline = g_render_ctx->GetPipelineCache()->CreatePipeline(framebuffer, &color_info, &depth_info, &vs_input_info, ctx, sh_ctx,
 	                                                                  &ps_input_info, topology);
 
 	// EXIT_NOT_IMPLEMENTED(vs_input_info.buffers_num > 1);
@@ -4578,7 +4595,7 @@ void GraphicsRenderDrawIndexAuto(uint64_t submit_id, CommandBuffer* buffer, HW::
 	InvalidateMemoryObject(depth_info);
 }
 
-void GraphicsRenderDispatchDirect(uint64_t submit_id, CommandBuffer* buffer, HW::HardwareContext* ctx, uint32_t thread_group_x,
+void GraphicsRenderDispatchDirect(uint64_t submit_id, CommandBuffer* buffer, HW::Context* ctx, HW::Shader* sh_ctx, uint32_t thread_group_x,
                                   uint32_t thread_group_y, uint32_t thread_group_z, uint32_t mode)
 {
 	EXIT_IF(ctx == nullptr);
@@ -4588,21 +4605,22 @@ void GraphicsRenderDispatchDirect(uint64_t submit_id, CommandBuffer* buffer, HW:
 
 	Core::LockGuard lock(g_render_ctx->GetMutex());
 
-	if (ShaderIsDisabled(ctx->GetCs().cs_regs.data_addr))
+	if (ShaderIsDisabled(sh_ctx->GetCs().cs_regs.data_addr))
 	{
 		return;
 	}
 
 	EXIT_NOT_IMPLEMENTED(mode != 0);
 
-	const auto& cs_regs = ctx->GetCs();
+	const auto& cs_regs = sh_ctx->GetCs();
+	const auto& sh_regs = ctx->GetShaderRegisters();
 
 	ShaderComputeInputInfo input_info;
-	ShaderGetInputInfoCS(&cs_regs, &input_info);
+	ShaderGetInputInfoCS(&cs_regs, &sh_regs, &input_info);
 
 	auto* vk_buffer = buffer->GetPool()->buffers[buffer->GetIndex()];
 
-	auto* pipeline = g_render_ctx->GetPipelineCache()->CreatePipeline(&input_info, &ctx->GetCs());
+	auto* pipeline = g_render_ctx->GetPipelineCache()->CreatePipeline(&input_info, &sh_ctx->GetCs(), &ctx->GetShaderRegisters());
 
 	vkCmdBindPipeline(vk_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
 

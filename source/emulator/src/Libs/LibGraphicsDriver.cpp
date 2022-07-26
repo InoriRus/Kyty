@@ -70,13 +70,6 @@ LIB_DEFINE(InitGraphicsDriver_1)
 	LIB_FUNC("2JtWUUiYBXs", Gen5::GraphicsGetRegisterDefaults2);
 	LIB_FUNC("wRbq6ZjNop4", Gen5::GraphicsGetRegisterDefaults2Internal);
 	LIB_FUNC("f3dg2CSgRKY", Gen5::GraphicsCreateShader);
-	LIB_FUNC("TRO721eVt4g", Gen5::GraphicsDcbResetQueue);
-	LIB_FUNC("MWiElSNE8j8", Gen5::GraphicsDcbWaitUntilSafeForRendering);
-	LIB_FUNC("ZvwO9euwYzc", Gen5::GraphicsDcbSetCxRegistersIndirect);
-	LIB_FUNC("-HOOCn0JY48", Gen5::GraphicsDcbSetShRegistersIndirect);
-	LIB_FUNC("hvUfkUIQcOE", Gen5::GraphicsDcbSetUcRegistersIndirect);
-	LIB_FUNC("GIIW2J37e70", Gen5::GraphicsDcbSetIndexSize);
-	LIB_FUNC("Yw0jKSqop+E", Gen5::GraphicsDcbDrawIndexAuto);
 	LIB_FUNC("vcmNN+AAXnY", Gen5::GraphicsSetCxRegIndirectPatchSetAddress);
 	LIB_FUNC("Qrj4c+61z4A", Gen5::GraphicsSetShRegIndirectPatchSetAddress);
 	LIB_FUNC("6lNcCp+fxi4", Gen5::GraphicsSetUcRegIndirectPatchSetAddress);
@@ -85,16 +78,47 @@ LIB_DEFINE(InitGraphicsDriver_1)
 	LIB_FUNC("vRoArM9zaIk", Gen5::GraphicsSetUcRegIndirectPatchAddRegisters);
 	LIB_FUNC("D9sr1xGUriE", Gen5::GraphicsCreatePrimState);
 	LIB_FUNC("HV4j+E0MBHE", Gen5::GraphicsCreateInterpolantMapping);
-	LIB_FUNC("n2fD4A+pb+g", Gen5::GraphicsCbSetShRegisterRangeDirect);
 	LIB_FUNC("V++UgBtQhn0", Gen5::GraphicsGetDataPacketPayloadAddress);
+	LIB_FUNC("h9z6+0hEydk", Gen5::GraphicsSuspendPoint);
+
+	LIB_FUNC("n2fD4A+pb+g", Gen5::GraphicsCbSetShRegisterRangeDirect);
+	LIB_FUNC("wr23dPKyWc0", Gen5::GraphicsCbReleaseMem);
+	LIB_FUNC("TRO721eVt4g", Gen5::GraphicsDcbResetQueue);
+	LIB_FUNC("MWiElSNE8j8", Gen5::GraphicsDcbWaitUntilSafeForRendering);
+	LIB_FUNC("ZvwO9euwYzc", Gen5::GraphicsDcbSetCxRegistersIndirect);
+	LIB_FUNC("-HOOCn0JY48", Gen5::GraphicsDcbSetShRegistersIndirect);
+	LIB_FUNC("hvUfkUIQcOE", Gen5::GraphicsDcbSetUcRegistersIndirect);
+	LIB_FUNC("GIIW2J37e70", Gen5::GraphicsDcbSetIndexSize);
+	LIB_FUNC("Yw0jKSqop+E", Gen5::GraphicsDcbDrawIndexAuto);
+	LIB_FUNC("aJf+j5yntiU", Gen5::GraphicsDcbEventWrite);
+	LIB_FUNC("57labkp+rSQ", Gen5::GraphicsDcbAcquireMem);
+	LIB_FUNC("i1jyy49AjXU", Gen5::GraphicsDcbWriteData);
+	LIB_FUNC("VmW0Tdpy420", Gen5::GraphicsDcbWaitRegMem);
+	LIB_FUNC("YUeqkyT7mEQ", Gen5::GraphicsDcbSetFlip);
 }
 
 } // namespace LibGen5
+
+namespace LibGen5Driver {
+
+LIB_VERSION("Graphics5Driver", 1, "Graphics5Driver", 1, 1);
+
+namespace Gen5Driver = Graphics::Gen5Driver;
+
+LIB_DEFINE(InitGraphicsDriver_1)
+{
+	PRINT_NAME_ENABLE(true);
+
+	LIB_FUNC("UglJIZjGssM", Gen5Driver::GraphicsDriverSubmitDcb);
+}
+
+} // namespace LibGen5Driver
 
 LIB_DEFINE(InitGraphicsDriver_1)
 {
 	LibGen4::InitGraphicsDriver_1(s);
 	LibGen5::InitGraphicsDriver_1(s);
+	LibGen5Driver::InitGraphicsDriver_1(s);
 }
 
 } // namespace Kyty::Libs

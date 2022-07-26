@@ -2088,7 +2088,7 @@ KYTY_SHADER_PARSER(shader_parse)
 	return ptr - src;
 }
 
-static void vs_print(const char* func, const HW::VsStageRegisters& vs)
+static void vs_print(const char* func, const HW::VsStageRegisters& vs, const HW::ShaderRegisters& sh)
 {
 	printf("%s\n", func);
 
@@ -2098,12 +2098,23 @@ static void vs_print(const char* func, const HW::VsStageRegisters& vs)
 	printf("\t GetInputComponentsCount() = 0x%08" PRIx32 "\n", vs.GetInputComponentsCount());
 	printf("\t GetUnknown1()             = 0x%08" PRIx32 "\n", vs.GetUnknown1());
 	printf("\t GetUnknown2()             = 0x%08" PRIx32 "\n", vs.GetUnknown2());
-	printf("\t m_spiVsOutConfig          = 0x%08" PRIx32 "\n", vs.m_spiVsOutConfig);
-	printf("\t m_spiShaderPosFormat      = 0x%08" PRIx32 "\n", vs.m_spiShaderPosFormat);
-	printf("\t m_paClVsOutCntl           = 0x%08" PRIx32 "\n", vs.m_paClVsOutCntl);
+	printf("\t m_spiVsOutConfig          = 0x%08" PRIx32 "\n", sh.m_spiVsOutConfig);
+	printf("\t m_spiShaderPosFormat      = 0x%08" PRIx32 "\n", sh.m_spiShaderPosFormat);
+	printf("\t m_paClVsOutCntl           = 0x%08" PRIx32 "\n", sh.m_paClVsOutCntl);
+
+	printf("\t m_spiShaderIdxFormat      = 0x%08" PRIx32 "\n", sh.m_spiShaderIdxFormat);
+	printf("\t m_geNggSubgrpCntl         = 0x%08" PRIx32 "\n", sh.m_geNggSubgrpCntl);
+	printf("\t m_vgtGsInstanceCnt        = 0x%08" PRIx32 "\n", sh.m_vgtGsInstanceCnt);
+	printf("\t GetEsVertsPerSubgrp()     = 0x%08" PRIx32 "\n", sh.GetEsVertsPerSubgrp());
+	printf("\t GetGsPrimsPerSubgrp()     = 0x%08" PRIx32 "\n", sh.GetGsPrimsPerSubgrp());
+	printf("\t GetGsInstPrimsInSubgrp()  = 0x%08" PRIx32 "\n", sh.GetGsInstPrimsInSubgrp());
+	printf("\t m_geMaxOutputPerSubgroup  = 0x%08" PRIx32 "\n", sh.m_geMaxOutputPerSubgroup);
+	printf("\t m_vgtEsgsRingItemsize     = 0x%08" PRIx32 "\n", sh.m_vgtEsgsRingItemsize);
+	printf("\t m_vgtGsMaxVertOut         = 0x%08" PRIx32 "\n", sh.m_vgtGsMaxVertOut);
+	printf("\t m_vgtGsOutPrimType        = 0x%08" PRIx32 "\n", sh.m_vgtGsOutPrimType);
 }
 
-static void ps_print(const char* func, const HW::PsStageRegisters& ps)
+static void ps_print(const char* func, const HW::PsStageRegisters& ps, const HW::ShaderRegisters& sh)
 {
 	printf("%s\n", func);
 
@@ -2112,26 +2123,28 @@ static void ps_print(const char* func, const HW::PsStageRegisters& ps)
 	// printf("\t m_spiShaderPgmRsrc2Ps         = 0x%08" PRIx32 "\n", ps.m_spiShaderPgmRsrc2Ps);
 	// printf("\t GetTargetOutputMode(0)        = 0x%08" PRIx32 "\n", ps.GetTargetOutputMode(0));
 	printf("\t data_addr                   = 0x%016" PRIx64 "\n", ps.data_addr);
-	printf("\t conservative_z_export_value = 0x%08" PRIx32 "\n", ps.conservative_z_export_value);
-	printf("\t shader_z_behavior           = 0x%08" PRIx32 "\n", ps.shader_z_behavior);
-	printf("\t shader_kill_enable          = %s\n", ps.shader_kill_enable ? "true" : "false");
-	printf("\t shader_z_export_enable      = %s\n", ps.shader_z_export_enable ? "true" : "false");
-	printf("\t shader_execute_on_noop      = %s\n", ps.shader_execute_on_noop ? "true" : "false");
+	printf("\t conservative_z_export_value = 0x%08" PRIx32 "\n", sh.db_shader_control.conservative_z_export_value);
+	printf("\t shader_z_behavior           = 0x%08" PRIx32 "\n", sh.db_shader_control.shader_z_behavior);
+	printf("\t shader_kill_enable          = %s\n", sh.db_shader_control.shader_kill_enable ? "true" : "false");
+	printf("\t shader_z_export_enable      = %s\n", sh.db_shader_control.shader_z_export_enable ? "true" : "false");
+	printf("\t shader_execute_on_noop      = %s\n", sh.db_shader_control.shader_execute_on_noop ? "true" : "false");
 	printf("\t vgprs                       = 0x%02" PRIx8 "\n", ps.vgprs);
 	printf("\t sgprs                       = 0x%02" PRIx8 "\n", ps.sgprs);
 	printf("\t scratch_en                  = 0x%02" PRIx8 "\n", ps.scratch_en);
 	printf("\t user_sgpr                   = 0x%02" PRIx8 "\n", ps.user_sgpr);
 	printf("\t wave_cnt_en                 = 0x%02" PRIx8 "\n", ps.wave_cnt_en);
-	printf("\t shader_z_format             = 0x%08" PRIx32 "\n", ps.shader_z_format);
-	printf("\t target_output_mode[0]       = 0x%02" PRIx8 "\n", ps.target_output_mode[0]);
-	printf("\t ps_input_ena                = 0x%08" PRIx32 "\n", ps.ps_input_ena);
-	printf("\t ps_input_addr               = 0x%08" PRIx32 "\n", ps.ps_input_addr);
-	printf("\t ps_in_control               = 0x%08" PRIx32 "\n", ps.ps_in_control);
-	printf("\t baryc_cntl                  = 0x%08" PRIx32 "\n", ps.baryc_cntl);
-	printf("\t m_cbShaderMask              = 0x%08" PRIx32 "\n", ps.m_cbShaderMask);
+	printf("\t shader_z_format             = 0x%08" PRIx32 "\n", sh.shader_z_format);
+	printf("\t target_output_mode[0]       = 0x%02" PRIx8 "\n", sh.target_output_mode[0]);
+	printf("\t ps_input_ena                = 0x%08" PRIx32 "\n", sh.ps_input_ena);
+	printf("\t ps_input_addr               = 0x%08" PRIx32 "\n", sh.ps_input_addr);
+	printf("\t ps_in_control               = 0x%08" PRIx32 "\n", sh.ps_in_control);
+	printf("\t baryc_cntl                  = 0x%08" PRIx32 "\n", sh.baryc_cntl);
+	printf("\t m_cbShaderMask              = 0x%08" PRIx32 "\n", sh.m_cbShaderMask);
+
+	printf("\t m_paScShaderControl         = 0x%08" PRIx32 "\n", sh.m_paScShaderControl);
 }
 
-static void cs_print(const char* func, const HW::CsStageRegisters& cs)
+static void cs_print(const char* func, const HW::CsStageRegisters& cs, const HW::ShaderRegisters& /*sh*/)
 {
 	printf("%s\n", func);
 
@@ -2183,7 +2196,7 @@ static void bi_print(const char* func, const ShaderBinaryInfo& bi)
 	printf("\t crc32                      = 0x%08" PRIx32 "\n", bi.crc32);
 }
 
-static void vs_check(const HW::VsStageRegisters& vs)
+static void vs_check(const HW::VsStageRegisters& vs, const HW::ShaderRegisters& sh)
 {
 	EXIT_NOT_IMPLEMENTED(vs.GetStreamoutEnabled() != false);
 	// EXIT_NOT_IMPLEMENTED(vs.GetSgprCount() != 0x00000000);
@@ -2191,17 +2204,28 @@ static void vs_check(const HW::VsStageRegisters& vs)
 	// EXIT_NOT_IMPLEMENTED(vs.GetUnknown1() != 0x002c0000);
 	// EXIT_NOT_IMPLEMENTED(vs.GetUnknown2() != 0x00000000);
 	// EXIT_NOT_IMPLEMENTED(vs.m_spiVsOutConfig != 0x00000000);
-	EXIT_NOT_IMPLEMENTED(vs.m_spiShaderPosFormat != 0x00000004);
-	EXIT_NOT_IMPLEMENTED(vs.m_paClVsOutCntl != 0x00000000);
+	EXIT_NOT_IMPLEMENTED(sh.m_spiShaderPosFormat != 0x00000004);
+	EXIT_NOT_IMPLEMENTED(sh.m_paClVsOutCntl != 0x00000000);
+
+	EXIT_NOT_IMPLEMENTED(sh.m_spiShaderIdxFormat != 0x00000000 && sh.m_spiShaderIdxFormat != 0x00000001);
+	EXIT_NOT_IMPLEMENTED(sh.m_geNggSubgrpCntl != 0x00000000 && sh.m_geNggSubgrpCntl != 0x00000001);
+	EXIT_NOT_IMPLEMENTED(sh.m_vgtGsInstanceCnt != 0x00000000);
+	EXIT_NOT_IMPLEMENTED(sh.GetEsVertsPerSubgrp() != 0x00000000);
+	EXIT_NOT_IMPLEMENTED(sh.GetGsPrimsPerSubgrp() != 0x00000000);
+	EXIT_NOT_IMPLEMENTED(sh.GetGsInstPrimsInSubgrp() != 0x00000000);
+	EXIT_NOT_IMPLEMENTED(sh.m_geMaxOutputPerSubgroup != 0x00000000);
+	EXIT_NOT_IMPLEMENTED(sh.m_vgtEsgsRingItemsize != 0x00000000);
+	EXIT_NOT_IMPLEMENTED(sh.m_vgtGsMaxVertOut != 0x00000000);
+	EXIT_NOT_IMPLEMENTED(sh.m_vgtGsOutPrimType != 0x00000000);
 }
 
-static void ps_check(const HW::PsStageRegisters& ps)
+static void ps_check(const HW::PsStageRegisters& ps, const HW::ShaderRegisters& sh)
 {
-	EXIT_NOT_IMPLEMENTED(ps.target_output_mode[0] != 4 && ps.target_output_mode[0] != 9);
-	EXIT_NOT_IMPLEMENTED(ps.conservative_z_export_value != 0x00000000);
-	EXIT_NOT_IMPLEMENTED(ps.shader_z_behavior != 0x00000001 && ps.shader_z_behavior != 0x00000000);
+	EXIT_NOT_IMPLEMENTED(sh.target_output_mode[0] != 4 && sh.target_output_mode[0] != 9);
+	EXIT_NOT_IMPLEMENTED(sh.db_shader_control.conservative_z_export_value != 0x00000000);
+	EXIT_NOT_IMPLEMENTED(sh.db_shader_control.shader_z_behavior != 0x00000001 && sh.db_shader_control.shader_z_behavior != 0x00000000);
 	// EXIT_NOT_IMPLEMENTED(ps.shader_kill_enable != false);
-	EXIT_NOT_IMPLEMENTED(ps.shader_z_export_enable != false);
+	EXIT_NOT_IMPLEMENTED(sh.db_shader_control.shader_z_export_enable != false);
 	// EXIT_NOT_IMPLEMENTED(ps.shader_execute_on_noop != false);
 	// EXIT_NOT_IMPLEMENTED(ps.m_spiShaderPgmRsrc1Ps != 0x002c0000);
 	// EXIT_NOT_IMPLEMENTED(ps.m_spiShaderPgmRsrc2Ps != 0x00000000);
@@ -2210,15 +2234,18 @@ static void ps_check(const HW::PsStageRegisters& ps)
 	EXIT_NOT_IMPLEMENTED(ps.scratch_en != 0);
 	// EXIT_NOT_IMPLEMENTED(ps.user_sgpr != 0 && ps.user_sgpr != 4 && ps.user_sgpr != 12);
 	EXIT_NOT_IMPLEMENTED(ps.wave_cnt_en != 0);
-	EXIT_NOT_IMPLEMENTED(ps.shader_z_format != 0x00000000);
-	EXIT_NOT_IMPLEMENTED(ps.ps_input_ena != 0x00000002 && ps.ps_input_ena != 0x00000302);
-	EXIT_NOT_IMPLEMENTED(ps.ps_input_addr != 0x00000002 && ps.ps_input_addr != 0x00000302);
+	EXIT_NOT_IMPLEMENTED(sh.shader_z_format != 0x00000000);
+	EXIT_NOT_IMPLEMENTED(sh.ps_input_ena != 0x00000002 && sh.ps_input_ena != 0x00000302);
+	EXIT_NOT_IMPLEMENTED(sh.ps_input_addr != 0x00000002 && sh.ps_input_addr != 0x00000302);
 	// EXIT_NOT_IMPLEMENTED(ps.m_spiPsInControl != 0x00000000);
-	EXIT_NOT_IMPLEMENTED(ps.baryc_cntl != 0x00000000);
-	EXIT_NOT_IMPLEMENTED(ps.m_cbShaderMask != 0x0000000f);
+	EXIT_NOT_IMPLEMENTED(sh.baryc_cntl != 0x00000000);
+	EXIT_NOT_IMPLEMENTED(sh.m_cbShaderMask != 0x0000000f);
+
+	EXIT_NOT_IMPLEMENTED(sh.db_shader_control.other_bits != 0x00000000);
+	EXIT_NOT_IMPLEMENTED(sh.m_paScShaderControl != 0x00000000);
 }
 
-static void cs_check(const HW::CsStageRegisters& cs)
+static void cs_check(const HW::CsStageRegisters& cs, const HW::ShaderRegisters& /*sh*/)
 {
 	// EXIT_NOT_IMPLEMENTED(cs.num_thread_x != 0x00000040);
 	// EXIT_NOT_IMPLEMENTED(cs.num_thread_y != 0x00000001);
@@ -2713,13 +2740,13 @@ void ShaderCalcBindingIndices(ShaderBindResources* bind)
 	EXIT_IF((bind->push_constant_size % 16) != 0);
 }
 
-void ShaderGetInputInfoVS(const HW::VertexShaderInfo* regs, ShaderVertexInputInfo* info)
+void ShaderGetInputInfoVS(const HW::VertexShaderInfo* regs, const HW::ShaderRegisters* sh, ShaderVertexInputInfo* info)
 {
 	KYTY_PROFILER_FUNCTION();
 
 	EXIT_IF(info == nullptr || regs == nullptr);
 
-	info->export_count              = static_cast<int>(1 + ((regs->vs_regs.m_spiVsOutConfig >> 1u) & 0x1Fu));
+	info->export_count              = static_cast<int>(sh->GetExportCount());
 	info->bind.push_constant_offset = 0;
 	info->bind.push_constant_size   = 0;
 	info->bind.descriptor_set_slot  = 0;
@@ -2800,28 +2827,30 @@ void ShaderGetInputInfoVS(const HW::VertexShaderInfo* regs, ShaderVertexInputInf
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-void ShaderGetInputInfoPS(const HW::PixelShaderInfo* regs, const ShaderVertexInputInfo* vs_info, ShaderPixelInputInfo* ps_info)
+void ShaderGetInputInfoPS(const HW::PixelShaderInfo* regs, const HW::ShaderRegisters* sh, const ShaderVertexInputInfo* vs_info,
+                          ShaderPixelInputInfo* ps_info)
 {
 	KYTY_PROFILER_FUNCTION();
 
 	EXIT_IF(vs_info == nullptr);
 	EXIT_IF(ps_info == nullptr);
 	EXIT_IF(regs == nullptr);
+	EXIT_IF(sh == nullptr);
 
 	if (regs->ps_embedded)
 	{
 		return;
 	}
 
-	ps_info->input_num            = regs->ps_regs.ps_in_control;
-	ps_info->ps_pos_xy            = (regs->ps_regs.ps_input_ena == 0x00000302 && regs->ps_regs.ps_input_addr == 0x00000302);
-	ps_info->ps_pixel_kill_enable = regs->ps_regs.shader_kill_enable;
-	ps_info->ps_early_z           = (regs->ps_regs.shader_z_behavior == 1);
-	ps_info->ps_execute_on_noop   = regs->ps_regs.shader_execute_on_noop;
+	ps_info->input_num            = sh->ps_in_control;
+	ps_info->ps_pos_xy            = (sh->ps_input_ena == 0x00000302 && sh->ps_input_addr == 0x00000302);
+	ps_info->ps_pixel_kill_enable = sh->db_shader_control.shader_kill_enable;
+	ps_info->ps_early_z           = (sh->db_shader_control.shader_z_behavior == 1);
+	ps_info->ps_execute_on_noop   = sh->db_shader_control.shader_execute_on_noop;
 
 	for (uint32_t i = 0; i < ps_info->input_num; i++)
 	{
-		ps_info->interpolator_settings[i] = regs->ps_interpolator_settings[i];
+		ps_info->interpolator_settings[i] = sh->ps_interpolator_settings[i];
 	}
 
 	ps_info->bind.descriptor_set_slot  = (vs_info->bind.storage_buffers.buffers_num > 0 ? 1 : 0);
@@ -2830,7 +2859,7 @@ void ShaderGetInputInfoPS(const HW::PixelShaderInfo* regs, const ShaderVertexInp
 
 	for (int i = 0; i < 8; i++)
 	{
-		ps_info->target_output_mode[i] = regs->ps_regs.target_output_mode[i];
+		ps_info->target_output_mode[i] = sh->target_output_mode[i];
 	}
 
 	const auto* src = reinterpret_cast<const uint32_t*>(regs->ps_regs.data_addr);
@@ -2894,7 +2923,7 @@ void ShaderGetInputInfoPS(const HW::PixelShaderInfo* regs, const ShaderVertexInp
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-void ShaderGetInputInfoCS(const HW::ComputeShaderInfo* regs, ShaderComputeInputInfo* info)
+void ShaderGetInputInfoCS(const HW::ComputeShaderInfo* regs, const HW::ShaderRegisters* /*sh*/, ShaderComputeInputInfo* info)
 {
 	EXIT_IF(info == nullptr);
 	EXIT_IF(regs == nullptr);
@@ -3355,9 +3384,12 @@ private:
 	String     m_file_name;
 };
 
-ShaderCode ShaderParseVS(const HW::VertexShaderInfo* regs)
+ShaderCode ShaderParseVS(const HW::VertexShaderInfo* regs, const HW::ShaderRegisters* sh)
 {
 	KYTY_PROFILER_FUNCTION(profiler::colors::Amber300);
+
+	EXIT_IF(regs == nullptr);
+	EXIT_IF(sh == nullptr);
 
 	ShaderCode code;
 	code.SetType(ShaderType::Vertex);
@@ -3372,8 +3404,8 @@ ShaderCode ShaderParseVS(const HW::VertexShaderInfo* regs)
 
 		EXIT_NOT_IMPLEMENTED(src == nullptr);
 
-		vs_print("ShaderParseVS()", regs->vs_regs);
-		vs_check(regs->vs_regs);
+		vs_print("ShaderParseVS()", regs->vs_regs, *sh);
+		vs_check(regs->vs_regs, *sh);
 
 		const auto* header = GetBinaryInfo(src);
 
@@ -3434,9 +3466,12 @@ Vector<uint32_t> ShaderRecompileVS(const ShaderCode& code, const ShaderVertexInp
 	return ret;
 }
 
-ShaderCode ShaderParsePS(const HW::PixelShaderInfo* regs)
+ShaderCode ShaderParsePS(const HW::PixelShaderInfo* regs, const HW::ShaderRegisters* sh)
 {
 	KYTY_PROFILER_FUNCTION(profiler::colors::Blue300);
+
+	EXIT_IF(regs == nullptr);
+	EXIT_IF(sh == nullptr);
 
 	ShaderCode code;
 	code.SetType(ShaderType::Pixel);
@@ -3451,8 +3486,8 @@ ShaderCode ShaderParsePS(const HW::PixelShaderInfo* regs)
 
 		EXIT_NOT_IMPLEMENTED(src == nullptr);
 
-		ps_print("ShaderParsePS()", regs->ps_regs);
-		ps_check(regs->ps_regs);
+		ps_print("ShaderParsePS()", regs->ps_regs, *sh);
+		ps_check(regs->ps_regs, *sh);
 
 		EXIT_NOT_IMPLEMENTED(regs->ps_regs.user_sgpr > regs->ps_user_sgpr.count);
 
@@ -3520,16 +3555,19 @@ Vector<uint32_t> ShaderRecompilePS(const ShaderCode& code, const ShaderPixelInpu
 	return ret;
 }
 
-ShaderCode ShaderParseCS(const HW::ComputeShaderInfo* regs)
+ShaderCode ShaderParseCS(const HW::ComputeShaderInfo* regs, const HW::ShaderRegisters* sh)
 {
 	KYTY_PROFILER_FUNCTION(profiler::colors::CyanA700);
+
+	EXIT_IF(regs == nullptr);
+	EXIT_IF(sh == nullptr);
 
 	const auto* src = reinterpret_cast<const uint32_t*>(regs->cs_regs.data_addr);
 
 	EXIT_NOT_IMPLEMENTED(src == nullptr);
 
-	cs_print("ShaderParseCS()", regs->cs_regs);
-	cs_check(regs->cs_regs);
+	cs_print("ShaderParseCS()", regs->cs_regs, *sh);
+	cs_check(regs->cs_regs, *sh);
 
 	EXIT_NOT_IMPLEMENTED(regs->cs_regs.user_sgpr > regs->cs_user_sgpr.count);
 

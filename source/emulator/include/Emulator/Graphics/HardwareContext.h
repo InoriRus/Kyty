@@ -204,18 +204,18 @@ struct RenderControl
 
 struct ClipControl
 {
-	uint32_t user_clip_planes                    = 0;
-	uint32_t user_clip_plane_mode                = 0;
-	uint32_t clip_space                          = 0;
-	uint32_t vertex_kill_mode                    = 0;
-	uint32_t min_z_clip_enable                   = 0;
-	uint32_t max_z_clip_enable                   = 0;
-	bool     user_clip_plane_negate_y            = false;
-	bool     clip_enable                         = false;
-	bool     user_clip_plane_cull_only           = false;
-	bool     cull_on_clipping_error_disable      = false;
-	bool     linear_attribute_clip_enable        = false;
-	bool     force_viewport_index_from_vs_enable = false;
+	uint8_t user_clip_planes                    = 0;
+	uint8_t user_clip_plane_mode                = 0;
+	bool    dx_clip_space                       = false;
+	bool    vertex_kill_any                     = false;
+	bool    min_z_clip_disable                  = false;
+	bool    max_z_clip_disable                  = false;
+	bool    user_clip_plane_negate_y            = false;
+	bool    clip_disable                        = false;
+	bool    user_clip_plane_cull_only           = false;
+	bool    cull_on_clipping_error_disable      = false;
+	bool    linear_attribute_clip_enable        = false;
+	bool    force_viewport_index_from_vs_enable = false;
 };
 
 struct DepthControl
@@ -318,6 +318,16 @@ struct AaSampleControl
 	uint32_t locations[16]     = {};
 };
 
+struct DepthShaderControl
+{
+	uint32_t other_bits                  = 0;
+	uint8_t  conservative_z_export_value = 0;
+	uint8_t  shader_z_behavior           = 0;
+	bool     shader_kill_enable          = false;
+	bool     shader_z_export_enable      = false;
+	bool     shader_execute_on_noop      = false;
+};
+
 struct AaConfig
 {
 	uint8_t msaa_num_samples      = 0;
@@ -371,10 +381,6 @@ struct VsStageRegisters
 	uint32_t m_spiShaderPgmRsrc1Vs = 0;
 	uint32_t m_spiShaderPgmRsrc2Vs = 0;
 
-	uint32_t m_spiVsOutConfig     = 0;
-	uint32_t m_spiShaderPosFormat = 0;
-	uint32_t m_paClVsOutCntl      = 0;
-
 	[[nodiscard]] uint64_t GetGpuAddress() const;
 	[[nodiscard]] bool     GetStreamoutEnabled() const;
 	[[nodiscard]] uint32_t GetSgprCount() const;
@@ -385,26 +391,12 @@ struct VsStageRegisters
 
 struct PsStageRegisters
 {
-	uint64_t data_addr             = 0;
-	uint8_t  vgprs                 = 0;
-	uint8_t  sgprs                 = 0;
-	uint8_t  scratch_en            = 0;
-	uint8_t  user_sgpr             = 0;
-	uint8_t  wave_cnt_en           = 0;
-	uint32_t shader_z_format       = 0;
-	uint8_t  target_output_mode[8] = {};
-	uint32_t ps_input_ena          = 0;
-	uint32_t ps_input_addr         = 0;
-	uint32_t ps_in_control         = 0;
-	uint32_t baryc_cntl            = 0;
-
-	uint8_t conservative_z_export_value = 0;
-	uint8_t shader_z_behavior           = 0;
-	bool    shader_kill_enable          = false;
-	bool    shader_z_export_enable      = false;
-	bool    shader_execute_on_noop      = false;
-
-	uint32_t m_cbShaderMask = 0;
+	uint64_t data_addr   = 0;
+	uint8_t  vgprs       = 0;
+	uint8_t  sgprs       = 0;
+	uint8_t  scratch_en  = 0;
+	uint8_t  user_sgpr   = 0;
+	uint8_t  wave_cnt_en = 0;
 };
 
 struct CsStageRegisters
@@ -425,6 +417,42 @@ struct CsStageRegisters
 	uint8_t  tg_size_en     = 0;
 	uint8_t  tidig_comp_cnt = 0;
 	uint8_t  lds_size       = 0;
+};
+
+struct ShaderRegisters
+{
+	uint32_t m_spiVsOutConfig     = 0;
+	uint32_t m_spiShaderPosFormat = 0;
+	uint32_t m_paClVsOutCntl      = 0;
+
+	uint32_t ps_interpolator_settings[32] = {0};
+	// uint32_t ps_input_num                 = 0;
+
+	uint32_t m_spiShaderIdxFormat     = 0;
+	uint32_t m_geNggSubgrpCntl        = 0;
+	uint32_t m_vgtGsInstanceCnt       = 0;
+	uint32_t m_vgtGsOnchipCntl        = 0;
+	uint32_t m_geMaxOutputPerSubgroup = 0;
+	uint32_t m_vgtEsgsRingItemsize    = 0;
+	uint32_t m_vgtGsMaxVertOut        = 0;
+	uint32_t m_vgtGsOutPrimType       = 0;
+
+	uint32_t shader_z_format       = 0;
+	uint8_t  target_output_mode[8] = {};
+	uint32_t ps_input_ena          = 0;
+	uint32_t ps_input_addr         = 0;
+	uint32_t ps_in_control         = 0;
+	uint32_t baryc_cntl            = 0;
+	uint32_t m_cbShaderMask        = 0;
+
+	uint32_t m_paScShaderControl = 0;
+
+	DepthShaderControl db_shader_control;
+
+	[[nodiscard]] uint32_t GetExportCount() const { return 1u + ((m_spiVsOutConfig >> 1u) & 0x1Fu); }
+	[[nodiscard]] uint32_t GetEsVertsPerSubgrp() const { return (m_vgtGsOnchipCntl >> 0u) & 0x7FFu; }
+	[[nodiscard]] uint32_t GetGsPrimsPerSubgrp() const { return (m_vgtGsOnchipCntl >> 11u) & 0x7FFu; }
+	[[nodiscard]] uint32_t GetGsInstPrimsInSubgrp() const { return (m_vgtGsOnchipCntl >> 22u) & 0x3FFu; }
 };
 
 enum class UserSgprType
@@ -453,8 +481,6 @@ struct VertexShaderInfo
 struct PixelShaderInfo
 {
 	PsStageRegisters ps_regs;
-	uint32_t         ps_interpolator_settings[32] = {0};
-	uint32_t         ps_input_num                 = 0;
 	UserSgprInfo     ps_user_sgpr;
 	uint32_t         ps_embedded_id = 0;
 	bool             ps_embedded    = false;
@@ -467,15 +493,15 @@ struct ComputeShaderInfo
 	UserSgprInfo     cs_user_sgpr;
 };
 
-class HardwareContext
+class Context
 {
 public:
-	HardwareContext()          = default;
-	virtual ~HardwareContext() = default;
+	Context()          = default;
+	virtual ~Context() = default;
 
-	KYTY_CLASS_DEFAULT_COPY(HardwareContext);
+	KYTY_CLASS_DEFAULT_COPY(Context);
 
-	void Reset() { *this = HardwareContext(); }
+	void Reset() { *this = Context(); }
 
 	void SetColorBase(uint32_t slot, const ColorBase& base) { m_render_targets[slot].base = base; }
 	void SetColorPitch(uint32_t slot, const ColorPitch& pitch) { m_render_targets[slot].pitch = pitch; }
@@ -554,56 +580,6 @@ public:
 	}
 	[[nodiscard]] const ScreenViewport& GetScreenViewport() const { return m_screen_viewport; }
 
-	void SetVsShader(const VsStageRegisters* vs_regs, uint32_t shader_modifier)
-	{
-		m_vs.vs_regs            = *vs_regs;
-		m_vs.vs_shader_modifier = shader_modifier;
-		m_vs.vs_embedded        = false;
-	}
-	void UpdateVsShader(const VsStageRegisters* vs_regs, uint32_t shader_modifier)
-	{
-		m_vs.vs_regs.m_spiShaderPgmLoVs    = vs_regs->m_spiShaderPgmLoVs;
-		m_vs.vs_regs.m_spiShaderPgmHiVs    = vs_regs->m_spiShaderPgmHiVs;
-		m_vs.vs_regs.m_spiShaderPgmRsrc1Vs = vs_regs->m_spiShaderPgmRsrc1Vs;
-		m_vs.vs_regs.m_spiShaderPgmRsrc2Vs = vs_regs->m_spiShaderPgmRsrc2Vs;
-		m_vs.vs_shader_modifier            = shader_modifier;
-		m_vs.vs_embedded                   = false;
-	}
-	void SetVsEmbedded(uint32_t id, uint32_t shader_modifier)
-	{
-		m_vs.vs_embedded_id     = id;
-		m_vs.vs_shader_modifier = shader_modifier;
-		m_vs.vs_embedded        = true;
-	}
-
-	void SetPsShader(const PsStageRegisters* ps_regs)
-	{
-		m_ps.ps_regs     = *ps_regs;
-		m_ps.ps_embedded = false;
-	}
-	void UpdatePsShader(const PsStageRegisters* ps_regs)
-	{
-		m_ps.ps_regs.data_addr       = ps_regs->data_addr;
-		m_ps.ps_regs.vgprs           = ps_regs->vgprs;
-		m_ps.ps_regs.sgprs           = ps_regs->sgprs;
-		m_ps.ps_regs.scratch_en      = ps_regs->scratch_en;
-		m_ps.ps_regs.user_sgpr       = ps_regs->user_sgpr;
-		m_ps.ps_regs.wave_cnt_en     = ps_regs->wave_cnt_en;
-		m_ps.ps_regs.shader_z_format = ps_regs->shader_z_format;
-		m_ps.ps_embedded             = false;
-	}
-	void SetPsEmbedded(uint32_t id)
-	{
-		m_ps.ps_embedded_id = id;
-		m_ps.ps_embedded    = true;
-	}
-
-	void SetCsShader(const CsStageRegisters* cs_regs, uint32_t shader_modifier)
-	{
-		m_cs.cs_regs            = *cs_regs;
-		m_cs.cs_shader_modifier = shader_modifier;
-	}
-
 	[[nodiscard]] const BlendColor&      GetBlendColor() const { return m_blend_color; }
 	void                                 SetBlendColor(const BlendColor& color) { m_blend_color = color; }
 	[[nodiscard]] const ClipControl&     GetClipControl() const { return m_clip_control; }
@@ -629,6 +605,153 @@ public:
 	[[nodiscard]] const AaConfig&        GetAaConfig() const { return m_aa_config; }
 	void                                 SetAaConfig(const AaConfig& config) { m_aa_config = config; }
 
+	[[nodiscard]] float   GetDepthClearValue() const { return m_depth_clear_value; }
+	void                  SetDepthClearValue(float clear_value) { m_depth_clear_value = clear_value; }
+	[[nodiscard]] uint8_t GetStencilClearValue() const { return m_stencil_clear_value; }
+	void                  SetStencilClearValue(uint8_t clear_value) { m_stencil_clear_value = clear_value; }
+
+	[[nodiscard]] float GetLineWidth() const { return m_line_width; }
+	void                SetLineWidth(float width) { m_line_width = width; }
+
+	[[nodiscard]] const ShaderRegisters& GetShaderRegisters() const { return m_sh_regs; }
+
+	void SetVsOutConfig(uint32_t value) { m_sh_regs.m_spiVsOutConfig = value; }
+	void SetShaderPosFormat(uint32_t value) { m_sh_regs.m_spiShaderPosFormat = value; }
+	void SetClVsOutCntl(uint32_t value) { m_sh_regs.m_paClVsOutCntl = value; }
+	void SetShaderIdxFormat(uint32_t value) { m_sh_regs.m_spiShaderIdxFormat = value; }
+	void SetNggSubgrpCntl(uint32_t value) { m_sh_regs.m_geNggSubgrpCntl = value; }
+	void SetGsInstanceCnt(uint32_t value) { m_sh_regs.m_vgtGsInstanceCnt = value; }
+	void SetGsOnchipCntl(uint32_t value) { m_sh_regs.m_vgtGsOnchipCntl = value; }
+	void SetMaxOutputPerSubgroup(uint32_t value) { m_sh_regs.m_geMaxOutputPerSubgroup = value; }
+	void SetEsgsRingItemsize(uint32_t value) { m_sh_regs.m_vgtEsgsRingItemsize = value; }
+	void SetGsMaxVertOut(uint32_t value) { m_sh_regs.m_vgtGsMaxVertOut = value; }
+	void SetGsOutPrimType(uint32_t value) { m_sh_regs.m_vgtGsOutPrimType = value; }
+
+	void SetPsInputSettings(uint32_t id, uint32_t value)
+	{
+		m_sh_regs.ps_interpolator_settings[id] = value;
+		// m_sh_regs.ps_input_num                 = ((id + 1) > m_sh_regs.ps_input_num ? (id + 1) : m_sh_regs.ps_input_num);
+	}
+
+	void SetShaderZFormat(uint32_t value) { m_sh_regs.shader_z_format = value; }
+	void SetTargetOutputMode(uint32_t slot, uint8_t value) { m_sh_regs.target_output_mode[slot] = value; }
+	void SetPsInputEna(uint32_t value) { m_sh_regs.ps_input_ena = value; }
+	void SetPsInputAddr(uint32_t value) { m_sh_regs.ps_input_addr = value; }
+	void SetPsInControl(uint32_t value) { m_sh_regs.ps_in_control = value; }
+	void SetBarycCntl(uint32_t value) { m_sh_regs.baryc_cntl = value; }
+	void SetShaderMask(uint32_t value) { m_sh_regs.m_cbShaderMask = value; }
+	void SetDepthShaderControl(const DepthShaderControl& value) { m_sh_regs.db_shader_control = value; }
+
+	void SetScShaderControl(uint32_t value) { m_sh_regs.m_paScShaderControl = value; }
+
+private:
+	float m_line_width = 1.0f;
+
+	BlendControl    m_blend_control[8];
+	BlendColor      m_blend_color;
+	RenderTarget    m_render_targets[8];
+	uint32_t        m_render_target_mask = 0;
+	ScreenViewport  m_screen_viewport;
+	ClipControl     m_clip_control;
+	ColorControl    m_color_control;
+	ScanModeControl m_scan_mode_control;
+
+	AaSampleControl m_aa_sample_control;
+	AaConfig        m_aa_config;
+
+	uint32_t m_shader_stages = 0;
+
+	DepthRenderTarget m_depth_render_target;
+	RenderControl     m_render_control;
+	DepthControl      m_depth_control;
+	StencilControl    m_stencil_control;
+	StencilMask       m_stencil_mask;
+	float             m_depth_clear_value   = 0.0f;
+	uint8_t           m_stencil_clear_value = 0;
+
+	ModeControl m_mode_control;
+	EqaaControl m_eqaa_control;
+
+	ShaderRegisters m_sh_regs;
+};
+
+class UserConfig
+{
+public:
+	UserConfig()          = default;
+	virtual ~UserConfig() = default;
+
+	KYTY_CLASS_DEFAULT_COPY(UserConfig);
+
+	void Reset() { *this = UserConfig(); }
+
+	void                   SetPrimitiveType(uint32_t prim_type) { m_prim_type = prim_type; }
+	[[nodiscard]] uint32_t GetPrimType() const { return m_prim_type; }
+
+private:
+	uint32_t m_prim_type = 0;
+};
+
+class Shader
+{
+public:
+	Shader()          = default;
+	virtual ~Shader() = default;
+
+	KYTY_CLASS_DEFAULT_COPY(Shader);
+
+	void Reset() { *this = Shader(); }
+
+	void SetVsShader(const VsStageRegisters& vs_regs, uint32_t shader_modifier)
+	{
+		m_vs.vs_regs            = vs_regs;
+		m_vs.vs_shader_modifier = shader_modifier;
+		m_vs.vs_embedded        = false;
+	}
+
+	void UpdateVsShader(const VsStageRegisters& vs_regs, uint32_t shader_modifier)
+	{
+		m_vs.vs_regs.m_spiShaderPgmLoVs    = vs_regs.m_spiShaderPgmLoVs;
+		m_vs.vs_regs.m_spiShaderPgmHiVs    = vs_regs.m_spiShaderPgmHiVs;
+		m_vs.vs_regs.m_spiShaderPgmRsrc1Vs = vs_regs.m_spiShaderPgmRsrc1Vs;
+		m_vs.vs_regs.m_spiShaderPgmRsrc2Vs = vs_regs.m_spiShaderPgmRsrc2Vs;
+		m_vs.vs_shader_modifier            = shader_modifier;
+		m_vs.vs_embedded                   = false;
+	}
+	void SetVsEmbedded(uint32_t id, uint32_t shader_modifier)
+	{
+		m_vs.vs_embedded_id     = id;
+		m_vs.vs_shader_modifier = shader_modifier;
+		m_vs.vs_embedded        = true;
+	}
+
+	void SetPsShader(const PsStageRegisters& ps_regs)
+	{
+		m_ps.ps_regs     = ps_regs;
+		m_ps.ps_embedded = false;
+	}
+	void UpdatePsShader(const PsStageRegisters& ps_regs)
+	{
+		m_ps.ps_regs.data_addr   = ps_regs.data_addr;
+		m_ps.ps_regs.vgprs       = ps_regs.vgprs;
+		m_ps.ps_regs.sgprs       = ps_regs.sgprs;
+		m_ps.ps_regs.scratch_en  = ps_regs.scratch_en;
+		m_ps.ps_regs.user_sgpr   = ps_regs.user_sgpr;
+		m_ps.ps_regs.wave_cnt_en = ps_regs.wave_cnt_en;
+		m_ps.ps_embedded         = false;
+	}
+	void SetPsEmbedded(uint32_t id)
+	{
+		m_ps.ps_embedded_id = id;
+		m_ps.ps_embedded    = true;
+	}
+
+	void SetCsShader(const CsStageRegisters& cs_regs, uint32_t shader_modifier)
+	{
+		m_cs.cs_regs            = cs_regs;
+		m_cs.cs_shader_modifier = shader_modifier;
+	}
+
 	void SetVsUserSgpr(uint32_t id, uint32_t value, UserSgprType type)
 	{
 		m_vs.vs_user_sgpr.value[id] = value;
@@ -647,71 +770,15 @@ public:
 		m_cs.cs_user_sgpr.type[id]  = type;
 		m_cs.cs_user_sgpr.count     = ((id + 1) > m_cs.cs_user_sgpr.count ? (id + 1) : m_cs.cs_user_sgpr.count);
 	}
-	void SetPsInputSettings(uint32_t id, uint32_t value)
-	{
-		m_ps.ps_interpolator_settings[id] = value;
-		m_ps.ps_input_num                 = ((id + 1) > m_ps.ps_input_num ? (id + 1) : m_ps.ps_input_num);
-	}
 
 	[[nodiscard]] const PixelShaderInfo&   GetPs() const { return m_ps; }
 	[[nodiscard]] const VertexShaderInfo&  GetVs() const { return m_vs; }
 	[[nodiscard]] const ComputeShaderInfo& GetCs() const { return m_cs; }
 
-	[[nodiscard]] float   GetDepthClearValue() const { return m_depth_clear_value; }
-	void                  SetDepthClearValue(float clear_value) { m_depth_clear_value = clear_value; }
-	[[nodiscard]] uint8_t GetStencilClearValue() const { return m_stencil_clear_value; }
-	void                  SetStencilClearValue(uint8_t clear_value) { m_stencil_clear_value = clear_value; }
-
-	[[nodiscard]] float GetLineWidth() const { return m_line_width; }
-	void                SetLineWidth(float width) { m_line_width = width; }
-
 private:
-	float m_line_width = 1.0f;
-
-	BlendControl    m_blend_control[8];
-	BlendColor      m_blend_color;
-	RenderTarget    m_render_targets[8];
-	uint32_t        m_render_target_mask = 0;
-	ScreenViewport  m_screen_viewport;
-	ClipControl     m_clip_control;
-	ColorControl    m_color_control;
-	ScanModeControl m_scan_mode_control;
-
-	AaSampleControl m_aa_sample_control;
-	AaConfig        m_aa_config;
-
 	VertexShaderInfo  m_vs;
 	PixelShaderInfo   m_ps;
 	ComputeShaderInfo m_cs;
-	uint32_t          m_shader_stages = 0;
-
-	DepthRenderTarget m_depth_render_target;
-	RenderControl     m_render_control;
-	DepthControl      m_depth_control;
-	StencilControl    m_stencil_control;
-	StencilMask       m_stencil_mask;
-	float             m_depth_clear_value   = 0.0f;
-	uint8_t           m_stencil_clear_value = 0;
-
-	ModeControl m_mode_control;
-	EqaaControl m_eqaa_control;
-};
-
-class UserConfig
-{
-public:
-	UserConfig()          = default;
-	virtual ~UserConfig() = default;
-
-	KYTY_CLASS_DEFAULT_COPY(UserConfig);
-
-	void Reset() { *this = UserConfig(); }
-
-	void                   SetPrimitiveType(uint32_t prim_type) { m_prim_type = prim_type; }
-	[[nodiscard]] uint32_t GetPrimType() const { return m_prim_type; }
-
-private:
-	uint32_t m_prim_type = 0;
 };
 
 inline uint64_t VsStageRegisters::GetGpuAddress() const

@@ -11,8 +11,9 @@
 namespace Kyty::Libs::Graphics {
 
 namespace HW {
-class HardwareContext;
+class Context;
 class UserConfig;
+class Shader;
 } // namespace HW
 
 class CommandProcessor;
@@ -55,7 +56,6 @@ public:
 	VulkanCommandPool*     GetPool() { return m_pool; }
 	[[nodiscard]] bool     IsExecute() const { return m_execute; }
 
-
 private:
 	VulkanCommandPool* m_pool    = nullptr;
 	uint32_t           m_index   = static_cast<uint32_t>(-1);
@@ -67,9 +67,9 @@ private:
 void GraphicsRenderInit();
 void GraphicsRenderCreateContext();
 
-void GraphicsRenderDrawIndex(uint64_t submit_id, CommandBuffer* buffer, HW::HardwareContext* ctx, HW::UserConfig* ucfg,
+void GraphicsRenderDrawIndex(uint64_t submit_id, CommandBuffer* buffer, HW::Context* ctx, HW::UserConfig* ucfg, HW::Shader* sh_ctx,
                              uint32_t index_type_and_size, uint32_t index_count, const void* index_addr, uint32_t flags, uint32_t type);
-void GraphicsRenderDrawIndexAuto(uint64_t submit_id, CommandBuffer* buffer, HW::HardwareContext* ctx, HW::UserConfig* ucfg,
+void GraphicsRenderDrawIndexAuto(uint64_t submit_id, CommandBuffer* buffer, HW::Context* ctx, HW::UserConfig* ucfg, HW::Shader* sh_ctx,
                                  uint32_t index_count, uint32_t flags);
 void GraphicsRenderWriteAtEndOfPipe64(uint64_t submit_id, CommandBuffer* buffer, uint64_t* dst_gpu_addr, uint64_t value);
 void GraphicsRenderWriteAtEndOfPipeClockCounter(uint64_t submit_id, CommandBuffer* buffer, uint64_t* dst_gpu_addr);
@@ -88,7 +88,7 @@ void GraphicsRenderWriteAtEndOfPipeWithInterruptWriteBack64(uint64_t submit_id, 
 void GraphicsRenderWriteAtEndOfPipeWithInterrupt64(uint64_t submit_id, CommandBuffer* buffer, uint64_t* dst_gpu_addr, uint64_t value);
 void GraphicsRenderWriteAtEndOfPipeWithInterrupt32(uint64_t submit_id, CommandBuffer* buffer, uint32_t* dst_gpu_addr, uint32_t value);
 void GraphicsRenderWriteBack(CommandProcessor* cp);
-void GraphicsRenderDispatchDirect(uint64_t submit_id, CommandBuffer* buffer, HW::HardwareContext* ctx, uint32_t thread_group_x,
+void GraphicsRenderDispatchDirect(uint64_t submit_id, CommandBuffer* buffer, HW::Context* ctx, HW::Shader* sh_ctx, uint32_t thread_group_x,
                                   uint32_t thread_group_y, uint32_t thread_group_z, uint32_t mode);
 void GraphicsRenderMemoryBarrier(CommandBuffer* buffer);
 void GraphicsRenderRenderTextureBarrier(CommandBuffer* buffer, uint64_t vaddr, uint64_t size);

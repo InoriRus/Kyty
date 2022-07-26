@@ -17,6 +17,7 @@ namespace HW {
 struct VertexShaderInfo;
 struct PixelShaderInfo;
 struct ComputeShaderInfo;
+struct ShaderRegisters;
 } // namespace HW
 
 enum class ShaderType
@@ -802,18 +803,19 @@ struct ShaderPixelInputInfo
 };
 
 void       ShaderCalcBindingIndices(ShaderBindResources* bind);
-void       ShaderGetInputInfoVS(const HW::VertexShaderInfo* regs, ShaderVertexInputInfo* info);
-void       ShaderGetInputInfoPS(const HW::PixelShaderInfo* regs, const ShaderVertexInputInfo* vs_info, ShaderPixelInputInfo* ps_info);
-void       ShaderGetInputInfoCS(const HW::ComputeShaderInfo* regs, ShaderComputeInputInfo* info);
+void       ShaderGetInputInfoVS(const HW::VertexShaderInfo* regs, const HW::ShaderRegisters* sh, ShaderVertexInputInfo* info);
+void       ShaderGetInputInfoPS(const HW::PixelShaderInfo* regs, const HW::ShaderRegisters* sh, const ShaderVertexInputInfo* vs_info,
+                                ShaderPixelInputInfo* ps_info);
+void       ShaderGetInputInfoCS(const HW::ComputeShaderInfo* regs, const HW::ShaderRegisters* sh, ShaderComputeInputInfo* info);
 void       ShaderDbgDumpInputInfo(const ShaderVertexInputInfo* info);
 void       ShaderDbgDumpInputInfo(const ShaderPixelInputInfo* info);
 void       ShaderDbgDumpInputInfo(const ShaderComputeInputInfo* info);
 ShaderId   ShaderGetIdVS(const HW::VertexShaderInfo* regs, const ShaderVertexInputInfo* input_info);
 ShaderId   ShaderGetIdPS(const HW::PixelShaderInfo* regs, const ShaderPixelInputInfo* input_info);
 ShaderId   ShaderGetIdCS(const HW::ComputeShaderInfo* regs, const ShaderComputeInputInfo* input_info);
-ShaderCode ShaderParseVS(const HW::VertexShaderInfo* regs);
-ShaderCode ShaderParsePS(const HW::PixelShaderInfo* regs);
-ShaderCode ShaderParseCS(const HW::ComputeShaderInfo* regs);
+ShaderCode ShaderParseVS(const HW::VertexShaderInfo* regs, const HW::ShaderRegisters* sh);
+ShaderCode ShaderParsePS(const HW::PixelShaderInfo* regs, const HW::ShaderRegisters* sh);
+ShaderCode ShaderParseCS(const HW::ComputeShaderInfo* regs, const HW::ShaderRegisters* sh);
 // ShaderBindParameters ShaderGetBindParametersVS(const ShaderCode& code, const ShaderVertexInputInfo* input_info);
 // ShaderBindParameters ShaderGetBindParametersPS(const ShaderCode& code, const ShaderPixelInputInfo* input_info);
 // ShaderBindParameters ShaderGetBindParametersCS(const ShaderCode& code, const ShaderComputeInputInfo* input_info);

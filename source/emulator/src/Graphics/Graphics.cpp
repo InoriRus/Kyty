@@ -73,7 +73,7 @@ namespace Gen4 {
 
 LIB_NAME("GraphicsDriver", "GraphicsDriver");
 
-int KYTY_SYSV_ABI GraphicsSetVsShader(uint32_t* cmd, uint64_t size, const HW::VsStageRegisters* vs_regs, uint32_t shader_modifier)
+int KYTY_SYSV_ABI GraphicsSetVsShader(uint32_t* cmd, uint64_t size, const uint32_t* vs_regs, uint32_t shader_modifier)
 {
 	PRINT_NAME();
 
@@ -83,22 +83,22 @@ int KYTY_SYSV_ABI GraphicsSetVsShader(uint32_t* cmd, uint64_t size, const HW::Vs
 	printf("\t size            = %" PRIu64 "\n", size);
 	printf("\t shader_modifier = %" PRIu32 "\n", shader_modifier);
 
-	printf("\t vs_regs.m_spiShaderPgmLoVs    = %08" PRIx32 "\n", vs_regs->m_spiShaderPgmLoVs);
-	printf("\t vs_regs.m_spiShaderPgmHiVs    = %08" PRIx32 "\n", vs_regs->m_spiShaderPgmHiVs);
-	printf("\t vs_regs.m_spiShaderPgmRsrc1Vs = %08" PRIx32 "\n", vs_regs->m_spiShaderPgmRsrc1Vs);
-	printf("\t vs_regs.m_spiShaderPgmRsrc2Vs = %08" PRIx32 "\n", vs_regs->m_spiShaderPgmRsrc2Vs);
-	printf("\t vs_regs.m_spiVsOutConfig      = %08" PRIx32 "\n", vs_regs->m_spiVsOutConfig);
-	printf("\t vs_regs.m_spiShaderPosFormat  = %08" PRIx32 "\n", vs_regs->m_spiShaderPosFormat);
-	printf("\t vs_regs.m_paClVsOutCntl       = %08" PRIx32 "\n", vs_regs->m_paClVsOutCntl);
+	printf("\t m_spiShaderPgmLoVs    = %08" PRIx32 "\n", vs_regs[0]);
+	printf("\t m_spiShaderPgmHiVs    = %08" PRIx32 "\n", vs_regs[1]);
+	printf("\t m_spiShaderPgmRsrc1Vs = %08" PRIx32 "\n", vs_regs[2]);
+	printf("\t m_spiShaderPgmRsrc2Vs = %08" PRIx32 "\n", vs_regs[3]);
+	printf("\t m_spiVsOutConfig      = %08" PRIx32 "\n", vs_regs[4]);
+	printf("\t m_spiShaderPosFormat  = %08" PRIx32 "\n", vs_regs[5]);
+	printf("\t m_paClVsOutCntl       = %08" PRIx32 "\n", vs_regs[6]);
 
 	cmd[0] = KYTY_PM4(size, Pm4::IT_NOP, Pm4::R_VS);
 	cmd[1] = shader_modifier;
-	memcpy(&cmd[2], vs_regs, sizeof(HW::VsStageRegisters));
+	memcpy(&cmd[2], vs_regs, static_cast<size_t>(7) * 4);
 
 	return OK;
 }
 
-int KYTY_SYSV_ABI GraphicsUpdateVsShader(uint32_t* cmd, uint64_t size, const HW::VsStageRegisters* vs_regs, uint32_t shader_modifier)
+int KYTY_SYSV_ABI GraphicsUpdateVsShader(uint32_t* cmd, uint64_t size, const uint32_t* vs_regs, uint32_t shader_modifier)
 {
 	PRINT_NAME();
 
@@ -108,17 +108,17 @@ int KYTY_SYSV_ABI GraphicsUpdateVsShader(uint32_t* cmd, uint64_t size, const HW:
 	printf("\t size            = %" PRIu64 "\n", size);
 	printf("\t shader_modifier = %" PRIu32 "\n", shader_modifier);
 
-	printf("\t vs_regs.m_spiShaderPgmLoVs    = %08" PRIx32 "\n", vs_regs->m_spiShaderPgmLoVs);
-	printf("\t vs_regs.m_spiShaderPgmHiVs    = %08" PRIx32 "\n", vs_regs->m_spiShaderPgmHiVs);
-	printf("\t vs_regs.m_spiShaderPgmRsrc1Vs = %08" PRIx32 "\n", vs_regs->m_spiShaderPgmRsrc1Vs);
-	printf("\t vs_regs.m_spiShaderPgmRsrc2Vs = %08" PRIx32 "\n", vs_regs->m_spiShaderPgmRsrc2Vs);
-	printf("\t vs_regs.m_spiVsOutConfig      = %08" PRIx32 "\n", vs_regs->m_spiVsOutConfig);
-	printf("\t vs_regs.m_spiShaderPosFormat  = %08" PRIx32 "\n", vs_regs->m_spiShaderPosFormat);
-	printf("\t vs_regs.m_paClVsOutCntl       = %08" PRIx32 "\n", vs_regs->m_paClVsOutCntl);
+	printf("\t m_spiShaderPgmLoVs    = %08" PRIx32 "\n", vs_regs[0]);
+	printf("\t m_spiShaderPgmHiVs    = %08" PRIx32 "\n", vs_regs[1]);
+	printf("\t m_spiShaderPgmRsrc1Vs = %08" PRIx32 "\n", vs_regs[2]);
+	printf("\t m_spiShaderPgmRsrc2Vs = %08" PRIx32 "\n", vs_regs[3]);
+	printf("\t m_spiVsOutConfig      = %08" PRIx32 "\n", vs_regs[4]);
+	printf("\t m_spiShaderPosFormat  = %08" PRIx32 "\n", vs_regs[5]);
+	printf("\t m_paClVsOutCntl       = %08" PRIx32 "\n", vs_regs[6]);
 
 	cmd[0] = KYTY_PM4(size, Pm4::IT_NOP, Pm4::R_VS_UPDATE);
 	cmd[1] = shader_modifier;
-	memcpy(&cmd[2], vs_regs, sizeof(HW::VsStageRegisters));
+	memcpy(&cmd[2], vs_regs, static_cast<size_t>(7) * 4);
 
 	return OK;
 }
@@ -162,18 +162,18 @@ int KYTY_SYSV_ABI GraphicsSetPsShader(uint32_t* cmd, uint64_t size, const uint32
 		printf("\t cmd_buffer      = %016" PRIx64 "\n", reinterpret_cast<uint64_t>(cmd));
 		printf("\t size            = %" PRIu64 "\n", size);
 
-		printf("\t ps_regs.m_spiShaderPgmLoPs    = %08" PRIx32 "\n", ps_regs[0]);
-		printf("\t ps_regs.m_spiShaderPgmHiPs    = %08" PRIx32 "\n", ps_regs[1]);
-		printf("\t ps_regs.m_spiShaderPgmRsrc1Ps = %08" PRIx32 "\n", ps_regs[2]);
-		printf("\t ps_regs.m_spiShaderPgmRsrc2Ps = %08" PRIx32 "\n", ps_regs[3]);
-		printf("\t ps_regs.m_spiShaderZFormat    = %08" PRIx32 "\n", ps_regs[4]);
-		printf("\t ps_regs.m_spiShaderColFormat  = %08" PRIx32 "\n", ps_regs[5]);
-		printf("\t ps_regs.m_spiPsInputEna       = %08" PRIx32 "\n", ps_regs[6]);
-		printf("\t ps_regs.m_spiPsInputAddr      = %08" PRIx32 "\n", ps_regs[7]);
-		printf("\t ps_regs.m_spiPsInControl      = %08" PRIx32 "\n", ps_regs[8]);
-		printf("\t ps_regs.m_spiBarycCntl        = %08" PRIx32 "\n", ps_regs[9]);
-		printf("\t ps_regs.m_dbShaderControl     = %08" PRIx32 "\n", ps_regs[10]);
-		printf("\t ps_regs.m_cbShaderMask        = %08" PRIx32 "\n", ps_regs[11]);
+		printf("\t m_spiShaderPgmLoPs    = %08" PRIx32 "\n", ps_regs[0]);
+		printf("\t m_spiShaderPgmHiPs    = %08" PRIx32 "\n", ps_regs[1]);
+		printf("\t m_spiShaderPgmRsrc1Ps = %08" PRIx32 "\n", ps_regs[2]);
+		printf("\t m_spiShaderPgmRsrc2Ps = %08" PRIx32 "\n", ps_regs[3]);
+		printf("\t m_spiShaderZFormat    = %08" PRIx32 "\n", ps_regs[4]);
+		printf("\t m_spiShaderColFormat  = %08" PRIx32 "\n", ps_regs[5]);
+		printf("\t m_spiPsInputEna       = %08" PRIx32 "\n", ps_regs[6]);
+		printf("\t m_spiPsInputAddr      = %08" PRIx32 "\n", ps_regs[7]);
+		printf("\t m_spiPsInControl      = %08" PRIx32 "\n", ps_regs[8]);
+		printf("\t m_spiBarycCntl        = %08" PRIx32 "\n", ps_regs[9]);
+		printf("\t m_dbShaderControl     = %08" PRIx32 "\n", ps_regs[10]);
+		printf("\t m_cbShaderMask        = %08" PRIx32 "\n", ps_regs[11]);
 
 		cmd[0] = KYTY_PM4(size, Pm4::IT_NOP, Pm4::R_PS);
 		memcpy(&cmd[1], ps_regs, static_cast<size_t>(12) * 4);
@@ -203,18 +203,18 @@ int KYTY_SYSV_ABI GraphicsSetPsShader350(uint32_t* cmd, uint64_t size, const uin
 		printf("\t cmd_buffer      = %016" PRIx64 "\n", reinterpret_cast<uint64_t>(cmd));
 		printf("\t size            = %" PRIu64 "\n", size);
 
-		printf("\t ps_regs.m_spiShaderPgmLoPs    = %08" PRIx32 "\n", ps_regs[0]);
-		printf("\t ps_regs.m_spiShaderPgmHiPs    = %08" PRIx32 "\n", ps_regs[1]);
-		printf("\t ps_regs.m_spiShaderPgmRsrc1Ps = %08" PRIx32 "\n", ps_regs[2]);
-		printf("\t ps_regs.m_spiShaderPgmRsrc2Ps = %08" PRIx32 "\n", ps_regs[3]);
-		printf("\t ps_regs.m_spiShaderZFormat    = %08" PRIx32 "\n", ps_regs[4]);
-		printf("\t ps_regs.m_spiShaderColFormat  = %08" PRIx32 "\n", ps_regs[5]);
-		printf("\t ps_regs.m_spiPsInputEna       = %08" PRIx32 "\n", ps_regs[6]);
-		printf("\t ps_regs.m_spiPsInputAddr      = %08" PRIx32 "\n", ps_regs[7]);
-		printf("\t ps_regs.m_spiPsInControl      = %08" PRIx32 "\n", ps_regs[8]);
-		printf("\t ps_regs.m_spiBarycCntl        = %08" PRIx32 "\n", ps_regs[9]);
-		printf("\t ps_regs.m_dbShaderControl     = %08" PRIx32 "\n", ps_regs[10]);
-		printf("\t ps_regs.m_cbShaderMask        = %08" PRIx32 "\n", ps_regs[11]);
+		printf("\t m_spiShaderPgmLoPs    = %08" PRIx32 "\n", ps_regs[0]);
+		printf("\t m_spiShaderPgmHiPs    = %08" PRIx32 "\n", ps_regs[1]);
+		printf("\t m_spiShaderPgmRsrc1Ps = %08" PRIx32 "\n", ps_regs[2]);
+		printf("\t m_spiShaderPgmRsrc2Ps = %08" PRIx32 "\n", ps_regs[3]);
+		printf("\t m_spiShaderZFormat    = %08" PRIx32 "\n", ps_regs[4]);
+		printf("\t m_spiShaderColFormat  = %08" PRIx32 "\n", ps_regs[5]);
+		printf("\t m_spiPsInputEna       = %08" PRIx32 "\n", ps_regs[6]);
+		printf("\t m_spiPsInputAddr      = %08" PRIx32 "\n", ps_regs[7]);
+		printf("\t m_spiPsInControl      = %08" PRIx32 "\n", ps_regs[8]);
+		printf("\t m_spiBarycCntl        = %08" PRIx32 "\n", ps_regs[9]);
+		printf("\t m_dbShaderControl     = %08" PRIx32 "\n", ps_regs[10]);
+		printf("\t m_cbShaderMask        = %08" PRIx32 "\n", ps_regs[11]);
 
 		cmd[0] = KYTY_PM4(size, Pm4::IT_NOP, Pm4::R_PS);
 		memcpy(&cmd[1], ps_regs, static_cast<size_t>(12) * 4);
@@ -235,18 +235,18 @@ int KYTY_SYSV_ABI GraphicsUpdatePsShader(uint32_t* cmd, uint64_t size, const uin
 	printf("\t cmd_buffer      = %016" PRIx64 "\n", reinterpret_cast<uint64_t>(cmd));
 	printf("\t size            = %" PRIu64 "\n", size);
 
-	printf("\t ps_regs.m_spiShaderPgmLoPs    = %08" PRIx32 "\n", ps_regs[0]);
-	printf("\t ps_regs.m_spiShaderPgmHiPs    = %08" PRIx32 "\n", ps_regs[1]);
-	printf("\t ps_regs.m_spiShaderPgmRsrc1Ps = %08" PRIx32 "\n", ps_regs[2]);
-	printf("\t ps_regs.m_spiShaderPgmRsrc2Ps = %08" PRIx32 "\n", ps_regs[3]);
-	printf("\t ps_regs.m_spiShaderZFormat    = %08" PRIx32 "\n", ps_regs[4]);
-	printf("\t ps_regs.m_spiShaderColFormat  = %08" PRIx32 "\n", ps_regs[5]);
-	printf("\t ps_regs.m_spiPsInputEna       = %08" PRIx32 "\n", ps_regs[6]);
-	printf("\t ps_regs.m_spiPsInputAddr      = %08" PRIx32 "\n", ps_regs[7]);
-	printf("\t ps_regs.m_spiPsInControl      = %08" PRIx32 "\n", ps_regs[8]);
-	printf("\t ps_regs.m_spiBarycCntl        = %08" PRIx32 "\n", ps_regs[9]);
-	printf("\t ps_regs.m_dbShaderControl     = %08" PRIx32 "\n", ps_regs[10]);
-	printf("\t ps_regs.m_cbShaderMask        = %08" PRIx32 "\n", ps_regs[11]);
+	printf("\t m_spiShaderPgmLoPs    = %08" PRIx32 "\n", ps_regs[0]);
+	printf("\t m_spiShaderPgmHiPs    = %08" PRIx32 "\n", ps_regs[1]);
+	printf("\t m_spiShaderPgmRsrc1Ps = %08" PRIx32 "\n", ps_regs[2]);
+	printf("\t m_spiShaderPgmRsrc2Ps = %08" PRIx32 "\n", ps_regs[3]);
+	printf("\t m_spiShaderZFormat    = %08" PRIx32 "\n", ps_regs[4]);
+	printf("\t m_spiShaderColFormat  = %08" PRIx32 "\n", ps_regs[5]);
+	printf("\t m_spiPsInputEna       = %08" PRIx32 "\n", ps_regs[6]);
+	printf("\t m_spiPsInputAddr      = %08" PRIx32 "\n", ps_regs[7]);
+	printf("\t m_spiPsInControl      = %08" PRIx32 "\n", ps_regs[8]);
+	printf("\t m_spiBarycCntl        = %08" PRIx32 "\n", ps_regs[9]);
+	printf("\t m_dbShaderControl     = %08" PRIx32 "\n", ps_regs[10]);
+	printf("\t m_cbShaderMask        = %08" PRIx32 "\n", ps_regs[11]);
 
 	cmd[0] = KYTY_PM4(size, Pm4::IT_NOP, Pm4::R_PS_UPDATE);
 	memcpy(&cmd[1], ps_regs, static_cast<size_t>(12) * 4);
@@ -264,18 +264,18 @@ int KYTY_SYSV_ABI GraphicsUpdatePsShader350(uint32_t* cmd, uint64_t size, const 
 	printf("\t cmd_buffer      = %016" PRIx64 "\n", reinterpret_cast<uint64_t>(cmd));
 	printf("\t size            = %" PRIu64 "\n", size);
 
-	printf("\t ps_regs.m_spiShaderPgmLoPs    = %08" PRIx32 "\n", ps_regs[0]);
-	printf("\t ps_regs.m_spiShaderPgmHiPs    = %08" PRIx32 "\n", ps_regs[1]);
-	printf("\t ps_regs.m_spiShaderPgmRsrc1Ps = %08" PRIx32 "\n", ps_regs[2]);
-	printf("\t ps_regs.m_spiShaderPgmRsrc2Ps = %08" PRIx32 "\n", ps_regs[3]);
-	printf("\t ps_regs.m_spiShaderZFormat    = %08" PRIx32 "\n", ps_regs[4]);
-	printf("\t ps_regs.m_spiShaderColFormat  = %08" PRIx32 "\n", ps_regs[5]);
-	printf("\t ps_regs.m_spiPsInputEna       = %08" PRIx32 "\n", ps_regs[6]);
-	printf("\t ps_regs.m_spiPsInputAddr      = %08" PRIx32 "\n", ps_regs[7]);
-	printf("\t ps_regs.m_spiPsInControl      = %08" PRIx32 "\n", ps_regs[8]);
-	printf("\t ps_regs.m_spiBarycCntl        = %08" PRIx32 "\n", ps_regs[9]);
-	printf("\t ps_regs.m_dbShaderControl     = %08" PRIx32 "\n", ps_regs[10]);
-	printf("\t ps_regs.m_cbShaderMask        = %08" PRIx32 "\n", ps_regs[11]);
+	printf("\t m_spiShaderPgmLoPs    = %08" PRIx32 "\n", ps_regs[0]);
+	printf("\t m_spiShaderPgmHiPs    = %08" PRIx32 "\n", ps_regs[1]);
+	printf("\t m_spiShaderPgmRsrc1Ps = %08" PRIx32 "\n", ps_regs[2]);
+	printf("\t m_spiShaderPgmRsrc2Ps = %08" PRIx32 "\n", ps_regs[3]);
+	printf("\t m_spiShaderZFormat    = %08" PRIx32 "\n", ps_regs[4]);
+	printf("\t m_spiShaderColFormat  = %08" PRIx32 "\n", ps_regs[5]);
+	printf("\t m_spiPsInputEna       = %08" PRIx32 "\n", ps_regs[6]);
+	printf("\t m_spiPsInputAddr      = %08" PRIx32 "\n", ps_regs[7]);
+	printf("\t m_spiPsInControl      = %08" PRIx32 "\n", ps_regs[8]);
+	printf("\t m_spiBarycCntl        = %08" PRIx32 "\n", ps_regs[9]);
+	printf("\t m_dbShaderControl     = %08" PRIx32 "\n", ps_regs[10]);
+	printf("\t m_cbShaderMask        = %08" PRIx32 "\n", ps_regs[11]);
 
 	cmd[0] = KYTY_PM4(size, Pm4::IT_NOP, Pm4::R_PS_UPDATE);
 	memcpy(&cmd[1], ps_regs, static_cast<size_t>(12) * 4);
@@ -293,13 +293,13 @@ int KYTY_SYSV_ABI GraphicsSetCsShaderWithModifier(uint32_t* cmd, uint64_t size, 
 	printf("\t size            = %" PRIu64 "\n", size);
 	printf("\t shader_modifier = %" PRIu32 "\n", shader_modifier);
 
-	printf("\t cs_regs.m_computePgmLo      = %08" PRIx32 "\n", cs_regs[0]);
-	printf("\t cs_regs.m_computePgmHi      = %08" PRIx32 "\n", cs_regs[1]);
-	printf("\t cs_regs.m_computePgmRsrc1   = %08" PRIx32 "\n", cs_regs[2]);
-	printf("\t cs_regs.m_computePgmRsrc2   = %08" PRIx32 "\n", cs_regs[3]);
-	printf("\t cs_regs.m_computeNumThreadX = %08" PRIx32 "\n", cs_regs[4]);
-	printf("\t cs_regs.m_computeNumThreadY = %08" PRIx32 "\n", cs_regs[5]);
-	printf("\t cs_regs.m_computeNumThreadZ = %08" PRIx32 "\n", cs_regs[6]);
+	printf("\t m_computePgmLo      = %08" PRIx32 "\n", cs_regs[0]);
+	printf("\t m_computePgmHi      = %08" PRIx32 "\n", cs_regs[1]);
+	printf("\t m_computePgmRsrc1   = %08" PRIx32 "\n", cs_regs[2]);
+	printf("\t m_computePgmRsrc2   = %08" PRIx32 "\n", cs_regs[3]);
+	printf("\t m_computeNumThreadX = %08" PRIx32 "\n", cs_regs[4]);
+	printf("\t m_computeNumThreadY = %08" PRIx32 "\n", cs_regs[5]);
+	printf("\t m_computeNumThreadZ = %08" PRIx32 "\n", cs_regs[6]);
 
 	cmd[0] = KYTY_PM4(size, Pm4::IT_NOP, Pm4::R_CS);
 	cmd[1] = shader_modifier;
@@ -315,12 +315,12 @@ int KYTY_SYSV_ABI GraphicsDrawIndex(uint32_t* cmd, uint64_t size, uint32_t index
 
 	EXIT_NOT_IMPLEMENTED(size < 6);
 
-	printf("\tcmd_buffer  = %016" PRIx64 "\n", reinterpret_cast<uint64_t>(cmd));
-	printf("\tsize        = %" PRIu64 "\n", size);
-	printf("\tindex_count = %" PRIu32 "\n", index_count);
-	printf("\tindex_addr  = %016" PRIx64 "\n", reinterpret_cast<uint64_t>(index_addr));
-	printf("\tflags       = %08" PRIx32 "\n", flags);
-	printf("\ttype        = %" PRIu32 "\n", type);
+	printf("\t cmd_buffer  = %016" PRIx64 "\n", reinterpret_cast<uint64_t>(cmd));
+	printf("\t size        = %" PRIu64 "\n", size);
+	printf("\t index_count = %" PRIu32 "\n", index_count);
+	printf("\t index_addr  = %016" PRIx64 "\n", reinterpret_cast<uint64_t>(index_addr));
+	printf("\t flags       = %08" PRIx32 "\n", flags);
+	printf("\t type        = %" PRIu32 "\n", type);
 
 	cmd[0] = KYTY_PM4(size, Pm4::IT_NOP, Pm4::R_DRAW_INDEX);
 	cmd[1] = index_count;
@@ -592,7 +592,7 @@ int KYTY_SYSV_ABI GraphicsComputeWaitOnAddress(uint32_t* cmd, uint64_t size, uin
 	printf("\t func        = %" PRIu32 "\n", func);
 	printf("\t ref         = %08" PRIx32 "\n", ref);
 
-	cmd[0] = KYTY_PM4(size, Pm4::IT_NOP, Pm4::R_DISPATCH_WAIT_MEM);
+	cmd[0] = KYTY_PM4(size, Pm4::IT_NOP, Pm4::R_WAIT_MEM_32);
 	cmd[1] = static_cast<uint32_t>(reinterpret_cast<uint64_t>(gpu_addr) & 0xffffffffu);
 	cmd[2] = static_cast<uint32_t>((reinterpret_cast<uint64_t>(gpu_addr) >> 32u) & 0xffffffffu);
 	cmd[3] = mask;
@@ -921,63 +921,466 @@ struct CommandBuffer
 	}
 };
 
-static RegisterDefaultInfo g_reg_info0[] = {
-    /* 0 */ {0x5f5a3e7b, {{Pm4::VGT_GS_OUT_PRIM_TYPE, 0x00000002}}},
-    /* 1 */ {0x105971c2, {{Pm4::GE_CNTL, 0}}},
-    /* 2 */ {0x40d49ad1, {{Pm4::GE_USER_VGPR_EN, 0}}},
-    /* 3 */ {0x9ebfab10, {{Pm4::PRIMITIVE_TYPE, 0}}},
-    /* 4 */ {0x48531062, {{Pm4::SPI_PS_INPUT_CNTL_0, 0}}},
+struct Label
+{
+	volatile uint64_t m_value;
+	uint64_t          m_reserved[3];
 };
 
-static RegisterDefaultInfo g_reg_info1[] = {
-    /* 0 - DepthRenderTarget */ {0x67096014,
-                                 {{Pm4::DB_Z_INFO, 0},
-                                  {Pm4::DB_STENCIL_INFO, 0},
-                                  {Pm4::DB_Z_READ_BASE, 0},
-                                  {Pm4::DB_STENCIL_READ_BASE, 0},
-                                  {Pm4::DB_Z_WRITE_BASE, 0},
-                                  {Pm4::DB_STENCIL_WRITE_BASE, 0},
-                                  {Pm4::DB_Z_READ_BASE_HI, 0},
-                                  {Pm4::DB_STENCIL_READ_BASE_HI, 0},
-                                  {Pm4::DB_Z_WRITE_BASE_HI, 0},
-                                  {Pm4::DB_STENCIL_WRITE_BASE_HI, 0},
-                                  {Pm4::DB_HTILE_DATA_BASE_HI, 0},
-                                  {Pm4::DB_DEPTH_VIEW, 0},
-                                  {Pm4::DB_HTILE_DATA_BASE, 0},
-                                  {Pm4::DB_DEPTH_SIZE_XY, 0},
-                                  {Pm4::DB_DEPTH_CLEAR, 0},
-                                  {Pm4::DB_STENCIL_CLEAR, 0}}},
-    /* 1 - RenderTarget */ {0x38e92c91,
-                            {{Pm4::CB_COLOR0_BASE, 0},
-                             {Pm4::CB_COLOR0_VIEW, 0},
-                             {Pm4::CB_COLOR0_INFO, 0},
-                             {Pm4::CB_COLOR0_ATTRIB, 0},
-                             {Pm4::CB_COLOR0_DCC_CONTROL, 0},
-                             {Pm4::CB_COLOR0_CMASK, 0},
-                             {Pm4::CB_COLOR0_FMASK, 0},
-                             {Pm4::CB_COLOR0_CLEAR_WORD0, 0},
-                             {Pm4::CB_COLOR0_CLEAR_WORD1, 0},
-                             {Pm4::CB_COLOR0_DCC_BASE, 0},
-                             {Pm4::CB_COLOR0_BASE_EXT, 0},
-                             {Pm4::CB_COLOR0_CMASK_BASE_EXT, 0},
-                             {Pm4::CB_COLOR0_FMASK_BASE_EXT, 0},
-                             {Pm4::CB_COLOR0_DCC_BASE_EXT, 0},
-                             {Pm4::CB_COLOR0_ATTRIB2, 0},
-                             {Pm4::CB_COLOR0_ATTRIB3, 0}}}};
+static RegisterDefaultInfo g_cx_reg_info1[] = {
+    /* 0 */ {0xE24F806D, {{Pm4::CB_COLOR_CONTROL, 0x00cc0010}}},
+    /* 1 */ {0xF6C28182, {{Pm4::CB_DCC_CONTROL, 0x00000000}}},
+    /* 2 */ {0x6F6E55A5, {{Pm4::CB_RMI_GL2_CACHE_CONTROL, 0x00000000}}},
+    /* 3 */ {0x0BC65DA4, {{Pm4::CB_SHADER_MASK, 0x00000000}}},
+    /* 4 */ {0x9E5AD592, {{Pm4::CB_TARGET_MASK, 0x00000000}}},
+    /* 5 */ {0xBB513B98, {{Pm4::DB_ALPHA_TO_MASK, 0x0000aa00}}},
+    /* 6 */ {0xAB64B23B, {{Pm4::DB_COUNT_CONTROL, 0x00000000}}},
+    /* 7 */ {0x53C39964, {{Pm4::DB_DEPTH_CONTROL, 0x00000000}}},
+    /* 8 */ {0x01396B11, {{Pm4::DB_EQAA, 0x00000000}}},
+    /* 9 */ {0x7D42019A, {{Pm4::DB_RENDER_CONTROL, 0x00000000}}},
+    /* 10 */ {0x3548F523, {{Pm4::PS_SHADER_SAMPLE_EXCLUSION_MASK, 0x00000000}}},
+    /* 11 */ {0xF43AD28A, {{Pm4::DB_RMI_L2_CACHE_CONTROL, 0x00000000}}},
+    /* 12 */ {0x6DE4C312, {{Pm4::DB_SHADER_CONTROL, 0x00000000}}},
+    /* 13 */ {0x00A77AE0, {{Pm4::DB_SRESULTS_COMPARE_STATE0, 0x00000000}}},
+    /* 14 */ {0x00A779B7, {{Pm4::DB_SRESULTS_COMPARE_STATE1, 0x00000000}}},
+    /* 15 */ {0x5100100C, {{Pm4::DB_STENCILREFMASK, 0x00000000}}},
+    /* 16 */ {0x59958BBA, {{Pm4::DB_STENCILREFMASK_BF, 0x00000000}}},
+    /* 17 */ {0x0C06F17C, {{Pm4::DB_STENCIL_CONTROL, 0x00000000}}},
+    /* 18 */ {0x6F104B72, {{Pm4::GE_MAX_OUTPUT_PER_SUBGROUP, 0x00000000}}},
+    /* 19 */ {0x25C70D9C, {{Pm4::PA_CL_CLIP_CNTL, 0x00000000}}},
+    /* 20 */ {0x3881201E, {{Pm4::PA_CL_OBJPRIM_ID_CNTL, 0x00000000}}},
+    /* 21 */ {0x09AFDDAF, {{Pm4::PA_CL_VTE_CNTL, 0x0000043f}}},
+    /* 22 */ {0x367D63CF, {{Pm4::PA_SC_AA_CONFIG, 0x00000000}}},
+    /* 23 */ {0x43707DB8, {{Pm4::PA_SC_CLIPRECT_RULE, 0x0000ffff}}},
+    /* 24 */ {0xF6AE26BA, {{Pm4::PA_SC_CONSERVATIVE_RASTERIZATION_CNTL, 0x00000000}}},
+    /* 25 */ {0x1B917652, {{Pm4::PA_SC_FSR_ENABLE, 0x00000000}}},
+    /* 26 */ {0x94B1E4F7, {{Pm4::PA_SC_HORIZ_GRID, 0x00000000}}},
+    /* 27 */ {0xE3661B6C, {{Pm4::PA_SC_LEFT_VERT_GRID, 0x00000000}}},
+    /* 28 */ {0x1EB8D73A, {{Pm4::PA_SC_MODE_CNTL_0, 0x00000002}}},
+    /* 29 */ {0x15051FA3, {{Pm4::PA_SC_MODE_CNTL_1, 0x00000000}}},
+    /* 30 */ {0x9C51A7F1, {{Pm4::PA_SC_RIGHT_VERT_GRID, 0x00000000}}},
+    /* 31 */ {0xA20EFC70, {{Pm4::PA_SC_WINDOW_OFFSET, 0x00000000}}},
+    /* 32 */ {0x0EC09F6E, {{Pm4::PA_STATE_STEREO_X, 0x00000000}}},
+    /* 33 */ {0x34A7D6D3, {{Pm4::PA_STEREO_CNTL, 0x00000000}}},
+    /* 34 */ {0xCE831B94, {{Pm4::PA_SU_HARDWARE_SCREEN_OFFSET, 0x00000000}}},
+    /* 35 */ {0x5CC72A74, {{Pm4::PA_SU_LINE_CNTL, 0x00000008}}},
+    /* 36 */ {0x3B77713C, {{Pm4::PA_SU_POINT_MINMAX, 0xffff0000}}},
+    /* 37 */ {0x40F64410, {{Pm4::PA_SU_POINT_SIZE, 0x00080008}}},
+    /* 38 */ {0x69441268, {{Pm4::PA_SU_POLY_OFFSET_CLAMP, 0x00000000}}},
+    /* 39 */ {0x2E418B83, {{Pm4::PA_SU_POLY_OFFSET_DB_FMT_CNTL, 0x000001e9}}},
+    /* 40 */ {0xA00D0C8D, {{Pm4::PA_SU_SC_MODE_CNTL, 0x00000240}}},
+    /* 41 */ {0xB1289FB3, {{Pm4::PA_SU_SMALL_PRIM_FILTER_CNTL, 0x00000001}}},
+    /* 42 */ {0x144832FB, {{Pm4::PA_SU_VTX_CNTL, 0x0000002d}}},
+    /* 43 */ {0x9890D9FA, {{Pm4::SPI_TMPRING_SIZE, 0x00000000}}},
+    /* 44 */ {0x9016FAF1, {{Pm4::VGT_DRAW_PAYLOAD_CNTL, 0x00000000}}},
+    /* 45 */ {0x4B73CE27, {{Pm4::VGT_GS_MAX_VERT_OUT, 0x00000400}}},
+    /* 46 */ {0x5F5A3E7B, {{Pm4::VGT_GS_OUT_PRIM_TYPE, 0x00000002}}},
+    /* 47 */ {0xD4AF3A51, {{Pm4::VGT_LS_HS_CONFIG, 0x00000000}}},
+    /* 48 */ {0x6CF4F543, {{Pm4::VGT_PRIMITIVEID_RESET, 0xffffffff}}},
+    /* 49 */ {0x5FB86CCB, {{Pm4::VGT_PRIMITIVEID_EN, 0x00000000}}},
+    /* 50 */ {0xEDEFA188, {{Pm4::VGT_REUSE_OFF, 0x00000000}}},
+    /* 51 */ {0xD0DE9EE6, {{Pm4::VGT_SHADER_STAGES_EN, 0x00000000}}},
+    /* 52 */ {0xC5831803, {{Pm4::VGT_TESS_DISTRIBUTION, 0x88101000}}},
+    /* 53 */ {0x8E6DE84B, {{Pm4::VGT_TF_PARAM, 0x00000000}}},
+    /* 54 */
+    {0xD0771662,
+     {
+         {Pm4::PA_SC_CENTROID_PRIORITY_0, 0x00000000},
+         {Pm4::PA_SC_CENTROID_PRIORITY_1, 0x00000000},
+     }},
+    /* 55 */ {0x569F7444, {{Pm4::PA_SC_AA_SAMPLE_LOCS_PIXEL_X0Y0_0, 0x00000000}}},
+    /* 56 */
+    {0x5C6637CD,
+     {
+         {Pm4::PA_SC_AA_MASK_X0Y0_X1Y0, 0xffffffff},
+         {Pm4::PA_SC_AA_MASK_X0Y1_X1Y1, 0xffffffff},
+     }},
+    /* 57 */
+    {0xCAE3E690,
+     {
+         {Pm4::PA_SC_BINNER_CNTL_0, 0x00000002},
+         {Pm4::PA_SC_BINNER_CNTL_1, 0x03ff0080},
+     }},
+    /* 58 */
+    {0x43FBD769,
+     {
+         {Pm4::CB_BLEND_RED, 0x00000000},
+         {Pm4::CB_BLEND_BLUE, 0x00000000},
+         {Pm4::CB_BLEND_GREEN, 0x00000000},
+         {Pm4::CB_BLEND_ALPHA, 0x00000000},
+     }},
+    /* 59 */ {0xEF550356, {{Pm4::CB_BLEND0_CONTROL, 0x20010001}}},
+    /* 60 */
+    {0x8F52E279,
+     {
+         {Pm4::TA_BC_BASE_ADDR, 0x00000000},
+         {Pm4::TA_BC_BASE_ADDR_HI, 0x00000000},
+     }},
+    /* 61 */
+    {0x1F2D8149,
+     {
+         {Pm4::PA_SC_CLIPRECT_0_TL, 0x00000000},
+         {Pm4::PA_SC_CLIPRECT_0_BR, 0x20002000},
+     }},
+    /* 62 */ {0x853D0614, {{Pm4::CX_NOP, 0x00000000}}},
+    /* 63 */
+    {0x4413C6F9,
+     {
+         {Pm4::DB_DEPTH_BOUNDS_MIN, 0x00000000},
+         {Pm4::DB_DEPTH_BOUNDS_MAX, 0x00000000},
+     }},
+    /* 64 */
+    {0x67096014,
+     {
+         {Pm4::DB_Z_INFO, 0x80000000},
+         {Pm4::DB_STENCIL_INFO, 0x20000000},
+         {Pm4::DB_Z_READ_BASE, 0x00000000},
+         {Pm4::DB_STENCIL_READ_BASE, 0x00000000},
+         {Pm4::DB_Z_WRITE_BASE, 0x00000000},
+         {Pm4::DB_STENCIL_WRITE_BASE, 0x00000000},
+         {Pm4::DB_Z_READ_BASE_HI, 0x00000000},
+         {Pm4::DB_STENCIL_READ_BASE_HI, 0x00000000},
+         {Pm4::DB_Z_WRITE_BASE_HI, 0x00000000},
+         {Pm4::DB_STENCIL_WRITE_BASE_HI, 0x00000000},
+         {Pm4::DB_HTILE_DATA_BASE_HI, 0x00000000},
+         {Pm4::DB_DEPTH_VIEW, 0x00000000},
+         {Pm4::DB_HTILE_DATA_BASE, 0x00000000},
+         {Pm4::DB_DEPTH_SIZE_XY, 0x00000000},
+         {Pm4::DB_DEPTH_CLEAR, 0x00000000},
+         {Pm4::DB_STENCIL_CLEAR, 0x00000000},
+     }},
+    /* 65 */
+    {0x88F5E915,
+     {
+         {Pm4::PA_SC_FOV_WINDOW_LR, 0xff00ff00},
+         {Pm4::PA_SC_FOV_WINDOW_TB, 0x00000000},
+     }},
+    /* 66 */
+    {0x033F1EFF,
+     {
+         {Pm4::FSR_RECURSIONS0, 0x00000000},
+         {Pm4::FSR_RECURSIONS1, 0x00000000},
+     }},
+    /* 67 */
+    {0x918106BB,
+     {
+         {Pm4::PA_SC_GENERIC_SCISSOR_TL, 0x80000000},
+         {Pm4::PA_SC_GENERIC_SCISSOR_BR, 0x40004000},
+     }},
+    /* 68 */
+    {0x95F0E7AC,
+     {
+         {Pm4::PA_CL_GB_VERT_CLIP_ADJ, 0x4e7e0000},
+         {Pm4::PA_CL_GB_VERT_DISC_ADJ, 0x4e7e0000},
+         {Pm4::PA_CL_GB_HORZ_CLIP_ADJ, 0x4e7e0000},
+         {Pm4::PA_CL_GB_HORZ_DISC_ADJ, 0x4e7e0000},
+     }},
+    /* 69 */
+    {0xB48CBAB2,
+     {
+         {Pm4::PA_SU_POLY_OFFSET_BACK_SCALE, 0x00000000},
+         {Pm4::PA_SU_POLY_OFFSET_BACK_OFFSET, 0x00000000},
+     }},
+    /* 70 */
+    {0x05BB3BC6,
+     {
+         {Pm4::PA_SU_POLY_OFFSET_FRONT_SCALE, 0x00000000},
+         {Pm4::PA_SU_POLY_OFFSET_FRONT_OFFSET, 0x00000000},
+     }},
+    /* 71 */
+    {0x94FABA07,
+     {
+         {Pm4::DB_RENDER_OVERRIDE, 0x00000000},
+         {Pm4::DB_RENDER_OVERRIDE2, 0x00000000},
+     }},
+    /* 72 */
+    {0x38E92C91,
+     {
+         {Pm4::CB_COLOR0_BASE, 0x00000000},
+         {Pm4::CB_COLOR0_VIEW, 0x00000000},
+         {Pm4::CB_COLOR0_INFO, 0x00000000},
+         {Pm4::CB_COLOR0_ATTRIB, 0x00000000},
+         {Pm4::CB_COLOR0_DCC_CONTROL, 0x00000048},
+         {Pm4::CB_COLOR0_CMASK, 0x00000000},
+         {Pm4::CB_COLOR0_FMASK, 0x00000000},
+         {Pm4::CB_COLOR0_CLEAR_WORD0, 0x00000000},
+         {Pm4::CB_COLOR0_CLEAR_WORD1, 0x00000000},
+         {Pm4::CB_COLOR0_DCC_BASE, 0x00000000},
+         {Pm4::CB_COLOR0_BASE_EXT, 0x00000000},
+         {Pm4::CB_COLOR0_CMASK_BASE_EXT, 0x00000000},
+         {Pm4::CB_COLOR0_FMASK_BASE_EXT, 0x00000000},
+         {Pm4::CB_COLOR0_DCC_BASE_EXT, 0x00000000},
+         {Pm4::CB_COLOR0_ATTRIB2, 0x00000000},
+         {Pm4::CB_COLOR0_ATTRIB3, 0x0006c000},
+     }},
+    /* 73 */
+    {0x0B177B43,
+     {
+         {Pm4::PA_SC_SCREEN_SCISSOR_TL, 0x00000000},
+         {Pm4::PA_SC_SCREEN_SCISSOR_BR, 0x40004000},
+     }},
+    /* 74 */ {0x48531062, {{Pm4::SPI_PS_INPUT_CNTL_0, 0x00000000}}},
+    /* 75 */
+    {0xAAA964B9,
+     {
+         {Pm4::PA_CL_UCP_0_X, 0x00000000},
+         {Pm4::PA_CL_UCP_0_Y, 0x00000000},
+         {Pm4::PA_CL_UCP_0_Z, 0x00000000},
+         {Pm4::PA_CL_UCP_0_W, 0x00000000},
+     }},
+    /* 76 */
+    {0x7690AF6F,
+     {
+         {Pm4::PA_CL_VPORT_XSCALE, 0x4e7e0000},
+         {Pm4::PA_CL_VPORT_YSCALE, 0x4e7e0000},
+         {Pm4::PA_CL_VPORT_ZSCALE, 0x4e7e0000},
+         {Pm4::PA_CL_VPORT_XOFFSET, 0x00000000},
+         {Pm4::PA_CL_VPORT_YOFFSET, 0x00000000},
+         {Pm4::PA_CL_VPORT_ZOFFSET, 0x00000000},
+         {Pm4::PA_SC_VPORT_SCISSOR_0_TL, 0x80000000},
+         {Pm4::PA_SC_VPORT_SCISSOR_0_BR, 0x40004000},
+         {Pm4::PA_SC_VPORT_ZMIN_0, 0x00000000},
+         {Pm4::PA_SC_VPORT_ZMAX_0, 0x00000000},
+     }},
+    /* 77 */
+    {0x078D7060,
+     {
+         {Pm4::PA_SC_WINDOW_SCISSOR_TL, 0x80000000},
+         {Pm4::PA_SC_WINDOW_SCISSOR_BR, 0x40004000},
+     }},
 
-#define KYTY_ID(id, tbl) ((id)*4 + (tbl))
-#define KYTY_INDEX0(id)  g_reg_info0[id].type, KYTY_ID(id, 0), 0
-#define KYTY_INDEX1(id)  g_reg_info1[id].type, KYTY_ID(id, 1), 0
-#define KYTY_REG0(id)    &g_reg_info0[id].reg[0]
-#define KYTY_REG1(id)    &g_reg_info1[id].reg[0]
+};
 
-static ShaderRegister* g_tbl0[]      = {KYTY_REG0(0), KYTY_REG0(1), KYTY_REG0(2), KYTY_REG0(3), KYTY_REG0(4)};
-static ShaderRegister* g_tbl1[]      = {KYTY_REG1(0), KYTY_REG1(1)};
-static uint32_t        g_tbl_index[] = {KYTY_INDEX0(0), KYTY_INDEX0(1), KYTY_INDEX0(2), KYTY_INDEX0(3),
-                                        KYTY_INDEX0(4), KYTY_INDEX1(0), KYTY_INDEX1(1)};
+static RegisterDefaultInfo g_sh_reg_info1[] = {
+    /* 0 */ {0x5D6E3EC7, {{Pm4::COMPUTE_PGM_RSRC1, 0x00000000}}},
+    /* 1 */ {0x57E7079A, {{Pm4::COMPUTE_PGM_RSRC2, 0x00000000}}},
+    /* 2 */ {0x7467FAFD, {{Pm4::COMPUTE_PGM_RSRC3, 0x00000000}}},
+    /* 3 */ {0x9E826B50, {{Pm4::COMPUTE_RESOURCE_LIMITS, 0x00000000}}},
+    /* 4 */ {0xDC484F18, {{Pm4::COMPUTE_TMPRING_SIZE, 0x00000000}}},
+    /* 5 */ {0x5DA8BCA3, {{Pm4::SPI_SHADER_PGM_RSRC1_GS, 0x00000000}}},
+    /* 6 */ {0x5CA726D8, {{Pm4::SPI_SHADER_PGM_RSRC1_HS, 0x00000000}}},
+    /* 7 */ {0x5DD28360, {{Pm4::SPI_SHADER_PGM_RSRC1_PS, 0x00000000}}},
+    /* 8 */ {0x57EFA0BE, {{Pm4::SPI_SHADER_PGM_RSRC2_GS, 0x00000000}}},
+    /* 9 */ {0x502363D5, {{Pm4::SPI_SHADER_PGM_RSRC2_HS, 0x00000000}}},
+    /* 10 */ {0x506D14BD, {{Pm4::SPI_SHADER_PGM_RSRC2_PS, 0x00000000}}},
+    /* 11 */ {0xB2609506, {{Pm4::COMPUTE_USER_ACCUM_0, 0x00000000}}},
+    /* 12 */
+    {0x9E5CFB8A,
+     {
+         {Pm4::SPI_SHADER_PGM_RSRC3_HS, 0x00000000},
+         {Pm4::SPI_SHADER_PGM_RSRC3_GS, 0x00000000},
+         {Pm4::SPI_SHADER_PGM_RSRC3_PS, 0x00000000},
+     }},
+    /* 13 */
+    {0xC918DF3E,
+     {
+         {Pm4::COMPUTE_PGM_LO, 0x00000000},
+         {Pm4::COMPUTE_PGM_HI, 0x00000000},
+     }},
+    /* 14 */
+    {0xC9751C9C,
+     {
+         {Pm4::SPI_SHADER_PGM_LO_ES, 0x00000000},
+         {Pm4::SPI_SHADER_PGM_HI_ES, 0x00000000},
+     }},
+    /* 15 */
+    {0xC97EF77A,
+     {
+         {Pm4::SPI_SHADER_PGM_LO_GS, 0x00000000},
+         {Pm4::SPI_SHADER_PGM_HI_GS, 0x00000000},
+     }},
+    /* 16 */
+    {0xC927C6B9,
+     {
+         {Pm4::SPI_SHADER_PGM_LO_HS, 0x00000000},
+         {Pm4::SPI_SHADER_PGM_HI_HS, 0x00000000},
+     }},
+    /* 17 */
+    {0xC92A1EC5,
+     {
+         {Pm4::SPI_SHADER_PGM_LO_LS, 0x00000000},
+         {Pm4::SPI_SHADER_PGM_HI_LS, 0x00000000},
+     }},
+    /* 18 */
+    {0xC9E01B31,
+     {
+         {Pm4::SPI_SHADER_PGM_LO_PS, 0x00000000},
+         {Pm4::SPI_SHADER_PGM_HI_PS, 0x00000000},
+     }},
+    /* 19 */ {0x50685F29, {{Pm4::SH_NOP, 0x00000000}}},
+    /* 20 */ {0xB26219CA, {{Pm4::SPI_SHADER_USER_ACCUM_ESGS_0, 0x00000000}}},
+    /* 21 */ {0xB25B6CF9, {{Pm4::SPI_SHADER_USER_ACCUM_LSHS_0, 0x00000000}}},
+    /* 22 */ {0xB2F86101, {{Pm4::SPI_SHADER_USER_ACCUM_PS_0, 0x00000000}}},
+    /* 23 */
+    {0x07E3B155,
+     {
+         {Pm4::SPI_SHADER_USER_DATA_ADDR_LO_GS, 0x00000000},
+         {Pm4::SPI_SHADER_USER_DATA_ADDR_HI_GS, 0x00000000},
+     }},
+    /* 24 */
+    {0x07E383C6,
+     {
+         {Pm4::SPI_SHADER_USER_DATA_ADDR_LO_HS, 0x00000000},
+         {Pm4::SPI_SHADER_USER_DATA_ADDR_HI_HS, 0x00000000},
+     }},
+    /* 25 */ {0xBDA98653, {{Pm4::COMPUTE_USER_DATA_0, 0x00000000}}},
+    /* 26 */ {0xBDBD1D0F, {{Pm4::SPI_SHADER_USER_DATA_GS_0, 0x00000000}}},
+    /* 27 */ {0xBD946FD4, {{Pm4::SPI_SHADER_USER_DATA_HS_0, 0x00000000}}},
+    /* 28 */ {0xBDF02A4C, {{Pm4::SPI_SHADER_USER_DATA_PS_0, 0x00000000}}},
+};
 
-static RegisterDefaults g_reg_defaults = { // @suppress("Invalid arguments")
-    g_tbl0, g_tbl1, nullptr, nullptr, {0, 0}, g_tbl_index, sizeof(g_tbl_index) / 12};
+static RegisterDefaultInfo g_uc_reg_info1[] = {
+    /* 0 */ {0x19E93E85, {{Pm4::GDS_OA_ADDRESS, 0x00000000}}},
+    /* 1 */ {0x3B5C2AF3, {{Pm4::GDS_OA_CNTL, 0x00000000}}},
+    /* 2 */ {0x47974A35, {{Pm4::GDS_OA_COUNTER, 0x00000000}}},
+    /* 3 */ {0x105971C2, {{Pm4::GE_CNTL, 0x00000000}}},
+    /* 4 */ {0x7D137765, {{Pm4::GE_INDX_OFFSET, 0x00000000}}},
+    /* 5 */ {0xD187FEBC, {{Pm4::GE_MULTI_PRIM_IB_RESET_EN, 0x00000000}}},
+    /* 6 */ {0x12F854AC, {{Pm4::GE_STEREO_CNTL, 0x00000000}}},
+    /* 7 */ {0x40D49AD1, {{Pm4::GE_USER_VGPR_EN, 0x00000000}}},
+    /* 8 */ {0x8C0923DA, {{Pm4::FSR_EXTEND_SUBPIXEL_ROUNDING, 0x00000000}}},
+    /* 9 */ {0xBB8DF494, {{Pm4::TEXTURE_GRADIENT_CONTROL, 0x00000000}}},
+    /* 10 */ {0xF6D8A76E, {{Pm4::TEXTURE_GRADIENT_FACTORS, 0x40000040}}},
+    /* 11 */ {0x7620F1E9, {{Pm4::VGT_OBJECT_ID, 0x00000000}}},
+    /* 12 */ {0x9EBFAB10, {{Pm4::VGT_PRIMITIVE_TYPE, 0x00000000}}},
+    /* 13 */
+    {0x98A09D0E,
+     {
+         {Pm4::TA_CS_BC_BASE_ADDR, 0x00000000},
+         {Pm4::TA_CS_BC_BASE_ADDR_HI, 0x00000000},
+     }},
+    /* 14 */
+    {0x195D37D2,
+     {
+         {Pm4::FSR_ALPHA_VALUE0, 0x00000000},
+         {Pm4::FSR_ALPHA_VALUE1, 0x00000000},
+     }},
+    /* 15 */
+    {0xF9EC4F85,
+     {
+         {Pm4::FSR_CONTROL_POINT0, 0x00000000},
+         {Pm4::FSR_CONTROL_POINT1, 0x00000000},
+         {Pm4::FSR_CONTROL_POINT2, 0x00000000},
+         {Pm4::FSR_CONTROL_POINT3, 0x00000000},
+     }},
+    /* 16 */
+    {0x4626B750,
+     {
+         {Pm4::FSR_WINDOW0, 0x00000000},
+         {Pm4::FSR_WINDOW1, 0x00000000},
+     }},
+    /* 17 */ {0x4CC673A0, {{Pm4::MEMORY_MAPPING_MASK, 0x00000000}}},
+    /* 18 */ {0xDE5B3431, {{Pm4::UC_NOP, 0x00000000}}},
+    /* 19 */ {0x036AC8A6, {{Pm4::GE_USER_VGPR1, 0x00000000}}}};
+
+static RegisterDefaultInfo g_cx_reg_info2[] = {
+    /* 0 */ {0x8FB4EDB5, {{Pm4::DB_DFSM_CONTROL, 0x00000000}}},
+    /* 1 */ {0xB994AD29, {{Pm4::DB_HTILE_SURFACE, 0x00000000}}},
+    /* 2 */ {0xD427322F, {{Pm4::PA_SC_NGG_MODE_CNTL, 0x00000000}}},
+    /* 3 */ {0xF58FEA31, {{Pm4::SPI_INTERP_CONTROL_0, 0x00000000}}},
+};
+
+static RegisterDefaultInfo g_sh_reg_info2[] = {
+    /* 0 */ {0x6AC156EF, {{Pm4::COMPUTE_DESTINATION_EN_SE0, 0x00000000}}},
+    /* 1 */ {0x6AC15610, {{Pm4::COMPUTE_DESTINATION_EN_SE1, 0x00000000}}},
+    /* 2 */ {0x6AC15009, {{Pm4::COMPUTE_DESTINATION_EN_SE2, 0x00000000}}},
+    /* 3 */ {0x6AC153BA, {{Pm4::COMPUTE_DESTINATION_EN_SE3, 0x00000000}}},
+    /* 4 */ {0xBE7DCD73, {{Pm4::COMPUTE_DISPATCH_TUNNEL, 0x00000000}}},
+    /* 5 */ {0x0C4B1438, {{Pm4::COMPUTE_SHADER_CHKSUM, 0x00000000}}},
+    /* 6 */ {0xDB00D71A, {{Pm4::COMPUTE_START_X, 0x00000000}}},
+    /* 7 */ {0xDB00D249, {{Pm4::COMPUTE_START_Y, 0x00000000}}},
+    /* 8 */ {0xDB00EC60, {{Pm4::COMPUTE_START_Z, 0x00000000}}},
+    /* 9 */ {0x0C4D6FE4, {{Pm4::SPI_SHADER_PGM_CHKSUM_GS, 0x00000000}}},
+    /* 10 */ {0x0C4A80EF, {{Pm4::SPI_SHADER_PGM_CHKSUM_HS, 0x00000000}}},
+    /* 11 */ {0x0DD283E7, {{Pm4::SPI_SHADER_PGM_CHKSUM_PS, 0x00000000}}},
+    /* 12 */ {0xC620E68C, {{Pm4::SPI_SHADER_PGM_RSRC4_GS, 0x00000000}}},
+    /* 13 */ {0xC67EFACF, {{Pm4::SPI_SHADER_PGM_RSRC4_HS, 0x00000000}}},
+    /* 14 */ {0xD9E6D9F7, {{Pm4::SPI_SHADER_PGM_RSRC4_PS, 0x00000000}}},
+};
+
+static RegisterDefaultInfo g_uc_reg_info2[] = {
+    /* 0 */ {0x31F34B9F, {{Pm4::VGT_HS_OFFCHIP_PARAM, 0x00000000}}},
+    /* 1 */ {0xAC0F9E76, {{Pm4::UC_NOP, 0x00000000}}},
+    /* 2 */ {0x929FD95D, {{Pm4::VGT_TF_MEMORY_BASE, 0x00000000}}},
+};
+
+#define KYTY_ID(id, tbl)   ((id)*4 + (tbl))
+#define KYTY_INDEX_CX1(id) g_cx_reg_info1[id].type, KYTY_ID(id, 0), 0
+#define KYTY_INDEX_SH1(id) g_sh_reg_info1[id].type, KYTY_ID(id, 1), 0
+#define KYTY_INDEX_UC1(id) g_uc_reg_info1[id].type, KYTY_ID(id, 2), 0
+#define KYTY_INDEX_CX2(id) g_cx_reg_info2[id].type, KYTY_ID(id, 0), 0
+#define KYTY_INDEX_SH2(id) g_sh_reg_info2[id].type, KYTY_ID(id, 1), 0
+#define KYTY_INDEX_UC2(id) g_uc_reg_info2[id].type, KYTY_ID(id, 2), 0
+#define KYTY_REG_CX1(id)   &g_cx_reg_info1[id].reg[0]
+#define KYTY_REG_SH1(id)   &g_sh_reg_info1[id].reg[0]
+#define KYTY_REG_UC1(id)   &g_uc_reg_info1[id].reg[0]
+#define KYTY_REG_CX2(id)   &g_cx_reg_info2[id].reg[0]
+#define KYTY_REG_SH2(id)   &g_sh_reg_info2[id].reg[0]
+#define KYTY_REG_UC2(id)   &g_uc_reg_info2[id].reg[0]
+
+static ShaderRegister* g_tbl_cx1[] = {
+    KYTY_REG_CX1(0),  KYTY_REG_CX1(1),  KYTY_REG_CX1(2),  KYTY_REG_CX1(3),  KYTY_REG_CX1(4),  KYTY_REG_CX1(5),  KYTY_REG_CX1(6),
+    KYTY_REG_CX1(7),  KYTY_REG_CX1(8),  KYTY_REG_CX1(9),  KYTY_REG_CX1(10), KYTY_REG_CX1(11), KYTY_REG_CX1(12), KYTY_REG_CX1(13),
+    KYTY_REG_CX1(14), KYTY_REG_CX1(15), KYTY_REG_CX1(16), KYTY_REG_CX1(17), KYTY_REG_CX1(18), KYTY_REG_CX1(19), KYTY_REG_CX1(20),
+    KYTY_REG_CX1(21), KYTY_REG_CX1(22), KYTY_REG_CX1(23), KYTY_REG_CX1(24), KYTY_REG_CX1(25), KYTY_REG_CX1(26), KYTY_REG_CX1(27),
+    KYTY_REG_CX1(28), KYTY_REG_CX1(29), KYTY_REG_CX1(30), KYTY_REG_CX1(31), KYTY_REG_CX1(32), KYTY_REG_CX1(33), KYTY_REG_CX1(34),
+    KYTY_REG_CX1(35), KYTY_REG_CX1(36), KYTY_REG_CX1(37), KYTY_REG_CX1(38), KYTY_REG_CX1(39), KYTY_REG_CX1(40), KYTY_REG_CX1(41),
+    KYTY_REG_CX1(42), KYTY_REG_CX1(43), KYTY_REG_CX1(44), KYTY_REG_CX1(45), KYTY_REG_CX1(46), KYTY_REG_CX1(47), KYTY_REG_CX1(48),
+    KYTY_REG_CX1(49), KYTY_REG_CX1(50), KYTY_REG_CX1(51), KYTY_REG_CX1(52), KYTY_REG_CX1(53), KYTY_REG_CX1(54), KYTY_REG_CX1(55),
+    KYTY_REG_CX1(56), KYTY_REG_CX1(57), KYTY_REG_CX1(58), KYTY_REG_CX1(59), KYTY_REG_CX1(60), KYTY_REG_CX1(61), KYTY_REG_CX1(62),
+    KYTY_REG_CX1(63), KYTY_REG_CX1(64), KYTY_REG_CX1(65), KYTY_REG_CX1(66), KYTY_REG_CX1(67), KYTY_REG_CX1(68), KYTY_REG_CX1(69),
+    KYTY_REG_CX1(70), KYTY_REG_CX1(71), KYTY_REG_CX1(72), KYTY_REG_CX1(73), KYTY_REG_CX1(74), KYTY_REG_CX1(75), KYTY_REG_CX1(76),
+    KYTY_REG_CX1(77)};
+
+static ShaderRegister* g_tbl_sh1[]    = {KYTY_REG_SH1(0),  KYTY_REG_SH1(1),  KYTY_REG_SH1(2),  KYTY_REG_SH1(3),  KYTY_REG_SH1(4),
+                                         KYTY_REG_SH1(5),  KYTY_REG_SH1(6),  KYTY_REG_SH1(7),  KYTY_REG_SH1(8),  KYTY_REG_SH1(9),
+                                         KYTY_REG_SH1(10), KYTY_REG_SH1(11), KYTY_REG_SH1(12), KYTY_REG_SH1(13), KYTY_REG_SH1(14),
+                                         KYTY_REG_SH1(15), KYTY_REG_SH1(16), KYTY_REG_SH1(17), KYTY_REG_SH1(18), KYTY_REG_SH1(19),
+                                         KYTY_REG_SH1(20), KYTY_REG_SH1(21), KYTY_REG_SH1(22), KYTY_REG_SH1(23), KYTY_REG_SH1(24),
+                                         KYTY_REG_SH1(25), KYTY_REG_SH1(26), KYTY_REG_SH1(27), KYTY_REG_SH1(28)};
+static ShaderRegister* g_tbl_uc1[]    = {KYTY_REG_UC1(0),  KYTY_REG_UC1(1),  KYTY_REG_UC1(2),  KYTY_REG_UC1(3),  KYTY_REG_UC1(4),
+                                         KYTY_REG_UC1(5),  KYTY_REG_UC1(6),  KYTY_REG_UC1(7),  KYTY_REG_UC1(8),  KYTY_REG_UC1(9),
+                                         KYTY_REG_UC1(10), KYTY_REG_UC1(11), KYTY_REG_UC1(12), KYTY_REG_UC1(13), KYTY_REG_UC1(14),
+                                         KYTY_REG_UC1(15), KYTY_REG_UC1(16), KYTY_REG_UC1(17), KYTY_REG_UC1(18), KYTY_REG_UC1(19)};
+static uint32_t        g_tbl_index1[] = {
+           KYTY_INDEX_CX1(0),  KYTY_INDEX_CX1(1),  KYTY_INDEX_CX1(2),  KYTY_INDEX_CX1(3),  KYTY_INDEX_CX1(4),  KYTY_INDEX_CX1(5),
+           KYTY_INDEX_CX1(6),  KYTY_INDEX_CX1(7),  KYTY_INDEX_CX1(8),  KYTY_INDEX_CX1(9),  KYTY_INDEX_CX1(10), KYTY_INDEX_CX1(11),
+           KYTY_INDEX_CX1(12), KYTY_INDEX_CX1(13), KYTY_INDEX_CX1(14), KYTY_INDEX_CX1(15), KYTY_INDEX_CX1(16), KYTY_INDEX_CX1(17),
+           KYTY_INDEX_CX1(18), KYTY_INDEX_CX1(19), KYTY_INDEX_CX1(20), KYTY_INDEX_CX1(21), KYTY_INDEX_CX1(22), KYTY_INDEX_CX1(23),
+           KYTY_INDEX_CX1(24), KYTY_INDEX_CX1(25), KYTY_INDEX_CX1(26), KYTY_INDEX_CX1(27), KYTY_INDEX_CX1(28), KYTY_INDEX_CX1(29),
+           KYTY_INDEX_CX1(30), KYTY_INDEX_CX1(31), KYTY_INDEX_CX1(32), KYTY_INDEX_CX1(33), KYTY_INDEX_CX1(34), KYTY_INDEX_CX1(35),
+           KYTY_INDEX_CX1(36), KYTY_INDEX_CX1(37), KYTY_INDEX_CX1(38), KYTY_INDEX_CX1(39), KYTY_INDEX_CX1(40), KYTY_INDEX_CX1(41),
+           KYTY_INDEX_CX1(42), KYTY_INDEX_CX1(43), KYTY_INDEX_CX1(44), KYTY_INDEX_CX1(45), KYTY_INDEX_CX1(46), KYTY_INDEX_CX1(47),
+           KYTY_INDEX_CX1(48), KYTY_INDEX_CX1(49), KYTY_INDEX_CX1(50), KYTY_INDEX_CX1(51), KYTY_INDEX_CX1(52), KYTY_INDEX_CX1(53),
+           KYTY_INDEX_CX1(54), KYTY_INDEX_CX1(55), KYTY_INDEX_CX1(56), KYTY_INDEX_CX1(57), KYTY_INDEX_CX1(58), KYTY_INDEX_CX1(59),
+           KYTY_INDEX_CX1(60), KYTY_INDEX_CX1(61), KYTY_INDEX_CX1(62), KYTY_INDEX_CX1(63), KYTY_INDEX_CX1(64), KYTY_INDEX_CX1(65),
+           KYTY_INDEX_CX1(66), KYTY_INDEX_CX1(67), KYTY_INDEX_CX1(68), KYTY_INDEX_CX1(69), KYTY_INDEX_CX1(70), KYTY_INDEX_CX1(71),
+           KYTY_INDEX_CX1(72), KYTY_INDEX_CX1(73), KYTY_INDEX_CX1(74), KYTY_INDEX_CX1(75), KYTY_INDEX_CX1(76), KYTY_INDEX_CX1(77),
+           KYTY_INDEX_SH1(0),  KYTY_INDEX_SH1(1),  KYTY_INDEX_SH1(2),  KYTY_INDEX_SH1(3),  KYTY_INDEX_SH1(4),  KYTY_INDEX_SH1(5),
+           KYTY_INDEX_SH1(6),  KYTY_INDEX_SH1(7),  KYTY_INDEX_SH1(8),  KYTY_INDEX_SH1(9),  KYTY_INDEX_SH1(10), KYTY_INDEX_SH1(11),
+           KYTY_INDEX_SH1(12), KYTY_INDEX_SH1(13), KYTY_INDEX_SH1(14), KYTY_INDEX_SH1(15), KYTY_INDEX_SH1(16), KYTY_INDEX_SH1(17),
+           KYTY_INDEX_SH1(18), KYTY_INDEX_SH1(19), KYTY_INDEX_SH1(20), KYTY_INDEX_SH1(21), KYTY_INDEX_SH1(22), KYTY_INDEX_SH1(23),
+           KYTY_INDEX_SH1(24), KYTY_INDEX_SH1(25), KYTY_INDEX_SH1(26), KYTY_INDEX_SH1(27), KYTY_INDEX_SH1(28), KYTY_INDEX_UC1(0),
+           KYTY_INDEX_UC1(1),  KYTY_INDEX_UC1(2),  KYTY_INDEX_UC1(3),  KYTY_INDEX_UC1(4),  KYTY_INDEX_UC1(5),  KYTY_INDEX_UC1(6),
+           KYTY_INDEX_UC1(7),  KYTY_INDEX_UC1(8),  KYTY_INDEX_UC1(9),  KYTY_INDEX_UC1(10), KYTY_INDEX_UC1(11), KYTY_INDEX_UC1(12),
+           KYTY_INDEX_UC1(13), KYTY_INDEX_UC1(14), KYTY_INDEX_UC1(15), KYTY_INDEX_UC1(16), KYTY_INDEX_UC1(17), KYTY_INDEX_UC1(18),
+           KYTY_INDEX_UC1(19)};
+
+static ShaderRegister* g_tbl_cx2[]    = {KYTY_REG_CX2(0), KYTY_REG_CX2(1), KYTY_REG_CX2(2), KYTY_REG_CX2(3)};
+static ShaderRegister* g_tbl_sh2[]    = {KYTY_REG_SH2(0),  KYTY_REG_SH2(1),  KYTY_REG_SH2(2),  KYTY_REG_SH2(3),  KYTY_REG_SH2(4),
+                                         KYTY_REG_SH2(5),  KYTY_REG_SH2(6),  KYTY_REG_SH2(7),  KYTY_REG_SH2(8),  KYTY_REG_SH2(9),
+                                         KYTY_REG_SH2(10), KYTY_REG_SH2(11), KYTY_REG_SH2(12), KYTY_REG_SH2(13), KYTY_REG_SH2(14)};
+static ShaderRegister* g_tbl_uc2[]    = {KYTY_REG_UC2(0), KYTY_REG_UC2(1), KYTY_REG_UC2(2)};
+static uint32_t        g_tbl_index2[] = {KYTY_INDEX_CX2(0),  KYTY_INDEX_CX2(1),  KYTY_INDEX_CX2(2),  KYTY_INDEX_CX2(3),  KYTY_INDEX_SH2(0),
+                                         KYTY_INDEX_SH2(1),  KYTY_INDEX_SH2(2),  KYTY_INDEX_SH2(3),  KYTY_INDEX_SH2(4),  KYTY_INDEX_SH2(5),
+                                         KYTY_INDEX_SH2(6),  KYTY_INDEX_SH2(7),  KYTY_INDEX_SH2(8),  KYTY_INDEX_SH2(9),  KYTY_INDEX_SH2(10),
+                                         KYTY_INDEX_SH2(11), KYTY_INDEX_SH2(12), KYTY_INDEX_SH2(13), KYTY_INDEX_SH2(14), KYTY_INDEX_UC2(0),
+                                         KYTY_INDEX_UC2(1),  KYTY_INDEX_UC2(2)};
+
+static RegisterDefaults g_reg_defaults1 = { // @suppress("Invalid arguments")
+    g_tbl_cx1, g_tbl_sh1, g_tbl_uc1, nullptr, {0, 0}, g_tbl_index1, sizeof(g_tbl_index1) / 12};
+static RegisterDefaults g_reg_defaults2 = { // @suppress("Invalid arguments")
+    g_tbl_cx2, g_tbl_sh2, g_tbl_uc2, nullptr, {0, 0}, g_tbl_index2, sizeof(g_tbl_index2) / 12};
 
 int KYTY_SYSV_ABI GraphicsInit(uint32_t* state, uint32_t ver)
 {
@@ -999,9 +1402,7 @@ void* KYTY_SYSV_ABI GraphicsGetRegisterDefaults2(uint32_t ver)
 	EXIT_NOT_IMPLEMENTED(ver != 8);
 	EXIT_NOT_IMPLEMENTED(offsetof(RegisterDefaults, count) != 0x38);
 
-	// g_reg_defaults.count = 0;
-
-	return &g_reg_defaults;
+	return &g_reg_defaults1;
 }
 
 void* KYTY_SYSV_ABI GraphicsGetRegisterDefaults2Internal(uint32_t ver)
@@ -1011,9 +1412,7 @@ void* KYTY_SYSV_ABI GraphicsGetRegisterDefaults2Internal(uint32_t ver)
 	EXIT_NOT_IMPLEMENTED(ver != 8);
 	EXIT_NOT_IMPLEMENTED(offsetof(RegisterDefaults, count) != 0x38);
 
-	g_reg_defaults.count = 0;
-
-	return &g_reg_defaults;
+	return &g_reg_defaults2;
 }
 
 static void dbg_dump_shader(const Shader* h)
@@ -1167,173 +1566,6 @@ int KYTY_SYSV_ABI GraphicsCreateShader(Shader** dst, void* header, const volatil
 	return OK;
 }
 
-uint32_t* KYTY_SYSV_ABI GraphicsDcbResetQueue(CommandBuffer* buf, uint32_t op, uint32_t state)
-{
-	PRINT_NAME();
-
-	printf("\t op    = 0x%08" PRIx32 "\n", op);
-	printf("\t state = 0x%08" PRIx32 "\n", state);
-
-	EXIT_NOT_IMPLEMENTED(buf == nullptr);
-	EXIT_NOT_IMPLEMENTED(op != 0x3ff);
-	EXIT_NOT_IMPLEMENTED(state != 0);
-
-	buf->DbgDump();
-
-	auto* cmd = buf->AllocateDW(2);
-
-	EXIT_NOT_IMPLEMENTED(cmd == nullptr);
-
-	cmd[0] = KYTY_PM4(2, Pm4::IT_NOP, Pm4::R_DRAW_RESET);
-	cmd[1] = 0;
-
-	return cmd;
-}
-
-uint32_t* KYTY_SYSV_ABI GraphicsDcbWaitUntilSafeForRendering(CommandBuffer* buf, uint32_t video_out_handle, uint32_t display_buffer_index)
-{
-	PRINT_NAME();
-
-	printf("\t video_out_handle     = %" PRIu32 "\n", video_out_handle);
-	printf("\t display_buffer_index = %" PRIu32 "\n", display_buffer_index);
-
-	EXIT_NOT_IMPLEMENTED(buf == nullptr);
-
-	buf->DbgDump();
-
-	auto* cmd = buf->AllocateDW(3);
-
-	EXIT_NOT_IMPLEMENTED(cmd == nullptr);
-
-	cmd[0] = KYTY_PM4(3, Pm4::IT_NOP, Pm4::R_WAIT_FLIP_DONE);
-	cmd[1] = video_out_handle;
-	cmd[2] = display_buffer_index;
-
-	return cmd;
-}
-
-uint32_t* KYTY_SYSV_ABI GraphicsDcbSetCxRegistersIndirect(CommandBuffer* buf, const volatile ShaderRegister* regs, uint32_t num_regs)
-{
-	PRINT_NAME();
-
-	printf("\t regs     = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(regs));
-	printf("\t num_regs = %" PRIu32 "\n", num_regs);
-
-	EXIT_NOT_IMPLEMENTED(buf == nullptr);
-
-	buf->DbgDump();
-
-	auto* cmd = buf->AllocateDW(4);
-
-	EXIT_NOT_IMPLEMENTED(cmd == nullptr);
-
-	auto vaddr = reinterpret_cast<uint64_t>(regs);
-
-	cmd[0] = KYTY_PM4(4, Pm4::IT_NOP, Pm4::R_CX_REGS);
-	cmd[1] = num_regs;
-	cmd[2] = vaddr & 0xffffffffu;
-	cmd[3] = (vaddr >> 32u) & 0xffffffffu;
-
-	return cmd;
-}
-
-uint32_t* KYTY_SYSV_ABI GraphicsDcbSetShRegistersIndirect(CommandBuffer* buf, const volatile ShaderRegister* regs, uint32_t num_regs)
-{
-	PRINT_NAME();
-
-	printf("\t regs     = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(regs));
-	printf("\t num_regs = %" PRIu32 "\n", num_regs);
-
-	EXIT_NOT_IMPLEMENTED(buf == nullptr);
-
-	buf->DbgDump();
-
-	auto* cmd = buf->AllocateDW(4);
-
-	EXIT_NOT_IMPLEMENTED(cmd == nullptr);
-
-	auto vaddr = reinterpret_cast<uint64_t>(regs);
-
-	cmd[0] = KYTY_PM4(4, Pm4::IT_NOP, Pm4::R_SH_REGS);
-	cmd[1] = num_regs;
-	cmd[2] = vaddr & 0xffffffffu;
-	cmd[3] = (vaddr >> 32u) & 0xffffffffu;
-
-	return cmd;
-}
-
-uint32_t* KYTY_SYSV_ABI GraphicsDcbSetUcRegistersIndirect(CommandBuffer* buf, const volatile ShaderRegister* regs, uint32_t num_regs)
-{
-	PRINT_NAME();
-
-	printf("\t regs     = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(regs));
-	printf("\t num_regs = %" PRIu32 "\n", num_regs);
-
-	EXIT_NOT_IMPLEMENTED(buf == nullptr);
-
-	buf->DbgDump();
-
-	auto* cmd = buf->AllocateDW(4);
-
-	EXIT_NOT_IMPLEMENTED(cmd == nullptr);
-
-	auto vaddr = reinterpret_cast<uint64_t>(regs);
-
-	cmd[0] = KYTY_PM4(4, Pm4::IT_NOP, Pm4::R_UC_REGS);
-	cmd[1] = num_regs;
-	cmd[2] = vaddr & 0xffffffffu;
-	cmd[3] = (vaddr >> 32u) & 0xffffffffu;
-
-	return cmd;
-}
-
-uint32_t* KYTY_SYSV_ABI GraphicsDcbSetIndexSize(CommandBuffer* buf, uint8_t index_size, uint8_t cache_policy)
-{
-	PRINT_NAME();
-
-	printf("\t index_size   = 0x%" PRIx8 "\n", index_size);
-	printf("\t cache_policy = 0x%" PRIx8 "\n", cache_policy);
-
-	EXIT_NOT_IMPLEMENTED(buf == nullptr);
-	EXIT_NOT_IMPLEMENTED(cache_policy != 0);
-
-	buf->DbgDump();
-
-	auto* cmd = buf->AllocateDW(2);
-
-	EXIT_NOT_IMPLEMENTED(cmd == nullptr);
-
-	cmd[0] = KYTY_PM4(2, Pm4::IT_INDEX_TYPE, 0u);
-	cmd[1] = index_size;
-
-	return cmd;
-}
-
-uint32_t* KYTY_SYSV_ABI GraphicsDcbDrawIndexAuto(CommandBuffer* buf, uint32_t index_count, uint64_t modifier)
-{
-	PRINT_NAME();
-
-	printf("\t index_count = 0x%" PRIx32 "\n", index_count);
-	printf("\t modifier    = 0x%016" PRIx64 "\n", modifier);
-
-	EXIT_NOT_IMPLEMENTED(buf == nullptr);
-	EXIT_NOT_IMPLEMENTED(modifier != 0x40000000);
-
-	// auto *m = reinterpret_cast<ShaderDrawModifier*>(&modifier);
-
-	buf->DbgDump();
-
-	auto* cmd = buf->AllocateDW(7);
-
-	EXIT_NOT_IMPLEMENTED(cmd == nullptr);
-
-	cmd[0] = KYTY_PM4(7, Pm4::IT_NOP, Pm4::R_DRAW_INDEX_AUTO);
-	cmd[1] = index_count;
-	cmd[2] = 0;
-
-	return cmd;
-}
-
 int KYTY_SYSV_ABI GraphicsSetCxRegIndirectPatchSetAddress(uint32_t* cmd, const volatile ShaderRegister* regs)
 {
 	PRINT_NAME();
@@ -1457,8 +1689,8 @@ int KYTY_SYSV_ABI GraphicsCreatePrimState(ShaderRegister* cx_regs, ShaderRegiste
 
 	uc_regs[0]        = gs->specials->ge_cntl;
 	uc_regs[1]        = gs->specials->ge_user_vgpr_en;
-	uc_regs[2].offset = Pm4::PRIMITIVE_TYPE;
-	uc_regs[2].value  = 0;
+	uc_regs[2].offset = Pm4::VGT_PRIMITIVE_TYPE;
+	uc_regs[2].value  = prim_type;
 
 	return OK;
 }
@@ -1500,6 +1732,32 @@ int KYTY_SYSV_ABI GraphicsCreateInterpolantMapping(ShaderRegister* regs, const S
 	return OK;
 }
 
+int KYTY_SYSV_ABI GraphicsGetDataPacketPayloadAddress(uint32_t** addr, uint32_t* cmd, int type)
+{
+	PRINT_NAME();
+
+	printf("\t addr = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(addr));
+	printf("\t cmd  = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(cmd));
+	printf("\t type = %d\n", type);
+
+	EXIT_NOT_IMPLEMENTED(addr == nullptr);
+	EXIT_NOT_IMPLEMENTED(cmd == nullptr);
+	EXIT_NOT_IMPLEMENTED(type != 1);
+
+	*addr = cmd + 2;
+
+	return OK;
+}
+
+int KYTY_SYSV_ABI GraphicsSuspendPoint()
+{
+	PRINT_NAME();
+
+	GraphicsRunDone();
+
+	return OK;
+}
+
 uint32_t* KYTY_SYSV_ABI GraphicsCbSetShRegisterRangeDirect(CommandBuffer* buf, uint32_t offset, const uint32_t* values, uint32_t num_values)
 {
 	PRINT_NAME();
@@ -1534,24 +1792,421 @@ uint32_t* KYTY_SYSV_ABI GraphicsCbSetShRegisterRangeDirect(CommandBuffer* buf, u
 	return cmd;
 }
 
-int KYTY_SYSV_ABI GraphicsGetDataPacketPayloadAddress(uint32_t** addr, uint32_t* cmd, int type)
+uint32_t* KYTY_SYSV_ABI GraphicsCbReleaseMem(CommandBuffer* buf, uint8_t action, uint16_t gcr_cntl, uint8_t dst, uint8_t cache_policy,
+                                             const volatile Label* address, uint8_t data_sel, uint64_t data, uint16_t gds_offset,
+                                             uint16_t gds_size, uint8_t interrupt, uint32_t interrupt_ctx_id)
 {
 	PRINT_NAME();
 
-	printf("\t addr = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(addr));
-	printf("\t cmd  = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(cmd));
-	printf("\t type = %d\n", type);
+	printf("\t action           = 0x%02" PRIx8 "\n", action);
+	printf("\t gcr_cntl         = 0x%04" PRIx16 "\n", gcr_cntl);
+	printf("\t dst              = %" PRIu8 "\n", dst);
+	printf("\t cache_policy     = 0x%02" PRIx8 "\n", cache_policy);
+	printf("\t address          = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(address));
+	printf("\t data_sel         = 0x%02" PRIx8 "\n", data_sel);
+	printf("\t data             = 0x%016" PRIx64 "\n", data);
+	printf("\t gds_offset       = %" PRIu16 "\n", gds_offset);
+	printf("\t gds_size         = %" PRIu16 "\n", gds_size);
+	printf("\t interrupt        = 0x%02" PRIx8 "\n", interrupt);
+	printf("\t interrupt_ctx_id = %" PRIu32 "\n", interrupt_ctx_id);
 
-	EXIT_NOT_IMPLEMENTED(addr == nullptr);
+	EXIT_NOT_IMPLEMENTED(buf == nullptr);
+	EXIT_NOT_IMPLEMENTED(dst != 1);
+	EXIT_NOT_IMPLEMENTED(data_sel != 2);
+	EXIT_NOT_IMPLEMENTED(gds_offset != 0);
+	EXIT_NOT_IMPLEMENTED(gds_size != 1);
+
+	buf->DbgDump();
+
+	auto* cmd = buf->AllocateDW(10);
+
 	EXIT_NOT_IMPLEMENTED(cmd == nullptr);
-	EXIT_NOT_IMPLEMENTED(type != 1);
 
-	*addr = cmd + 2;
+	cmd[0] = KYTY_PM4(10, Pm4::IT_NOP, Pm4::R_RELEASE_MEM);
+	cmd[1] = action;
+	cmd[2] = gcr_cntl;
+	cmd[3] = cache_policy;
+	cmd[4] = static_cast<uint32_t>(reinterpret_cast<uint64_t>(address) & 0xffffffffu);
+	cmd[5] = static_cast<uint32_t>((reinterpret_cast<uint64_t>(address) >> 32u) & 0xffffffffu);
+	cmd[6] = static_cast<uint32_t>(data & 0xffffffffu);
+	cmd[7] = static_cast<uint32_t>((data >> 32u) & 0xffffffffu);
+	cmd[8] = interrupt;
+	cmd[9] = interrupt_ctx_id;
+
+	return cmd;
+}
+
+uint32_t* KYTY_SYSV_ABI GraphicsDcbResetQueue(CommandBuffer* buf, uint32_t op, uint32_t state)
+{
+	PRINT_NAME();
+
+	printf("\t op    = 0x%08" PRIx32 "\n", op);
+	printf("\t state = 0x%08" PRIx32 "\n", state);
+
+	EXIT_NOT_IMPLEMENTED(buf == nullptr);
+	EXIT_NOT_IMPLEMENTED(op != 0x3ff);
+	EXIT_NOT_IMPLEMENTED(state != 0);
+
+	buf->DbgDump();
+
+	auto* cmd = buf->AllocateDW(2);
+
+	EXIT_NOT_IMPLEMENTED(cmd == nullptr);
+
+	cmd[0] = KYTY_PM4(2, Pm4::IT_NOP, Pm4::R_DRAW_RESET);
+	cmd[1] = 0;
+
+	return cmd;
+}
+
+uint32_t* KYTY_SYSV_ABI GraphicsDcbWaitUntilSafeForRendering(CommandBuffer* buf, uint32_t video_out_handle, uint32_t display_buffer_index)
+{
+	PRINT_NAME();
+
+	printf("\t video_out_handle     = %" PRIu32 "\n", video_out_handle);
+	printf("\t display_buffer_index = %" PRIu32 "\n", display_buffer_index);
+
+	EXIT_NOT_IMPLEMENTED(buf == nullptr);
+
+	buf->DbgDump();
+
+	auto* cmd = buf->AllocateDW(7);
+
+	EXIT_NOT_IMPLEMENTED(cmd == nullptr);
+
+	cmd[0] = KYTY_PM4(7, Pm4::IT_NOP, Pm4::R_WAIT_FLIP_DONE);
+	cmd[1] = video_out_handle;
+	cmd[2] = display_buffer_index;
+	cmd[3] = 0;
+	cmd[4] = 0;
+	cmd[5] = 0;
+	cmd[6] = 0;
+
+	return cmd;
+}
+
+uint32_t* KYTY_SYSV_ABI GraphicsDcbSetCxRegistersIndirect(CommandBuffer* buf, const volatile ShaderRegister* regs, uint32_t num_regs)
+{
+	PRINT_NAME();
+
+	printf("\t regs     = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(regs));
+	printf("\t num_regs = %" PRIu32 "\n", num_regs);
+
+	EXIT_NOT_IMPLEMENTED(buf == nullptr);
+
+	buf->DbgDump();
+
+	auto* cmd = buf->AllocateDW(4);
+
+	EXIT_NOT_IMPLEMENTED(cmd == nullptr);
+
+	auto vaddr = reinterpret_cast<uint64_t>(regs);
+
+	cmd[0] = KYTY_PM4(4, Pm4::IT_NOP, Pm4::R_CX_REGS_INDIRECT);
+	cmd[1] = num_regs;
+	cmd[2] = vaddr & 0xffffffffu;
+	cmd[3] = (vaddr >> 32u) & 0xffffffffu;
+
+	return cmd;
+}
+
+uint32_t* KYTY_SYSV_ABI GraphicsDcbSetShRegistersIndirect(CommandBuffer* buf, const volatile ShaderRegister* regs, uint32_t num_regs)
+{
+	PRINT_NAME();
+
+	printf("\t regs     = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(regs));
+	printf("\t num_regs = %" PRIu32 "\n", num_regs);
+
+	EXIT_NOT_IMPLEMENTED(buf == nullptr);
+
+	buf->DbgDump();
+
+	auto* cmd = buf->AllocateDW(4);
+
+	EXIT_NOT_IMPLEMENTED(cmd == nullptr);
+
+	auto vaddr = reinterpret_cast<uint64_t>(regs);
+
+	cmd[0] = KYTY_PM4(4, Pm4::IT_NOP, Pm4::R_SH_REGS_INDIRECT);
+	cmd[1] = num_regs;
+	cmd[2] = vaddr & 0xffffffffu;
+	cmd[3] = (vaddr >> 32u) & 0xffffffffu;
+
+	return cmd;
+}
+
+uint32_t* KYTY_SYSV_ABI GraphicsDcbSetUcRegistersIndirect(CommandBuffer* buf, const volatile ShaderRegister* regs, uint32_t num_regs)
+{
+	PRINT_NAME();
+
+	printf("\t regs     = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(regs));
+	printf("\t num_regs = %" PRIu32 "\n", num_regs);
+
+	EXIT_NOT_IMPLEMENTED(buf == nullptr);
+
+	buf->DbgDump();
+
+	auto* cmd = buf->AllocateDW(4);
+
+	EXIT_NOT_IMPLEMENTED(cmd == nullptr);
+
+	auto vaddr = reinterpret_cast<uint64_t>(regs);
+
+	cmd[0] = KYTY_PM4(4, Pm4::IT_NOP, Pm4::R_UC_REGS_INDIRECT);
+	cmd[1] = num_regs;
+	cmd[2] = vaddr & 0xffffffffu;
+	cmd[3] = (vaddr >> 32u) & 0xffffffffu;
+
+	return cmd;
+}
+
+uint32_t* KYTY_SYSV_ABI GraphicsDcbSetIndexSize(CommandBuffer* buf, uint8_t index_size, uint8_t cache_policy)
+{
+	PRINT_NAME();
+
+	printf("\t index_size   = 0x%" PRIx8 "\n", index_size);
+	printf("\t cache_policy = 0x%" PRIx8 "\n", cache_policy);
+
+	EXIT_NOT_IMPLEMENTED(buf == nullptr);
+	EXIT_NOT_IMPLEMENTED(cache_policy != 0);
+
+	buf->DbgDump();
+
+	auto* cmd = buf->AllocateDW(2);
+
+	EXIT_NOT_IMPLEMENTED(cmd == nullptr);
+
+	cmd[0] = KYTY_PM4(2, Pm4::IT_INDEX_TYPE, 0u);
+	cmd[1] = index_size;
+
+	return cmd;
+}
+
+uint32_t* KYTY_SYSV_ABI GraphicsDcbDrawIndexAuto(CommandBuffer* buf, uint32_t index_count, uint64_t modifier)
+{
+	PRINT_NAME();
+
+	printf("\t index_count = 0x%" PRIx32 "\n", index_count);
+	printf("\t modifier    = 0x%016" PRIx64 "\n", modifier);
+
+	EXIT_NOT_IMPLEMENTED(buf == nullptr);
+	EXIT_NOT_IMPLEMENTED(modifier != 0x40000000);
+
+	// auto *m = reinterpret_cast<ShaderDrawModifier*>(&modifier);
+
+	buf->DbgDump();
+
+	auto* cmd = buf->AllocateDW(7);
+
+	EXIT_NOT_IMPLEMENTED(cmd == nullptr);
+
+	cmd[0] = KYTY_PM4(7, Pm4::IT_NOP, Pm4::R_DRAW_INDEX_AUTO);
+	cmd[1] = index_count;
+	cmd[2] = 0;
+
+	return cmd;
+}
+
+uint32_t* KYTY_SYSV_ABI GraphicsDcbEventWrite(CommandBuffer* buf, uint8_t event_type, const volatile void* address)
+{
+	PRINT_NAME();
+
+	printf("\t event_type = 0x%02" PRIx8 "\n", event_type);
+	printf("\t address    = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(address));
+
+	EXIT_NOT_IMPLEMENTED(buf == nullptr);
+	EXIT_NOT_IMPLEMENTED(address != nullptr);
+	EXIT_NOT_IMPLEMENTED(event_type > 0x3fu);
+
+	buf->DbgDump();
+
+	auto* cmd = buf->AllocateDW(2);
+
+	EXIT_NOT_IMPLEMENTED(cmd == nullptr);
+
+	uint32_t event_index = 0;
+
+	cmd[0] = KYTY_PM4(2, Pm4::IT_EVENT_WRITE, 0u);
+	cmd[1] = (event_index << 8u) | event_type;
+
+	return cmd;
+}
+
+uint32_t* KYTY_SYSV_ABI GraphicsDcbAcquireMem(CommandBuffer* buf, uint8_t engine, uint32_t cb_db_op, uint32_t gcr_cntl,
+                                              const volatile void* base, uint64_t size_bytes, uint32_t poll_cycles)
+{
+	PRINT_NAME();
+
+	printf("\t engine      = 0x%02" PRIx8 "\n", engine);
+	printf("\t cb_db_op    = 0x%08" PRIx32 "\n", cb_db_op);
+	printf("\t gcr_cntl    = 0x%08" PRIx32 "\n", gcr_cntl);
+	printf("\t base        = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(base));
+	printf("\t size_bytes  = 0x%016" PRIx64 "\n", size_bytes);
+	printf("\t poll_cycles = %" PRIu32 "\n", poll_cycles);
+
+	bool no_size = (static_cast<int64_t>(size_bytes) == -1);
+	auto vaddr   = reinterpret_cast<uint64_t>(base);
+
+	EXIT_NOT_IMPLEMENTED(buf == nullptr);
+	EXIT_NOT_IMPLEMENTED(!no_size && (size_bytes && 0xffu) != 0);
+	EXIT_NOT_IMPLEMENTED(!no_size && (size_bytes >> 40u) != 0);
+	EXIT_NOT_IMPLEMENTED((vaddr && 0xffu) != 0);
+	EXIT_NOT_IMPLEMENTED((vaddr >> 40u) != 0);
+	EXIT_NOT_IMPLEMENTED(engine > 1);
+
+	buf->DbgDump();
+
+	auto* cmd = buf->AllocateDW(8);
+
+	EXIT_NOT_IMPLEMENTED(cmd == nullptr);
+
+	cmd[0] = KYTY_PM4(8, Pm4::IT_NOP, Pm4::R_ACQUIRE_MEM);
+	cmd[1] = (static_cast<uint32_t>(engine) << 31u) | cb_db_op;
+	cmd[2] = (no_size ? 0 : size_bytes >> 8u);
+	cmd[3] = 0;
+	cmd[4] = vaddr >> 8u;
+	cmd[5] = 0;
+	cmd[6] = poll_cycles / 40;
+	cmd[7] = gcr_cntl;
+
+	return cmd;
+}
+
+uint32_t* KYTY_SYSV_ABI GraphicsDcbWriteData(CommandBuffer* buf, uint8_t dst, uint8_t cache_policy, uint64_t address_or_offset,
+                                             const void* data, uint32_t num_dwords, uint8_t increment, uint8_t write_confirm)
+{
+	PRINT_NAME();
+
+	printf("\t dst               = 0x%02" PRIx8 "\n", dst);
+	printf("\t cache_policy      = 0x%02" PRIx8 "\n", cache_policy);
+	printf("\t address_or_offset = 0x%016" PRIx64 "\n", address_or_offset);
+	printf("\t data              = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(data));
+	printf("\t num_dwords        = %" PRIu32 "\n", num_dwords);
+	printf("\t increment         = 0x%02" PRIx8 "\n", increment);
+	printf("\t write_confirm     = 0x%02" PRIx8 "\n", write_confirm);
+
+	EXIT_NOT_IMPLEMENTED(buf == nullptr);
+	EXIT_NOT_IMPLEMENTED((8 + num_dwords - 2u) > 0x3fffu);
+	EXIT_NOT_IMPLEMENTED(data == nullptr);
+	EXIT_NOT_IMPLEMENTED(address_or_offset == 0);
+
+	buf->DbgDump();
+
+	auto* cmd = buf->AllocateDW(8 + num_dwords);
+
+	EXIT_NOT_IMPLEMENTED(cmd == nullptr);
+
+	cmd[0] = KYTY_PM4(8 + num_dwords, Pm4::IT_NOP, Pm4::R_WRITE_DATA);
+	cmd[1] = dst;
+	cmd[2] = cache_policy;
+	cmd[3] = address_or_offset & 0xffffffffu;
+	cmd[4] = (address_or_offset >> 32u) & 0xffffffffu;
+	cmd[5] = num_dwords;
+	cmd[6] = increment;
+	cmd[7] = write_confirm;
+
+	memcpy(cmd + 8, data, static_cast<size_t>(num_dwords) * 4);
+
+	return cmd;
+}
+
+uint32_t* KYTY_SYSV_ABI GraphicsDcbWaitRegMem(CommandBuffer* buf, uint8_t size, uint8_t compare_function, uint8_t op, uint8_t cache_policy,
+                                              const volatile void* address, uint64_t reference, uint64_t mask, uint32_t poll_cycles)
+{
+	PRINT_NAME();
+
+	printf("\t size             = 0x%02" PRIx8 "\n", size);
+	printf("\t compare_function = 0x%02" PRIx8 "\n", compare_function);
+	printf("\t op               = 0x%02" PRIx8 "\n", op);
+	printf("\t cache_policy     = 0x%02" PRIx8 "\n", cache_policy);
+	printf("\t address          = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(address));
+	printf("\t reference        = 0x%016" PRIx64 "\n", reference);
+	printf("\t mask             = 0x%016" PRIx64 "\n", mask);
+	printf("\t poll_cycles      = %" PRIu32 "\n", poll_cycles);
+
+	EXIT_NOT_IMPLEMENTED(buf == nullptr);
+	EXIT_NOT_IMPLEMENTED(size != 1);
+	EXIT_NOT_IMPLEMENTED(op != 1);
+	EXIT_NOT_IMPLEMENTED(cache_policy != 0);
+
+	buf->DbgDump();
+
+	auto* cmd = buf->AllocateDW(9);
+
+	EXIT_NOT_IMPLEMENTED(cmd == nullptr);
+
+	cmd[0] = KYTY_PM4(9, Pm4::IT_NOP, Pm4::R_WAIT_MEM_64);
+	cmd[1] = static_cast<uint32_t>(reinterpret_cast<uint64_t>(address) & 0xffffffffu);
+	cmd[2] = static_cast<uint32_t>((reinterpret_cast<uint64_t>(address) >> 32u) & 0xffffffffu);
+	cmd[3] = static_cast<uint32_t>(reinterpret_cast<uint64_t>(mask) & 0xffffffffu);
+	cmd[4] = static_cast<uint32_t>((reinterpret_cast<uint64_t>(mask) >> 32u) & 0xffffffffu);
+	cmd[5] = static_cast<uint32_t>(reinterpret_cast<uint64_t>(reference) & 0xffffffffu);
+	cmd[6] = static_cast<uint32_t>((reinterpret_cast<uint64_t>(reference) >> 32u) & 0xffffffffu);
+	cmd[7] = compare_function;
+	cmd[8] = poll_cycles / 40;
+
+	return cmd;
+}
+
+uint32_t* KYTY_SYSV_ABI GraphicsDcbSetFlip(CommandBuffer* buf, uint32_t video_out_handle, int32_t display_buffer_index, uint32_t flip_mode,
+                                           int64_t flip_arg)
+{
+	PRINT_NAME();
+
+	printf("\t video_out_handle     = %" PRIu32 "\n", video_out_handle);
+	printf("\t display_buffer_index = %" PRId32 "\n", display_buffer_index);
+	printf("\t flip_mode            = %" PRIu32 "\n", flip_mode);
+	printf("\t flip_arg             = %" PRId64 "\n", flip_arg);
+
+	EXIT_NOT_IMPLEMENTED(buf == nullptr);
+
+	buf->DbgDump();
+
+	auto* cmd = buf->AllocateDW(6);
+
+	EXIT_NOT_IMPLEMENTED(cmd == nullptr);
+
+	cmd[0] = KYTY_PM4(6, Pm4::IT_NOP, Pm4::R_FLIP);
+	cmd[1] = video_out_handle;
+	cmd[2] = display_buffer_index;
+	cmd[3] = flip_mode;
+	cmd[4] = static_cast<uint32_t>(static_cast<uint64_t>(flip_arg) & 0xffffffffu);
+	cmd[5] = static_cast<uint32_t>((static_cast<uint64_t>(flip_arg) >> 32u) & 0xffffffffu);
+
+	return cmd;
+}
+
+} // namespace Gen5
+
+namespace Gen5Driver {
+
+LIB_NAME("Graphics5Driver", "Graphics5Driver");
+
+struct Packet
+{
+	uint32_t* addr;
+	uint32_t  dw_num;
+	uint8_t   pad[4];
+};
+
+int KYTY_SYSV_ABI GraphicsDriverSubmitDcb(const Packet* packet)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(packet == nullptr);
+	EXIT_NOT_IMPLEMENTED(packet->pad[0] != 0);
+
+	printf("\t addr   = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(packet->addr));
+	printf("\t dw_num = 0x%08" PRIx32 "\n", packet->dw_num);
+
+	GraphicsDbgDumpDcb("d", packet->dw_num, packet->addr);
+
+	GraphicsRunSubmit(packet->addr, packet->dw_num, nullptr, 0);
 
 	return OK;
 }
 
-} // namespace Gen5
+} // namespace Gen5Driver
 
 } // namespace Kyty::Libs::Graphics
 

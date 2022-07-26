@@ -7,9 +7,9 @@
 
 namespace Kyty::Libs::Graphics::Pm4 {
 
-static const char* g_names[256]        = {};
-static const char* g_r_names[64]       = {};
-static bool        g_names_initialized = false;
+static const char* g_names[256]          = {};
+static const char* g_r_names[Pm4::R_NUM] = {};
+static bool        g_names_initialized   = false;
 
 static void init_names()
 {
@@ -25,26 +25,31 @@ static void init_names()
 			n = "<unknown>";
 		}
 
-		g_r_names[R_ZERO]              = "R_ZERO";
-		g_r_names[R_VS]                = "R_VS";
-		g_r_names[R_PS]                = "R_PS";
-		g_r_names[R_DRAW_INDEX]        = "R_DRAW_INDEX";
-		g_r_names[R_DRAW_INDEX_AUTO]   = "R_DRAW_INDEX_AUTO";
-		g_r_names[R_DRAW_RESET]        = "R_DRAW_RESET";
-		g_r_names[R_WAIT_FLIP_DONE]    = "R_WAIT_FLIP_DONE";
-		g_r_names[R_CS]                = "R_CS";
-		g_r_names[R_DISPATCH_DIRECT]   = "R_DISPATCH_DIRECT";
-		g_r_names[R_DISPATCH_RESET]    = "R_DISPATCH_RESET";
-		g_r_names[R_DISPATCH_WAIT_MEM] = "R_DISPATCH_WAIT_MEM";
-		g_r_names[R_PUSH_MARKER]       = "R_PUSH_MARKER";
-		g_r_names[R_POP_MARKER]        = "R_POP_MARKER";
-		g_r_names[R_VS_EMBEDDED]       = "R_VS_EMBEDDED";
-		g_r_names[R_PS_EMBEDDED]       = "R_PS_EMBEDDED";
-		g_r_names[R_VS_UPDATE]         = "R_VS_UPDATE";
-		g_r_names[R_PS_UPDATE]         = "R_PS_UPDATE";
-		g_r_names[R_CX_REGS]           = "R_CX_REGS";
-		g_r_names[R_SH_REGS]           = "R_SH_REGS";
-		g_r_names[R_UC_REGS]           = "R_UC_REGS";
+		g_r_names[R_ZERO]             = "R_ZERO";
+		g_r_names[R_VS]               = "R_VS";
+		g_r_names[R_PS]               = "R_PS";
+		g_r_names[R_DRAW_INDEX]       = "R_DRAW_INDEX";
+		g_r_names[R_DRAW_INDEX_AUTO]  = "R_DRAW_INDEX_AUTO";
+		g_r_names[R_DRAW_RESET]       = "R_DRAW_RESET";
+		g_r_names[R_WAIT_FLIP_DONE]   = "R_WAIT_FLIP_DONE";
+		g_r_names[R_CS]               = "R_CS";
+		g_r_names[R_DISPATCH_DIRECT]  = "R_DISPATCH_DIRECT";
+		g_r_names[R_DISPATCH_RESET]   = "R_DISPATCH_RESET";
+		g_r_names[R_WAIT_MEM_32]      = "R_WAIT_MEM_32";
+		g_r_names[R_PUSH_MARKER]      = "R_PUSH_MARKER";
+		g_r_names[R_POP_MARKER]       = "R_POP_MARKER";
+		g_r_names[R_VS_EMBEDDED]      = "R_VS_EMBEDDED";
+		g_r_names[R_PS_EMBEDDED]      = "R_PS_EMBEDDED";
+		g_r_names[R_VS_UPDATE]        = "R_VS_UPDATE";
+		g_r_names[R_PS_UPDATE]        = "R_PS_UPDATE";
+		g_r_names[R_CX_REGS_INDIRECT] = "R_CX_REGS_INDIRECT";
+		g_r_names[R_SH_REGS_INDIRECT] = "R_SH_REGS_INDIRECT";
+		g_r_names[R_UC_REGS_INDIRECT] = "R_UC_REGS_INDIRECT";
+		g_r_names[R_ACQUIRE_MEM]      = "R_ACQUIRE_MEM";
+		g_r_names[R_WRITE_DATA]       = "R_WRITE_DATA";
+		g_r_names[R_WAIT_MEM_64]      = "R_WAIT_MEM_64";
+		g_r_names[R_FLIP]             = "R_FLIP";
+		g_r_names[R_RELEASE_MEM]      = "R_RELEASE_MEM";
 
 		g_names[IT_NOP]                       = "IT_NOP";
 		g_names[IT_SET_BASE]                  = "IT_SET_BASE";
@@ -131,7 +136,7 @@ void DumpPm4PacketStream(Core::File* file, uint32_t* cmd_buffer, uint32_t start_
 			bool sh_gx = (cmd_id & 0x2u) == 0;
 			len        = ((cmd_id >> 16u) & 0x3fffu) + 1;
 			uint8_t op = ((cmd_id >> 8u) & 0xffu);
-			auto    r  = ((cmd_id >> 2u) & 0x3fu);
+			auto    r  = KYTY_PM4_R(cmd_id);
 
 			file->Printf("%s %s(OP:0x%02" PRIx8 ") SH:%s CNT:%u\n", g_names[op], (op == IT_NOP ? g_r_names[r] : ""), op,
 			             sh_gx ? "GX" : "CX", len);
@@ -139,6 +144,18 @@ void DumpPm4PacketStream(Core::File* file, uint32_t* cmd_buffer, uint32_t start_
 			for (uint32_t i = 0; i < len; i++)
 			{
 				file->Printf("      | 0x%08" PRIx32 " | \n", cmd[i]);
+			}
+
+			if (op == IT_NOP && (r == R_CX_REGS_INDIRECT || r == R_SH_REGS_INDIRECT || r == R_UC_REGS_INDIRECT) && len == 3)
+			{
+				auto*    indirect_buffer = reinterpret_cast<uint32_t*>(cmd[1] | (static_cast<uint64_t>(cmd[2]) << 32u));
+				uint32_t indirect_num_dw = cmd[0];
+
+				for (uint32_t i = 0; i < indirect_num_dw; i++, indirect_buffer += 2)
+				{
+					file->Printf("      |            | offset = 0x%08" PRIx32 ", value = 0x%08" PRIx32 "\n", indirect_buffer[0],
+					             indirect_buffer[1]);
+				}
 			}
 		} else
 		{
