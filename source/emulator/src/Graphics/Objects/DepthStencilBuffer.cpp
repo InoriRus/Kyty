@@ -31,7 +31,8 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 	auto pixel_format = static_cast<VkFormat>(params[DepthStencilBufferObject::PARAM_FORMAT]);
 	auto width        = params[DepthStencilBufferObject::PARAM_WIDTH];
 	auto height       = params[DepthStencilBufferObject::PARAM_HEIGHT];
-	bool htile        = params[DepthStencilBufferObject::PARAM_HTILE] != 1;
+	bool htile        = params[DepthStencilBufferObject::PARAM_HTILE] != 0;
+	bool sampled      = params[DepthStencilBufferObject::PARAM_USAGE] == 1;
 
 	EXIT_NOT_IMPLEMENTED(pixel_format == VK_FORMAT_UNDEFINED);
 	EXIT_NOT_IMPLEMENTED(width == 0);
@@ -50,7 +51,7 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 		view = nullptr;
 	}
 
-	vk_obj->compressed = htile;
+	vk_obj->compressed = !htile;
 
 	VkImageCreateInfo image_info {};
 	image_info.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -66,7 +67,7 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 	image_info.tiling        = VK_IMAGE_TILING_OPTIMAL;
 	image_info.initialLayout = vk_obj->layout;
 	image_info.usage         = static_cast<VkImageUsageFlags>(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) |
-	                   static_cast<VkImageUsageFlags>(VK_IMAGE_USAGE_SAMPLED_BIT);
+	                   (sampled ? static_cast<VkImageUsageFlags>(VK_IMAGE_USAGE_SAMPLED_BIT) : static_cast<VkImageUsageFlags>(0));
 	image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	image_info.samples     = VK_SAMPLE_COUNT_1_BIT;
 
@@ -160,14 +161,9 @@ static void delete_func(GraphicContext* ctx, void* obj, VulkanMemory* mem)
 bool DepthStencilBufferObject::Equal(const uint64_t* other) const
 {
 	return (params[PARAM_FORMAT] == other[PARAM_FORMAT] && params[PARAM_WIDTH] == other[PARAM_WIDTH] &&
-	        params[PARAM_HEIGHT] == other[PARAM_HEIGHT] && params[PARAM_HTILE] == other[PARAM_HTILE]);
+	        params[PARAM_HEIGHT] == other[PARAM_HEIGHT] && params[PARAM_HTILE] == other[PARAM_HTILE] &&
+	        params[PARAM_NEO] == other[PARAM_NEO] && params[PARAM_USAGE] == other[PARAM_USAGE]);
 }
-
-// bool DepthStencilBufferObject::Reuse(const uint64_t* other) const
-//{
-//	return (params[PARAM_FORMAT] == other[PARAM_FORMAT] && params[PARAM_WIDTH] <= other[PARAM_WIDTH] &&
-//	        params[PARAM_HEIGHT] <= other[PARAM_HEIGHT] && params[PARAM_HTILE] == other[PARAM_HTILE]);
-//}
 
 GpuObject::create_func_t DepthStencilBufferObject::GetCreateFunc() const
 {

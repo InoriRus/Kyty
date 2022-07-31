@@ -1556,12 +1556,33 @@ int KYTY_SYSV_ABI GraphicsCreateShader(Shader** dst, void* header, const volatil
 
 	h->code = code;
 
-	dbg_dump_shader(h);
-
 	EXIT_NOT_IMPLEMENTED(h->file_header != 0x34333231);
 	EXIT_NOT_IMPLEMENTED(h->version != 0x00000018);
 
+	auto base = reinterpret_cast<uint64_t>(code);
+
+	if (h->type == 2 && h->num_sh_registers >= 2 && h->sh_registers[0].offset == Pm4::SPI_SHADER_PGM_LO_ES &&
+	    h->sh_registers[1].offset == Pm4::SPI_SHADER_PGM_HI_ES)
+	{
+		h->sh_registers[0].offset = Pm4::SPI_SHADER_PGM_LO_ES;
+		h->sh_registers[0].value  = ((base >> 8u) & 0xffffffffu);
+		h->sh_registers[1].offset = Pm4::SPI_SHADER_PGM_HI_ES;
+		h->sh_registers[1].value  = ((base >> 40u) & 0x000000ffu);
+	} else if (h->type == 1 && h->num_sh_registers >= 2 && h->sh_registers[0].offset == Pm4::SPI_SHADER_PGM_LO_PS &&
+	           h->sh_registers[1].offset == Pm4::SPI_SHADER_PGM_HI_PS)
+	{
+		h->sh_registers[0].offset = Pm4::SPI_SHADER_PGM_LO_PS;
+		h->sh_registers[0].value  = ((base >> 8u) & 0xffffffffu);
+		h->sh_registers[1].offset = Pm4::SPI_SHADER_PGM_HI_PS;
+		h->sh_registers[1].value  = ((base >> 40u) & 0x000000ffu);
+	} else
+	{
+		EXIT("invalid shader\n");
+	}
+
 	*dst = h;
+
+	dbg_dump_shader(h);
 
 	return OK;
 }
@@ -1774,6 +1795,10 @@ uint32_t* KYTY_SYSV_ABI GraphicsCbSetShRegisterRangeDirect(CommandBuffer* buf, u
 
 	buf->DbgDump();
 
+	auto* marker = buf->AllocateDW(2);
+	marker[0]    = KYTY_PM4(2, Pm4::IT_NOP, Pm4::R_ZERO);
+	marker[1]    = 0x6875000d;
+
 	auto* cmd = buf->AllocateDW(num_values + 2);
 
 	EXIT_NOT_IMPLEMENTED(cmd == nullptr);
@@ -1815,23 +1840,22 @@ uint32_t* KYTY_SYSV_ABI GraphicsCbReleaseMem(CommandBuffer* buf, uint8_t action,
 	EXIT_NOT_IMPLEMENTED(data_sel != 2);
 	EXIT_NOT_IMPLEMENTED(gds_offset != 0);
 	EXIT_NOT_IMPLEMENTED(gds_size != 1);
+	EXIT_NOT_IMPLEMENTED(interrupt != 0);
+	EXIT_NOT_IMPLEMENTED(interrupt_ctx_id != 0);
 
 	buf->DbgDump();
 
-	auto* cmd = buf->AllocateDW(10);
+	auto* cmd = buf->AllocateDW(7);
 
 	EXIT_NOT_IMPLEMENTED(cmd == nullptr);
 
-	cmd[0] = KYTY_PM4(10, Pm4::IT_NOP, Pm4::R_RELEASE_MEM);
-	cmd[1] = action;
+	cmd[0] = KYTY_PM4(7, Pm4::IT_NOP, Pm4::R_RELEASE_MEM);
+	cmd[1] = action | (static_cast<uint32_t>(cache_policy) << 8u);
 	cmd[2] = gcr_cntl;
-	cmd[3] = cache_policy;
-	cmd[4] = static_cast<uint32_t>(reinterpret_cast<uint64_t>(address) & 0xffffffffu);
-	cmd[5] = static_cast<uint32_t>((reinterpret_cast<uint64_t>(address) >> 32u) & 0xffffffffu);
-	cmd[6] = static_cast<uint32_t>(data & 0xffffffffu);
-	cmd[7] = static_cast<uint32_t>((data >> 32u) & 0xffffffffu);
-	cmd[8] = interrupt;
-	cmd[9] = interrupt_ctx_id;
+	cmd[3] = static_cast<uint32_t>(reinterpret_cast<uint64_t>(address) & 0xffffffffu);
+	cmd[4] = static_cast<uint32_t>((reinterpret_cast<uint64_t>(address) >> 32u) & 0xffffffffu);
+	cmd[5] = static_cast<uint32_t>(data & 0xffffffffu);
+	cmd[6] = static_cast<uint32_t>((data >> 32u) & 0xffffffffu);
 
 	return cmd;
 }
@@ -2086,26 +2110,23 @@ uint32_t* KYTY_SYSV_ABI GraphicsDcbWriteData(CommandBuffer* buf, uint8_t dst, ui
 	printf("\t write_confirm     = 0x%02" PRIx8 "\n", write_confirm);
 
 	EXIT_NOT_IMPLEMENTED(buf == nullptr);
-	EXIT_NOT_IMPLEMENTED((8 + num_dwords - 2u) > 0x3fffu);
+	EXIT_NOT_IMPLEMENTED((4 + num_dwords - 2u) > 0x3fffu);
 	EXIT_NOT_IMPLEMENTED(data == nullptr);
 	EXIT_NOT_IMPLEMENTED(address_or_offset == 0);
 
 	buf->DbgDump();
 
-	auto* cmd = buf->AllocateDW(8 + num_dwords);
+	auto* cmd = buf->AllocateDW(4 + num_dwords);
 
 	EXIT_NOT_IMPLEMENTED(cmd == nullptr);
 
-	cmd[0] = KYTY_PM4(8 + num_dwords, Pm4::IT_NOP, Pm4::R_WRITE_DATA);
-	cmd[1] = dst;
-	cmd[2] = cache_policy;
-	cmd[3] = address_or_offset & 0xffffffffu;
-	cmd[4] = (address_or_offset >> 32u) & 0xffffffffu;
-	cmd[5] = num_dwords;
-	cmd[6] = increment;
-	cmd[7] = write_confirm;
+	cmd[0] = KYTY_PM4(4 + num_dwords, Pm4::IT_NOP, Pm4::R_WRITE_DATA);
+	cmd[1] = dst | (static_cast<uint32_t>(cache_policy) << 8u) | (static_cast<uint32_t>(increment) << 16u) |
+	         (static_cast<uint32_t>(write_confirm) << 24u);
+	cmd[2] = address_or_offset & 0xffffffffu;
+	cmd[3] = (address_or_offset >> 32u) & 0xffffffffu;
 
-	memcpy(cmd + 8, data, static_cast<size_t>(num_dwords) * 4);
+	memcpy(cmd + 4, data, static_cast<size_t>(num_dwords) * 4);
 
 	return cmd;
 }

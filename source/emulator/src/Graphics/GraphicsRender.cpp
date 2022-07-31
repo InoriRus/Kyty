@@ -466,10 +466,27 @@ static void uc_print(const char* func, const HW::UserConfig& uc)
 {
 	printf("%s\n", func);
 
-	printf("\t GetPrimType()  = 0x%08" PRIx32 "\n", uc.GetPrimType());
+	const auto& ge_cntl = uc.GetGeControl();
+	const auto& user_en = uc.GetGeUserVgprEn();
+
+	printf("\t GetPrimType()         = 0x%08" PRIx32 "\n", uc.GetPrimType());
+	printf("\t primitive_group_size  = 0x%04" PRIx16 "\n", ge_cntl.primitive_group_size);
+	printf("\t en_user_vgpr1         = %s\n", user_en.vgpr1 ? "true" : "false");
+	printf("\t en_user_vgpr2         = %s\n", user_en.vgpr2 ? "true" : "false");
+	printf("\t en_user_vgpr3         = %s\n", user_en.vgpr3 ? "true" : "false");
 }
 
-static void uc_check(const HW::UserConfig& /*uc*/) {}
+static void uc_check(const HW::UserConfig& uc)
+{
+	const auto& ge_cntl = uc.GetGeControl();
+	const auto& user_en = uc.GetGeUserVgprEn();
+
+	EXIT_NOT_IMPLEMENTED(ge_cntl.primitive_group_size != 0x0000);
+	EXIT_NOT_IMPLEMENTED(ge_cntl.vertex_group_size != 0x0000);
+	EXIT_NOT_IMPLEMENTED(user_en.vgpr1 != false);
+	EXIT_NOT_IMPLEMENTED(user_en.vgpr2 != false);
+	EXIT_NOT_IMPLEMENTED(user_en.vgpr3 != false);
+}
 
 static void sh_print(const char* func, const HW::Shader& /*uc*/)
 {
@@ -490,8 +507,13 @@ static Core::StringList rt_print(const char* func, const HW::RenderTarget& rt)
 	dst.Add(String::FromPrintf("\t slice.slice_div64_minus1        = 0x%08" PRIx32 "\n", rt.slice.slice_div64_minus1));
 	dst.Add(String::FromPrintf("\t view.base_array_slice_index     = 0x%08" PRIx32 "\n", rt.view.base_array_slice_index));
 	dst.Add(String::FromPrintf("\t view.last_array_slice_index     = 0x%08" PRIx32 "\n", rt.view.last_array_slice_index));
+	dst.Add(String::FromPrintf("\t view.current_mip_level          = 0x%08" PRIx32 "\n", rt.view.current_mip_level));
 	dst.Add(String::FromPrintf("\t info.fmask_compression_enable   = %s\n", rt.info.fmask_compression_enable ? "true" : "false"));
-	dst.Add(String::FromPrintf("\t info.fmask_compression_mode     = 0x%08" PRIx32 "\n", rt.info.fmask_compression_mode));
+
+	// dst.Add(String::FromPrintf("\t info.fmask_compression_mode     = 0x%08" PRIx32 "\n", rt.info.fmask_compression_mode));
+	dst.Add(String::FromPrintf("\t info.fmask_data_compression_disable = %s\n", rt.info.fmask_data_compression_disable ? "true" : "false"));
+	dst.Add(String::FromPrintf("\t info.fmask_one_frag_mode        = %s\n", rt.info.fmask_one_frag_mode ? "true" : "false"));
+
 	dst.Add(String::FromPrintf("\t info.cmask_fast_clear_enable    = %s\n", rt.info.cmask_fast_clear_enable ? "true" : "false"));
 	dst.Add(String::FromPrintf("\t info.dcc_compression_enable     = %s\n", rt.info.dcc_compression_enable ? "true" : "false"));
 	dst.Add(String::FromPrintf("\t info.neo_mode                   = %s\n", rt.info.neo_mode ? "true" : "false"));
@@ -500,17 +522,31 @@ static Core::StringList rt_print(const char* func, const HW::RenderTarget& rt)
 	dst.Add(String::FromPrintf("\t info.format                     = 0x%08" PRIx32 "\n", rt.info.format));
 	dst.Add(String::FromPrintf("\t info.channel_type               = 0x%08" PRIx32 "\n", rt.info.channel_type));
 	dst.Add(String::FromPrintf("\t info.channel_order              = 0x%08" PRIx32 "\n", rt.info.channel_order));
+	dst.Add(String::FromPrintf("\t info.blend_bypa                 = %s\n", rt.info.blend_bypass ? "true" : "false"));
+	dst.Add(String::FromPrintf("\t info.blend_clamp                = %s\n", rt.info.blend_clamp ? "true" : "false"));
+	dst.Add(String::FromPrintf("\t info.round_mode                 = %s\n", rt.info.round_mode ? "true" : "false"));
 	dst.Add(String::FromPrintf("\t attrib.force_dest_alpha_to_one  = %s\n", rt.attrib.force_dest_alpha_to_one ? "true" : "false"));
 	dst.Add(String::FromPrintf("\t attrib.tile_mode                = 0x%08" PRIx32 "\n", rt.attrib.tile_mode));
 	dst.Add(String::FromPrintf("\t attrib.fmask_tile_mode          = 0x%08" PRIx32 "\n", rt.attrib.fmask_tile_mode));
 	dst.Add(String::FromPrintf("\t attrib.num_samples              = 0x%08" PRIx32 "\n", rt.attrib.num_samples));
 	dst.Add(String::FromPrintf("\t attrib.num_fragments            = 0x%08" PRIx32 "\n", rt.attrib.num_fragments));
+	dst.Add(String::FromPrintf("\t attrib2.width                   = 0x%08" PRIx32 "\n", rt.attrib2.width));
+	dst.Add(String::FromPrintf("\t attrib2.height                  = 0x%08" PRIx32 "\n", rt.attrib2.height));
+	dst.Add(String::FromPrintf("\t attrib2.num_mip_levels          = 0x%08" PRIx32 "\n", rt.attrib2.num_mip_levels));
+	dst.Add(String::FromPrintf("\t attrib3.depth                   = 0x%08" PRIx32 "\n", rt.attrib3.depth));
+	dst.Add(String::FromPrintf("\t attrib3.tile_mode               = 0x%08" PRIx32 "\n", rt.attrib3.tile_mode));
+	dst.Add(String::FromPrintf("\t attrib3.dimension               = 0x%08" PRIx32 "\n", rt.attrib3.dimension));
+	dst.Add(String::FromPrintf("\t attrib3.cmask_pipe_aligned      = %s\n", rt.attrib3.cmask_pipe_aligned ? "true" : "false"));
+	dst.Add(String::FromPrintf("\t attrib3.dcc_pipe_aligned        = %s\n", rt.attrib3.dcc_pipe_aligned ? "true" : "false"));
 	dst.Add(String::FromPrintf("\t dcc.max_uncompressed_block_size = 0x%08" PRIx32 "\n", rt.dcc.max_uncompressed_block_size));
 	dst.Add(String::FromPrintf("\t dcc.max_compressed_block_size   = 0x%08" PRIx32 "\n", rt.dcc.max_compressed_block_size));
 	dst.Add(String::FromPrintf("\t dcc.min_compressed_block_size   = 0x%08" PRIx32 "\n", rt.dcc.min_compressed_block_size));
 	dst.Add(String::FromPrintf("\t dcc.color_transform             = 0x%08" PRIx32 "\n", rt.dcc.color_transform));
-	dst.Add(String::FromPrintf("\t dcc.enable_overwrite_combiner   = %s\n", rt.dcc.enable_overwrite_combiner ? "true" : "false"));
-	dst.Add(String::FromPrintf("\t dcc.force_independent_blocks    = %s\n", rt.dcc.force_independent_blocks ? "true" : "false"));
+	dst.Add(String::FromPrintf("\t dcc.overwrite_combiner_disable  = %s\n", rt.dcc.overwrite_combiner_disable ? "true" : "false"));
+	dst.Add(String::FromPrintf("\t dcc.independent_64b_blocks      = %s\n", rt.dcc.independent_64b_blocks ? "true" : "false"));
+	dst.Add(String::FromPrintf("\t dcc.independent_128b_blocks     = %s\n", rt.dcc.independent_128b_blocks ? "true" : "false"));
+	dst.Add(String::FromPrintf("\t data_write_on_dcc_clear_to_reg  = %s\n", rt.dcc.data_write_on_dcc_clear_to_reg ? "true" : "false"));
+	dst.Add(String::FromPrintf("\t dcc.dcc_clear_key_enable        = %s\n", rt.dcc.dcc_clear_key_enable ? "true" : "false"));
 	dst.Add(String::FromPrintf("\t cmask.addr                      = 0x%016" PRIx64 "\n", rt.cmask.addr));
 	dst.Add(String::FromPrintf("\t cmask_slice.slice_minus1        = 0x%08" PRIx32 "\n", rt.cmask_slice.slice_minus1));
 	dst.Add(String::FromPrintf("\t fmask.addr                      = 0x%016" PRIx64 "\n", rt.fmask.addr));
@@ -536,13 +572,21 @@ static void rt_check(const HW::RenderTarget& rt)
 		// EXIT_NOT_IMPLEMENTED(rt.slice_div64_minus1 != 0x000086ff);
 		EXIT_NOT_IMPLEMENTED(rt.view.base_array_slice_index != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(rt.view.last_array_slice_index != 0x00000000);
+		EXIT_NOT_IMPLEMENTED(rt.view.current_mip_level != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(rt.info.fmask_compression_enable != false);
-		EXIT_NOT_IMPLEMENTED(rt.info.fmask_compression_mode != 0x00000000);
+
+		// EXIT_NOT_IMPLEMENTED(rt.info.fmask_compression_mode != 0x00000000);
+		EXIT_NOT_IMPLEMENTED(rt.info.fmask_data_compression_disable != false);
+		EXIT_NOT_IMPLEMENTED(rt.info.fmask_one_frag_mode != false);
+
 		EXIT_NOT_IMPLEMENTED(rt.info.cmask_fast_clear_enable != false);
 		EXIT_NOT_IMPLEMENTED(rt.info.dcc_compression_enable != false);
 		EXIT_NOT_IMPLEMENTED(!render_to_texture && rt.info.neo_mode != Config::IsNeo());
 		EXIT_NOT_IMPLEMENTED(rt.info.cmask_tile_mode != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(rt.info.cmask_tile_mode_neo != 0x00000000);
+		EXIT_NOT_IMPLEMENTED(rt.info.blend_bypass != false);
+		// EXIT_NOT_IMPLEMENTED(rt.info.blend_clamp != false);
+		EXIT_NOT_IMPLEMENTED(rt.info.round_mode != false);
 		//		 EXIT_NOT_IMPLEMENTED(rt.format != 0x0000000a);
 		// EXIT_NOT_IMPLEMENTED(rt.channel_type != 0x00000006);
 		// EXIT_NOT_IMPLEMENTED(rt.channel_order != 0x00000001);
@@ -551,12 +595,23 @@ static void rt_check(const HW::RenderTarget& rt)
 		// EXIT_NOT_IMPLEMENTED(rt.fmask_tile_mode != 0x0000000a);
 		EXIT_NOT_IMPLEMENTED(rt.attrib.num_samples != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(rt.attrib.num_fragments != 0x00000000);
+		EXIT_NOT_IMPLEMENTED(rt.attrib2.width != 0x00000000);
+		EXIT_NOT_IMPLEMENTED(rt.attrib2.height != 0x00000000);
+		EXIT_NOT_IMPLEMENTED(rt.attrib2.num_mip_levels != 0x00000000);
+		EXIT_NOT_IMPLEMENTED(rt.attrib3.depth != 0x00000000);
+		EXIT_NOT_IMPLEMENTED(rt.attrib3.tile_mode != 0x00000000);
+		EXIT_NOT_IMPLEMENTED(rt.attrib3.dimension != 0x00000000);
+		EXIT_NOT_IMPLEMENTED(rt.attrib3.cmask_pipe_aligned != false);
+		EXIT_NOT_IMPLEMENTED(rt.attrib3.dcc_pipe_aligned != false);
 		// EXIT_NOT_IMPLEMENTED(rt.dcc_max_uncompressed_block_size != 0x00000002);
 		// EXIT_NOT_IMPLEMENTED(rt.dcc.max_compressed_block_size != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(rt.dcc.min_compressed_block_size != 0x00000000);
 		// EXIT_NOT_IMPLEMENTED(rt.dcc.color_transform != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(rt.dcc.enable_overwrite_combiner != false);
+		EXIT_NOT_IMPLEMENTED(rt.dcc.overwrite_combiner_disable != false);
 		// EXIT_NOT_IMPLEMENTED(rt.dcc.force_independent_blocks != false);
+		// EXIT_NOT_IMPLEMENTED(rt.dcc.independent_128b_blocks != false);
+		// EXIT_NOT_IMPLEMENTED(rt.dcc.data_write_on_dcc_clear_to_reg != false);
+		EXIT_NOT_IMPLEMENTED(rt.dcc.dcc_clear_key_enable != false);
 		EXIT_NOT_IMPLEMENTED(rt.cmask.addr != 0x0000000000000000);
 		EXIT_NOT_IMPLEMENTED(rt.cmask_slice.slice_minus1 != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(rt.fmask.addr != 0x0000000000000000);
@@ -579,11 +634,17 @@ static void z_print(const char* func, const HW::DepthRenderTarget& z)
 	printf("\t z_info.tile_surface_enable            = %s\n", z.z_info.tile_surface_enable ? "true" : "false");
 	printf("\t z_info.expclear_enabled               = %s\n", z.z_info.expclear_enabled ? "true" : "false");
 	printf("\t z_info.zrange_precision               = 0x%08" PRIx32 "\n", z.z_info.zrange_precision);
+	printf("\t z_info.embedded_sample_locations      = %s\n", z.z_info.embedded_sample_locations ? "true" : "false");
+	printf("\t z_info.partially_resident             = %s\n", z.z_info.partially_resident ? "true" : "false");
+	printf("\t z_info.num_mip_levels                 = 0x%02" PRIx8 "\n", z.z_info.num_mip_levels);
+	printf("\t z_info.plane_compression              = 0x%02" PRIx8 "\n", z.z_info.plane_compression);
 	printf("\t stencil_info.format                   = 0x%08" PRIx32 "\n", z.stencil_info.format);
 	printf("\t stencil_info.tile_stencil_disable     = %s\n", z.stencil_info.tile_stencil_disable ? "true" : "false");
 	printf("\t stencil_info.expclear_enabled         = %s\n", z.stencil_info.expclear_enabled ? "true" : "false");
 	printf("\t stencil_info.tile_mode_index          = 0x%08" PRIx32 "\n", z.stencil_info.tile_mode_index);
 	printf("\t stencil_info.tile_split               = 0x%08" PRIx32 "\n", z.stencil_info.tile_split);
+	printf("\t stencil_info.texture_compatible_stencil = %s\n", z.stencil_info.texture_compatible_stencil ? "true" : "false");
+	printf("\t stencil_info.partially_resident       = %s\n", z.stencil_info.partially_resident ? "true" : "false");
 	printf("\t depth_info.addr5_swizzle_mask         = 0x%08" PRIx32 "\n", z.depth_info.addr5_swizzle_mask);
 	printf("\t depth_info.array_mode                 = 0x%08" PRIx32 "\n", z.depth_info.array_mode);
 	printf("\t depth_info.pipe_config                = 0x%08" PRIx32 "\n", z.depth_info.pipe_config);
@@ -593,6 +654,9 @@ static void z_print(const char* func, const HW::DepthRenderTarget& z)
 	printf("\t depth_info.num_banks                  = 0x%08" PRIx32 "\n", z.depth_info.num_banks);
 	printf("\t depth_view.slice_start                = 0x%08" PRIx32 "\n", z.depth_view.slice_start);
 	printf("\t depth_view.slice_max                  = 0x%08" PRIx32 "\n", z.depth_view.slice_max);
+	printf("\t depth_view.current_mip_level          = 0x%02" PRIx8 "\n", z.depth_view.current_mip_level);
+	printf("\t depth_view.depth_write_disable        = %s\n", z.depth_view.depth_write_disable ? "true" : "false");
+	printf("\t depth_view.stencil_write_disable      = %s\n", z.depth_view.stencil_write_disable ? "true" : "false");
 	printf("\t htile_surface.linear                  = 0x%08" PRIx32 "\n", z.htile_surface.linear);
 	printf("\t htile_surface.full_cache              = 0x%08" PRIx32 "\n", z.htile_surface.full_cache);
 	printf("\t htile_surface.htile_uses_preload_win  = 0x%08" PRIx32 "\n", z.htile_surface.htile_uses_preload_win);
@@ -610,6 +674,8 @@ static void z_print(const char* func, const HW::DepthRenderTarget& z)
 	printf("\t htile_data_base_addr                  = 0x%016" PRIx64 "\n", z.htile_data_base_addr);
 	printf("\t width                                 = 0x%08" PRIx32 "\n", z.width);
 	printf("\t height                                = 0x%08" PRIx32 "\n", z.height);
+	printf("\t size.x_max                            = 0x%04" PRIx16 "\n", z.size.x_max);
+	printf("\t size.y_max                            = 0x%04" PRIx16 "\n", z.size.y_max);
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
@@ -623,6 +689,10 @@ static void z_check(const HW::DepthRenderTarget& z)
 		EXIT_NOT_IMPLEMENTED(z.z_info.tile_surface_enable != false);
 		EXIT_NOT_IMPLEMENTED(z.z_info.expclear_enabled != false);
 		EXIT_NOT_IMPLEMENTED(z.z_info.zrange_precision != 0);
+		EXIT_NOT_IMPLEMENTED(z.z_info.embedded_sample_locations != false);
+		EXIT_NOT_IMPLEMENTED(z.z_info.partially_resident != false);
+		EXIT_NOT_IMPLEMENTED(z.z_info.num_mip_levels != 0);
+		EXIT_NOT_IMPLEMENTED(z.z_info.plane_compression != 0);
 	} else
 	{
 		EXIT_NOT_IMPLEMENTED(z.z_info.format != 0x00000003);
@@ -631,22 +701,30 @@ static void z_check(const HW::DepthRenderTarget& z)
 		// EXIT_NOT_IMPLEMENTED(z.z_info.tile_surface_enable != true);
 		EXIT_NOT_IMPLEMENTED(z.z_info.expclear_enabled != false);
 		EXIT_NOT_IMPLEMENTED(z.z_info.zrange_precision != 0x00000001);
+		EXIT_NOT_IMPLEMENTED(z.z_info.embedded_sample_locations != false);
+		EXIT_NOT_IMPLEMENTED(z.z_info.partially_resident != false);
+		EXIT_NOT_IMPLEMENTED(z.z_info.num_mip_levels != 0);
+		EXIT_NOT_IMPLEMENTED(z.z_info.plane_compression != 0);
 	}
 
 	if (z.stencil_info.format == 0)
 	{
-		EXIT_NOT_IMPLEMENTED(z.stencil_info.format != 0);
-		// EXIT_NOT_IMPLEMENTED(z.stencil_info.tile_stencil_disable != false);
+		// EXIT_NOT_IMPLEMENTED(z.stencil_info.format != 0);
+		//  EXIT_NOT_IMPLEMENTED(z.stencil_info.tile_stencil_disable != false);
 		EXIT_NOT_IMPLEMENTED(z.stencil_info.expclear_enabled != false);
 		// EXIT_NOT_IMPLEMENTED(z.stencil_info.tile_mode_index != 0);
 		// EXIT_NOT_IMPLEMENTED(z.stencil_info.tile_split != 0);
+		// EXIT_NOT_IMPLEMENTED(z.stencil_info.texture_compatible_stencil != true);
+		EXIT_NOT_IMPLEMENTED(z.stencil_info.partially_resident != false);
 	} else
 	{
-		EXIT_NOT_IMPLEMENTED(z.stencil_info.format != 0x00000001);
+		// EXIT_NOT_IMPLEMENTED(z.stencil_info.format != 0x00000001);
 		EXIT_NOT_IMPLEMENTED(z.stencil_info.tile_stencil_disable != true);
 		EXIT_NOT_IMPLEMENTED(z.stencil_info.expclear_enabled != false);
 		// EXIT_NOT_IMPLEMENTED(z.stencil_info.tile_mode_index != (Config::IsNeo() ? 0x00000002 : 0));
 		// EXIT_NOT_IMPLEMENTED(z.stencil_info.tile_split != (Config::IsNeo() ? 0x00000002 : 0));
+		// EXIT_NOT_IMPLEMENTED(z.stencil_info.texture_compatible_stencil != true);
+		EXIT_NOT_IMPLEMENTED(z.stencil_info.partially_resident != false);
 	}
 
 	if (z.z_info.format != 0 || z.stencil_info.format != 0)
@@ -660,6 +738,9 @@ static void z_check(const HW::DepthRenderTarget& z)
 		// EXIT_NOT_IMPLEMENTED(z.depth_info.num_banks != (Config::IsNeo() ? 0x00000002 : 3));
 		EXIT_NOT_IMPLEMENTED(z.depth_view.slice_start != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(z.depth_view.slice_max != 0x00000000);
+		EXIT_NOT_IMPLEMENTED(z.depth_view.current_mip_level != 0x00000000);
+		EXIT_NOT_IMPLEMENTED(z.depth_view.depth_write_disable != false);
+		EXIT_NOT_IMPLEMENTED(z.depth_view.stencil_write_disable != false);
 		EXIT_NOT_IMPLEMENTED(z.htile_surface.linear != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(z.htile_surface.full_cache != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(z.htile_surface.htile_uses_preload_win != 0x00000000);
@@ -677,6 +758,8 @@ static void z_check(const HW::DepthRenderTarget& z)
 		// EXIT_NOT_IMPLEMENTED(z.htile_data_base_addr == 0);
 		// EXIT_NOT_IMPLEMENTED(z.width != 0x00000780);
 		// EXIT_NOT_IMPLEMENTED(z.height != 0x00000438);
+		EXIT_NOT_IMPLEMENTED(z.size.x_max != 0);
+		EXIT_NOT_IMPLEMENTED(z.size.y_max != 0);
 	}
 }
 
@@ -820,6 +903,8 @@ static void d_print(const char* func, const HW::DepthControl& c, const HW::Stenc
 	printf("\t backface_enable      = %s\n", c.backface_enable ? "true" : "false");
 	printf("\t stencilfunc          = %" PRIu8 "\n", c.stencilfunc);
 	printf("\t stencilfunc_bf       = %" PRIu8 "\n", c.stencilfunc_bf);
+	printf("\t color_writes_on_depth_fail_enable  = %s\n", c.color_writes_on_depth_fail_enable ? "true" : "false");
+	printf("\t color_writes_on_depth_pass_disable = %s\n", c.color_writes_on_depth_pass_disable ? "true" : "false");
 	printf("\t stencil_fail         = %" PRIu8 "\n", s.stencil_fail);
 	printf("\t stencil_zpass        = %" PRIu8 "\n", s.stencil_zpass);
 	printf("\t stencil_zfail        = %" PRIu8 "\n", s.stencil_zfail);
@@ -846,6 +931,8 @@ static void d_check(const HW::DepthControl& c, const HW::StencilControl& s, cons
 	EXIT_NOT_IMPLEMENTED(c.backface_enable != false);
 	// EXIT_NOT_IMPLEMENTED(c.stencilfunc != 0);
 	// EXIT_NOT_IMPLEMENTED(c.stencilfunc_bf != 0);
+	EXIT_NOT_IMPLEMENTED(c.color_writes_on_depth_fail_enable != false);
+	EXIT_NOT_IMPLEMENTED(c.color_writes_on_depth_pass_disable != false);
 	// EXIT_NOT_IMPLEMENTED(s.stencil_fail != 0);
 	// EXIT_NOT_IMPLEMENTED(s.stencil_zpass != 0);
 	// EXIT_NOT_IMPLEMENTED(s.stencil_zfail != 0);
@@ -3736,7 +3823,9 @@ static void FindRenderDepthInfo(uint64_t submit_id, CommandBuffer* /*buffer*/, c
 
 	if (r->format != VK_FORMAT_UNDEFINED)
 	{
-		DepthStencilBufferObject vulkan_buffer_info(r->format, r->width, r->height, htile, neo);
+		bool sampled = ((z.stencil_info.format == 0 && z.z_info.tile_mode_index != 0) || z.stencil_info.texture_compatible_stencil);
+
+		DepthStencilBufferObject vulkan_buffer_info(r->format, r->width, r->height, htile, neo, sampled);
 
 		EXIT_NOT_IMPLEMENTED(z.z_info.tile_mode_index != 0 && r->depth_tile_swizzle != 0);
 		EXIT_NOT_IMPLEMENTED(r->stencil_tile_swizzle != 0);
@@ -4321,6 +4410,26 @@ static void SetDynamicParams(VkCommandBuffer vk_buffer, VulkanPipeline* pipeline
 	}
 }
 
+static bool shader_is_disabled(HW::Shader* sh_ctx)
+{
+	if (const auto& vs = sh_ctx->GetVs();
+	    !vs.vs_embedded && ((vs.vs_regs.data_addr != 0 && ShaderIsDisabled(vs.vs_regs.data_addr)) ||
+	                        (vs.vs_regs.data_addr == 0 && vs.gs_regs.data_addr == 0 && vs.es_regs.data_addr != 0 &&
+	                         vs.gs_regs.chksum != 0 && ShaderIsDisabled2(vs.es_regs.data_addr, vs.gs_regs.chksum))))
+	{
+		return true;
+	}
+
+	if (const auto& ps = sh_ctx->GetPs();
+	    !ps.ps_embedded && ((ps.ps_regs.chksum == 0 && ShaderIsDisabled(ps.ps_regs.data_addr)) ||
+	                        (ps.ps_regs.chksum != 0 && ShaderIsDisabled2(ps.ps_regs.data_addr, ps.ps_regs.chksum))))
+	{
+		return true;
+	}
+
+	return false;
+}
+
 void GraphicsRenderDrawIndex(uint64_t submit_id, CommandBuffer* buffer, HW::Context* ctx, HW::UserConfig* ucfg, HW::Shader* sh_ctx,
                              uint32_t index_type_and_size, uint32_t index_count, const void* index_addr, uint32_t flags, uint32_t type)
 {
@@ -4334,12 +4443,7 @@ void GraphicsRenderDrawIndex(uint64_t submit_id, CommandBuffer* buffer, HW::Cont
 
 	Core::LockGuard lock(g_render_ctx->GetMutex());
 
-	if (const auto& vs = sh_ctx->GetVs(); !vs.vs_embedded && ShaderIsDisabled(vs.vs_regs.GetGpuAddress()))
-	{
-		return;
-	}
-
-	if (const auto& ps = sh_ctx->GetPs(); !ps.ps_embedded && ShaderIsDisabled(ps.ps_regs.data_addr))
+	if (shader_is_disabled(sh_ctx))
 	{
 		return;
 	}
@@ -4482,12 +4586,7 @@ void GraphicsRenderDrawIndexAuto(uint64_t submit_id, CommandBuffer* buffer, HW::
 
 	Core::LockGuard lock(g_render_ctx->GetMutex());
 
-	if (const auto& vs = sh_ctx->GetVs(); !vs.vs_embedded && ShaderIsDisabled(vs.vs_regs.GetGpuAddress()))
-	{
-		return;
-	}
-
-	if (const auto& ps = sh_ctx->GetPs(); !ps.ps_embedded && ShaderIsDisabled(ps.ps_regs.data_addr))
+	if (shader_is_disabled(sh_ctx))
 	{
 		return;
 	}

@@ -29,20 +29,26 @@ struct ColorView
 {
 	uint32_t base_array_slice_index = 0;
 	uint32_t last_array_slice_index = 0;
+	uint32_t current_mip_level      = 0;
 };
 
 struct ColorInfo
 {
-	bool     fmask_compression_enable = false;
-	uint32_t fmask_compression_mode   = 0;
-	bool     cmask_fast_clear_enable  = false;
-	bool     dcc_compression_enable   = false;
-	bool     neo_mode                 = false;
-	uint32_t cmask_tile_mode          = 0;
-	uint32_t cmask_tile_mode_neo      = 0;
-	uint32_t format                   = 0;
-	uint32_t channel_type             = 0;
-	uint32_t channel_order            = 0;
+	bool fmask_compression_enable = false;
+	// uint32_t fmask_compression_mode   = 0;
+	bool     fmask_data_compression_disable = false;
+	bool     fmask_one_frag_mode            = false;
+	bool     cmask_fast_clear_enable        = false;
+	bool     dcc_compression_enable         = false;
+	bool     neo_mode                       = false;
+	bool     blend_clamp                    = false;
+	bool     blend_bypass                   = false;
+	bool     round_mode                     = false;
+	uint32_t cmask_tile_mode                = 0;
+	uint32_t cmask_tile_mode_neo            = 0;
+	uint32_t format                         = 0;
+	uint32_t channel_type                   = 0;
+	uint32_t channel_order                  = 0;
 };
 
 struct ColorAttrib
@@ -54,14 +60,33 @@ struct ColorAttrib
 	uint32_t num_fragments           = 0;
 };
 
-struct ColorDcc
+struct ColorAttrib2
 {
-	uint32_t max_uncompressed_block_size = 0;
-	uint32_t max_compressed_block_size   = 0;
-	uint32_t min_compressed_block_size   = 0;
-	uint32_t color_transform             = 0;
-	bool     enable_overwrite_combiner   = false;
-	bool     force_independent_blocks    = false;
+	uint32_t height         = 0;
+	uint32_t width          = 0;
+	uint32_t num_mip_levels = 0;
+};
+
+struct ColorAttrib3
+{
+	uint32_t depth              = 0;
+	uint32_t tile_mode          = 0;
+	uint32_t dimension          = 0;
+	bool     cmask_pipe_aligned = false;
+	bool     dcc_pipe_aligned   = false;
+};
+
+struct ColorDccControl
+{
+	uint32_t max_uncompressed_block_size    = 0;
+	uint32_t max_compressed_block_size      = 0;
+	uint32_t min_compressed_block_size      = 0;
+	uint32_t color_transform                = 0;
+	bool     dcc_clear_key_enable           = false;
+	bool     overwrite_combiner_disable     = false;
+	bool     independent_64b_blocks         = false;
+	bool     independent_128b_blocks        = false;
+	bool     data_write_on_dcc_clear_to_reg = false;
 };
 
 struct ColorCmask
@@ -113,7 +138,9 @@ struct RenderTarget
 	ColorView       view;
 	ColorInfo       info;
 	ColorAttrib     attrib;
-	ColorDcc        dcc;
+	ColorAttrib2    attrib2;
+	ColorAttrib3    attrib3;
+	ColorDccControl dcc;
 	ColorCmask      cmask;
 	ColorCmaskSlice cmask_slice;
 	ColorFmask      fmask;
@@ -124,23 +151,29 @@ struct RenderTarget
 	ColorSize       size;
 };
 
-struct DepthRenderTargetZInfo
+struct DepthZInfo
 {
-	uint32_t format              = 0;
-	uint32_t tile_mode_index     = 0;
-	uint32_t num_samples         = 0;
-	bool     tile_surface_enable = false;
-	bool     expclear_enabled    = false;
-	uint32_t zrange_precision    = 0;
+	uint32_t format                    = 0;
+	uint32_t tile_mode_index           = 0;
+	uint32_t num_samples               = 0;
+	uint32_t zrange_precision          = 0;
+	bool     tile_surface_enable       = false;
+	bool     expclear_enabled          = false;
+	bool     embedded_sample_locations = false;
+	bool     partially_resident        = false;
+	uint8_t  num_mip_levels            = 0;
+	uint8_t  plane_compression         = 0;
 };
 
-struct DepthRenderTargetStencilInfo
+struct DepthStencilInfo
 {
-	uint32_t format               = 0;
-	uint32_t tile_mode_index      = 0;
-	uint32_t tile_split           = 0;
-	bool     expclear_enabled     = false;
-	bool     tile_stencil_disable = false;
+	uint32_t format                     = 0;
+	uint32_t tile_mode_index            = 0;
+	uint32_t tile_split                 = 0;
+	bool     expclear_enabled           = false;
+	bool     tile_stencil_disable       = false;
+	bool     texture_compatible_stencil = false;
+	bool     partially_resident         = false;
 };
 
 struct DepthRenderTargetDepthInfo
@@ -154,10 +187,19 @@ struct DepthRenderTargetDepthInfo
 	uint32_t num_banks          = 0;
 };
 
-struct DepthRenderTargetDepthView
+struct DepthDepthView
 {
-	uint32_t slice_start = 0;
-	uint32_t slice_max   = 0;
+	uint32_t slice_start           = 0;
+	uint32_t slice_max             = 0;
+	uint8_t  current_mip_level     = 0;
+	bool     depth_write_disable   = false;
+	bool     stencil_write_disable = false;
+};
+
+struct DepthDepthSizeXY
+{
+	uint16_t x_max = 0;
+	uint16_t y_max = 0;
 };
 
 struct DepthRenderTargetHTileSurface
@@ -173,10 +215,11 @@ struct DepthRenderTargetHTileSurface
 
 struct DepthRenderTarget
 {
-	DepthRenderTargetZInfo        z_info;
-	DepthRenderTargetStencilInfo  stencil_info;
+	DepthZInfo                    z_info;
+	DepthStencilInfo              stencil_info;
+	DepthDepthView                depth_view;
+	DepthDepthSizeXY              size;
 	DepthRenderTargetDepthInfo    depth_info;
-	DepthRenderTargetDepthView    depth_view;
 	DepthRenderTargetHTileSurface htile_surface;
 
 	uint64_t z_read_base_addr        = 0;
@@ -220,14 +263,16 @@ struct ClipControl
 
 struct DepthControl
 {
-	bool    stencil_enable      = false;
-	bool    z_enable            = false;
-	bool    z_write_enable      = false;
-	bool    depth_bounds_enable = false;
-	uint8_t zfunc               = 0;
-	bool    backface_enable     = false;
-	uint8_t stencilfunc         = 0;
-	uint8_t stencilfunc_bf      = 0;
+	bool    stencil_enable                     = false;
+	bool    z_enable                           = false;
+	bool    z_write_enable                     = false;
+	bool    depth_bounds_enable                = false;
+	uint8_t zfunc                              = 0;
+	bool    backface_enable                    = false;
+	uint8_t stencilfunc                        = 0;
+	uint8_t stencilfunc_bf                     = 0;
+	bool    color_writes_on_depth_fail_enable  = false;
+	bool    color_writes_on_depth_pass_disable = false;
 };
 
 struct StencilControl
@@ -374,29 +419,66 @@ struct ScreenViewport
 	float    guard_band_vert_discard              = 0.0f;
 };
 
+struct VsShaderResource1
+{
+	uint8_t vgprs                    = 0;
+	uint8_t sgprs                    = 0;
+	uint8_t priority                 = 0;
+	uint8_t float_mode               = 0;
+	bool    dx10_clamp               = false;
+	bool    ieee_mode                = false;
+	uint8_t vgpr_component_count     = 0;
+	bool    cu_group_enable          = false;
+	bool    require_forward_progress = false;
+	bool    fp16_overflow            = false;
+};
+
+struct VsShaderResource2
+{
+	bool    scratch_en        = false;
+	uint8_t user_sgpr         = 0;
+	bool    offchip_lds       = false;
+	bool    streamout_enabled = false;
+	uint8_t shared_vgprs      = 0;
+};
+
 struct VsStageRegisters
 {
-	uint32_t m_spiShaderPgmLoVs    = 0;
-	uint32_t m_spiShaderPgmHiVs    = 0;
-	uint32_t m_spiShaderPgmRsrc1Vs = 0;
-	uint32_t m_spiShaderPgmRsrc2Vs = 0;
+	uint64_t          data_addr = 0;
+	VsShaderResource1 rsrc1;
+	VsShaderResource2 rsrc2;
+};
 
-	[[nodiscard]] uint64_t GetGpuAddress() const;
-	[[nodiscard]] bool     GetStreamoutEnabled() const;
-	[[nodiscard]] uint32_t GetSgprCount() const;
-	[[nodiscard]] uint32_t GetInputComponentsCount() const;
-	[[nodiscard]] uint32_t GetUnknown1() const;
-	[[nodiscard]] uint32_t GetUnknown2() const;
+struct PsShaderResource1
+{
+	uint8_t vgprs                    = 0;
+	uint8_t sgprs                    = 0;
+	uint8_t priority                 = 0;
+	uint8_t float_mode               = 0;
+	bool    dx10_clamp               = false;
+	bool    debug_mode               = false;
+	bool    ieee_mode                = false;
+	bool    cu_group_disable         = false;
+	bool    require_forward_progress = false;
+	bool    fp16_overflow            = false;
+};
+
+struct PsShaderResource2
+{
+	bool    scratch_en             = false;
+	uint8_t user_sgpr              = 0;
+	bool    wave_cnt_en            = false;
+	uint8_t extra_lds_size         = 0;
+	bool    raster_ordered_shading = false;
+	uint8_t shared_vgprs           = 0;
 };
 
 struct PsStageRegisters
 {
-	uint64_t data_addr   = 0;
-	uint8_t  vgprs       = 0;
-	uint8_t  sgprs       = 0;
-	uint8_t  scratch_en  = 0;
-	uint8_t  user_sgpr   = 0;
-	uint8_t  wave_cnt_en = 0;
+	uint64_t          data_addr = 0;
+	PsShaderResource1 rsrc1;
+	PsShaderResource2 rsrc2;
+	uint64_t          chksum = 0;
 };
 
 struct CsStageRegisters
@@ -417,6 +499,45 @@ struct CsStageRegisters
 	uint8_t  tg_size_en     = 0;
 	uint8_t  tidig_comp_cnt = 0;
 	uint8_t  lds_size       = 0;
+};
+
+struct EsStageRegisters
+{
+	uint64_t data_addr = 0;
+};
+
+struct GsShaderResource1
+{
+	uint8_t vgprs                    = 0;
+	uint8_t sgprs                    = 0;
+	uint8_t priority                 = 0;
+	uint8_t float_mode               = 0;
+	bool    dx10_clamp               = false;
+	bool    debug_mode               = false;
+	bool    ieee_mode                = false;
+	bool    cu_group_enable          = false;
+	bool    require_forward_progress = false;
+	bool    lds_configuration        = false;
+	uint8_t gs_vgpr_component_count  = 0;
+	bool    fp16_overflow            = false;
+};
+
+struct GsShaderResource2
+{
+	bool    scratch_en              = false;
+	uint8_t user_sgpr               = 0;
+	uint8_t es_vgpr_component_count = 0;
+	bool    offchip_lds             = false;
+	uint8_t lds_size                = 0;
+	uint8_t shared_vgprs            = 0;
+};
+
+struct GsStageRegisters
+{
+	uint64_t          data_addr = 0;
+	GsShaderResource1 rsrc1;
+	GsShaderResource2 rsrc2;
+	uint64_t          chksum = 0;
 };
 
 struct ShaderRegisters
@@ -472,9 +593,12 @@ struct UserSgprInfo
 struct VertexShaderInfo
 {
 	VsStageRegisters vs_regs;
+	EsStageRegisters es_regs;
+	GsStageRegisters gs_regs;
 	uint32_t         vs_shader_modifier = 0;
 	uint32_t         vs_embedded_id     = 0;
 	UserSgprInfo     vs_user_sgpr;
+	UserSgprInfo     gs_user_sgpr;
 	bool             vs_embedded = false;
 };
 
@@ -493,6 +617,19 @@ struct ComputeShaderInfo
 	UserSgprInfo     cs_user_sgpr;
 };
 
+struct GeControl
+{
+	uint16_t primitive_group_size = 0;
+	uint16_t vertex_group_size    = 0;
+};
+
+struct GeUserVgprEn
+{
+	bool vgpr1 = false;
+	bool vgpr2 = false;
+	bool vgpr3 = false;
+};
+
 class Context
 {
 public:
@@ -509,7 +646,9 @@ public:
 	void SetColorView(uint32_t slot, const ColorView& view) { m_render_targets[slot].view = view; }
 	void SetColorInfo(uint32_t slot, const ColorInfo& info) { m_render_targets[slot].info = info; }
 	void SetColorAttrib(uint32_t slot, const ColorAttrib& attrib) { m_render_targets[slot].attrib = attrib; }
-	void SetColorDcc(uint32_t slot, const ColorDcc& dcc) { m_render_targets[slot].dcc = dcc; }
+	void SetColorAttrib2(uint32_t slot, const ColorAttrib2& attrib2) { m_render_targets[slot].attrib2 = attrib2; }
+	void SetColorAttrib3(uint32_t slot, const ColorAttrib3& attrib3) { m_render_targets[slot].attrib3 = attrib3; }
+	void SetColorDccControl(uint32_t slot, const ColorDccControl& dcc) { m_render_targets[slot].dcc = dcc; }
 	void SetColorCmask(uint32_t slot, const ColorCmask& cmask) { m_render_targets[slot].cmask = cmask; }
 	void SetColorCmaskSlice(uint32_t slot, const ColorCmaskSlice& cmask_slice) { m_render_targets[slot].cmask_slice = cmask_slice; }
 	void SetColorFmask(uint32_t slot, const ColorFmask& fmask) { m_render_targets[slot].fmask = fmask; }
@@ -531,16 +670,27 @@ public:
 
 	void                                   SetDepthRenderTarget(const DepthRenderTarget& target) { m_depth_render_target = target; }
 	[[nodiscard]] const DepthRenderTarget& GetDepthRenderTarget() const { return m_depth_render_target; }
-	void SetDepthRenderTargetZInfo(const DepthRenderTargetZInfo& info) { m_depth_render_target.z_info = info; }
-	[[nodiscard]] const DepthRenderTargetZInfo& GetDepthRenderTargetZInfo() const { return m_depth_render_target.z_info; }
-	void SetDepthRenderTargetStencilInfo(const DepthRenderTargetStencilInfo& info) { m_depth_render_target.stencil_info = info; }
-	[[nodiscard]] const DepthRenderTargetStencilInfo& GetDepthRenderTargetStencilInfo() const { return m_depth_render_target.stencil_info; }
+	void                                   SetDepthZInfo(const DepthZInfo& info) { m_depth_render_target.z_info = info; }
+	[[nodiscard]] const DepthZInfo&        GetDepthZInfo() const { return m_depth_render_target.z_info; }
+	void                                   SetDepthStencilInfo(const DepthStencilInfo& info) { m_depth_render_target.stencil_info = info; }
+	[[nodiscard]] const DepthStencilInfo&  GetDepthStencilInfo() const { return m_depth_render_target.stencil_info; }
+	void                                   SetDepthZReadBase(uint64_t addr) { m_depth_render_target.z_read_base_addr = addr; }
+	void                                   SetDepthStencilReadBase(uint64_t addr) { m_depth_render_target.stencil_read_base_addr = addr; }
+	void                                   SetDepthZWriteBase(uint64_t addr) { m_depth_render_target.z_write_base_addr = addr; }
+	void                                   SetDepthStencilWriteBase(uint64_t addr) { m_depth_render_target.stencil_write_base_addr = addr; }
+	void                                   SetDepthHTileDataBase(uint64_t addr) { m_depth_render_target.htile_data_base_addr = addr; }
+	void                                   SetDepthDepthView(const DepthDepthView& view) { m_depth_render_target.depth_view = view; }
+	[[nodiscard]] const DepthDepthView&    GetDepthDepthView() const { return m_depth_render_target.depth_view; }
+	void                                   SetDepthDepthSizeXY(const DepthDepthSizeXY& size) { m_depth_render_target.size = size; }
+	[[nodiscard]] const DepthDepthSizeXY&  GetDepthDepthSizeXY() const { return m_depth_render_target.size; }
 
 	void SetViewportZ(uint32_t viewport_id, float zmin, float zmax)
 	{
 		m_screen_viewport.viewports[viewport_id].zmin = zmin;
 		m_screen_viewport.viewports[viewport_id].zmax = zmax;
 	}
+	void SetViewportZMin(uint32_t viewport_id, float zmin) { m_screen_viewport.viewports[viewport_id].zmin = zmin; }
+	void SetViewportZMax(uint32_t viewport_id, float zmax) { m_screen_viewport.viewports[viewport_id].zmax = zmax; }
 	void SetViewportScaleOffset(uint32_t viewport_id, float xscale, float xoffset, float yscale, float yoffset, float zscale, float zoffset)
 	{
 		m_screen_viewport.viewports[viewport_id].xscale  = xscale;
@@ -549,6 +699,31 @@ public:
 		m_screen_viewport.viewports[viewport_id].yoffset = yoffset;
 		m_screen_viewport.viewports[viewport_id].zscale  = zscale;
 		m_screen_viewport.viewports[viewport_id].zoffset = zoffset;
+	}
+	void SetViewportXScale(uint32_t viewport_id, float xscale) { m_screen_viewport.viewports[viewport_id].xscale = xscale; }
+	void SetViewportXOffset(uint32_t viewport_id, float xoffset) { m_screen_viewport.viewports[viewport_id].xoffset = xoffset; }
+	void SetViewportYScale(uint32_t viewport_id, float yscale) { m_screen_viewport.viewports[viewport_id].yscale = yscale; }
+	void SetViewportYOffset(uint32_t viewport_id, float yoffset) { m_screen_viewport.viewports[viewport_id].yoffset = yoffset; }
+	void SetViewportZScale(uint32_t viewport_id, float zscale) { m_screen_viewport.viewports[viewport_id].zscale = zscale; }
+	void SetViewportZOffset(uint32_t viewport_id, float zoffset) { m_screen_viewport.viewports[viewport_id].zoffset = zoffset; }
+	void SetViewportScissor(uint32_t viewport_id, int left, int top, int right, int bottom, bool window_offset_enable)
+	{
+		m_screen_viewport.viewports[viewport_id].viewport_scissor_left                 = left;
+		m_screen_viewport.viewports[viewport_id].viewport_scissor_top                  = top;
+		m_screen_viewport.viewports[viewport_id].viewport_scissor_right                = right;
+		m_screen_viewport.viewports[viewport_id].viewport_scissor_bottom               = bottom;
+		m_screen_viewport.viewports[viewport_id].viewport_scissor_window_offset_enable = window_offset_enable;
+	}
+	void SetViewportScissorTL(uint32_t viewport_id, int left, int top, bool window_offset_enable)
+	{
+		m_screen_viewport.viewports[viewport_id].viewport_scissor_left                 = left;
+		m_screen_viewport.viewports[viewport_id].viewport_scissor_top                  = top;
+		m_screen_viewport.viewports[viewport_id].viewport_scissor_window_offset_enable = window_offset_enable;
+	}
+	void SetViewportScissorBR(uint32_t viewport_id, int right, int bottom)
+	{
+		m_screen_viewport.viewports[viewport_id].viewport_scissor_right  = right;
+		m_screen_viewport.viewports[viewport_id].viewport_scissor_bottom = bottom;
 	}
 	void SetViewportTransformControl(uint32_t control) { m_screen_viewport.transform_control = control; }
 	void SetScreenScissor(int left, int top, int right, int bottom)
@@ -688,8 +863,16 @@ public:
 	void                   SetPrimitiveType(uint32_t prim_type) { m_prim_type = prim_type; }
 	[[nodiscard]] uint32_t GetPrimType() const { return m_prim_type; }
 
+	[[nodiscard]] const GeControl&    GetGeControl() const { return m_ge_cntl; }
+	void                              SetGeControl(const GeControl& control) { m_ge_cntl = control; }
+	[[nodiscard]] const GeUserVgprEn& GetGeUserVgprEn() const { return m_ge_user_vgpr_en; }
+	void                              SetGeUserVgprEn(const GeUserVgprEn& en) { m_ge_user_vgpr_en = en; }
+
 private:
 	uint32_t m_prim_type = 0;
+
+	GeControl    m_ge_cntl;
+	GeUserVgprEn m_ge_user_vgpr_en;
 };
 
 class Shader
@@ -702,48 +885,74 @@ public:
 
 	void Reset() { *this = Shader(); }
 
-	void SetVsShader(const VsStageRegisters& vs_regs, uint32_t shader_modifier)
+	void SetVsShaderModifier(uint32_t shader_modifier) { m_vs.vs_shader_modifier = shader_modifier; }
+	void SetVsShaderBase(uint64_t addr)
 	{
-		m_vs.vs_regs            = vs_regs;
-		m_vs.vs_shader_modifier = shader_modifier;
-		m_vs.vs_embedded        = false;
+		m_vs.vs_regs.data_addr = addr;
+		m_vs.vs_embedded       = false;
+	}
+	void SetVsShaderResource1(const VsShaderResource1& rsrc1)
+	{
+		m_vs.vs_regs.rsrc1 = rsrc1;
+		m_vs.vs_embedded   = false;
+	}
+	void SetVsShaderResource2(const VsShaderResource2& rsrc2)
+	{
+		m_vs.vs_regs.rsrc2 = rsrc2;
+		m_vs.vs_embedded   = false;
 	}
 
-	void UpdateVsShader(const VsStageRegisters& vs_regs, uint32_t shader_modifier)
-	{
-		m_vs.vs_regs.m_spiShaderPgmLoVs    = vs_regs.m_spiShaderPgmLoVs;
-		m_vs.vs_regs.m_spiShaderPgmHiVs    = vs_regs.m_spiShaderPgmHiVs;
-		m_vs.vs_regs.m_spiShaderPgmRsrc1Vs = vs_regs.m_spiShaderPgmRsrc1Vs;
-		m_vs.vs_regs.m_spiShaderPgmRsrc2Vs = vs_regs.m_spiShaderPgmRsrc2Vs;
-		m_vs.vs_shader_modifier            = shader_modifier;
-		m_vs.vs_embedded                   = false;
-	}
 	void SetVsEmbedded(uint32_t id, uint32_t shader_modifier)
 	{
 		m_vs.vs_embedded_id     = id;
 		m_vs.vs_shader_modifier = shader_modifier;
 		m_vs.vs_embedded        = true;
 	}
-
-	void SetPsShader(const PsStageRegisters& ps_regs)
+	void SetEsShaderBase(uint64_t addr)
 	{
-		m_ps.ps_regs     = ps_regs;
-		m_ps.ps_embedded = false;
+		m_vs.es_regs.data_addr = addr;
+		m_vs.vs_embedded       = false;
 	}
-	void UpdatePsShader(const PsStageRegisters& ps_regs)
+	void SetGsShaderResource1(const GsShaderResource1& rsrc1)
 	{
-		m_ps.ps_regs.data_addr   = ps_regs.data_addr;
-		m_ps.ps_regs.vgprs       = ps_regs.vgprs;
-		m_ps.ps_regs.sgprs       = ps_regs.sgprs;
-		m_ps.ps_regs.scratch_en  = ps_regs.scratch_en;
-		m_ps.ps_regs.user_sgpr   = ps_regs.user_sgpr;
-		m_ps.ps_regs.wave_cnt_en = ps_regs.wave_cnt_en;
-		m_ps.ps_embedded         = false;
+		m_vs.gs_regs.rsrc1 = rsrc1;
+		m_vs.vs_embedded   = false;
+	}
+	void SetGsShaderResource2(const GsShaderResource2& rsrc2)
+	{
+		m_vs.gs_regs.rsrc2 = rsrc2;
+		m_vs.vs_embedded   = false;
+	}
+	void SetGsShaderChksum(uint32_t value)
+	{
+		m_vs.gs_regs.chksum <<= 32u;
+		m_vs.gs_regs.chksum |= value;
+	}
+
+	void SetPsShaderBase(uint64_t addr)
+	{
+		m_ps.ps_regs.data_addr = addr;
+		m_ps.ps_embedded       = false;
+	}
+	void SetPsShaderResource1(const PsShaderResource1& rsrc1)
+	{
+		m_ps.ps_regs.rsrc1 = rsrc1;
+		m_ps.ps_embedded   = false;
+	}
+	void SetPsShaderResource2(const PsShaderResource2& rsrc2)
+	{
+		m_ps.ps_regs.rsrc2 = rsrc2;
+		m_ps.ps_embedded   = false;
 	}
 	void SetPsEmbedded(uint32_t id)
 	{
 		m_ps.ps_embedded_id = id;
 		m_ps.ps_embedded    = true;
+	}
+	void SetPsShaderChksum(uint32_t value)
+	{
+		m_ps.ps_regs.chksum <<= 32u;
+		m_ps.ps_regs.chksum |= value;
 	}
 
 	void SetCsShader(const CsStageRegisters& cs_regs, uint32_t shader_modifier)
@@ -770,6 +979,12 @@ public:
 		m_cs.cs_user_sgpr.type[id]  = type;
 		m_cs.cs_user_sgpr.count     = ((id + 1) > m_cs.cs_user_sgpr.count ? (id + 1) : m_cs.cs_user_sgpr.count);
 	}
+	void SetGsUserSgpr(uint32_t id, uint32_t value, UserSgprType type)
+	{
+		m_vs.gs_user_sgpr.value[id] = value;
+		m_vs.gs_user_sgpr.type[id]  = type;
+		m_vs.gs_user_sgpr.count     = ((id + 1) > m_vs.gs_user_sgpr.count ? (id + 1) : m_vs.gs_user_sgpr.count);
+	}
 
 	[[nodiscard]] const PixelShaderInfo&   GetPs() const { return m_ps; }
 	[[nodiscard]] const VertexShaderInfo&  GetVs() const { return m_vs; }
@@ -780,36 +995,6 @@ private:
 	PixelShaderInfo   m_ps;
 	ComputeShaderInfo m_cs;
 };
-
-inline uint64_t VsStageRegisters::GetGpuAddress() const
-{
-	return (static_cast<uint64_t>(m_spiShaderPgmLoVs) << 8u) | (static_cast<uint64_t>(m_spiShaderPgmHiVs) << 40u);
-}
-
-inline bool VsStageRegisters::GetStreamoutEnabled() const
-{
-	return (m_spiShaderPgmRsrc2Vs & 0x00001000u) != 0u;
-}
-
-inline uint32_t VsStageRegisters::GetSgprCount() const
-{
-	return (m_spiShaderPgmRsrc1Vs >> 6u) & 0xfu;
-}
-
-inline uint32_t VsStageRegisters::GetInputComponentsCount() const
-{
-	return (m_spiShaderPgmRsrc1Vs >> 24u) & 0x3u;
-}
-
-inline uint32_t VsStageRegisters::GetUnknown1() const
-{
-	return m_spiShaderPgmRsrc1Vs & 0xfcfffc3fu;
-}
-
-inline uint32_t VsStageRegisters::GetUnknown2() const
-{
-	return m_spiShaderPgmRsrc2Vs & 0xFFFFEFFFu;
-}
 
 } // namespace Kyty::Libs::Graphics::HW
 

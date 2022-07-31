@@ -2088,20 +2088,59 @@ KYTY_SHADER_PARSER(shader_parse)
 	return ptr - src;
 }
 
-static void vs_print(const char* func, const HW::VsStageRegisters& vs, const HW::ShaderRegisters& sh)
+static void vs_print(const char* func, const HW::VertexShaderInfo& vs, const HW::ShaderRegisters& sh)
 {
 	printf("%s\n", func);
 
-	printf("\t GetGpuAddress()           = 0x%016" PRIx64 "\n", vs.GetGpuAddress());
-	printf("\t GetStreamoutEnabled()     = %s\n", vs.GetStreamoutEnabled() ? "true" : "false");
-	printf("\t GetSgprCount()            = 0x%08" PRIx32 "\n", vs.GetSgprCount());
-	printf("\t GetInputComponentsCount() = 0x%08" PRIx32 "\n", vs.GetInputComponentsCount());
-	printf("\t GetUnknown1()             = 0x%08" PRIx32 "\n", vs.GetUnknown1());
-	printf("\t GetUnknown2()             = 0x%08" PRIx32 "\n", vs.GetUnknown2());
+	printf("\t vs.data_addr                 = 0x%016" PRIx64 "\n", vs.vs_regs.data_addr);
+	printf("\t es.data_addr                 = 0x%016" PRIx64 "\n", vs.es_regs.data_addr);
+	printf("\t gs.data_addr                 = 0x%016" PRIx64 "\n", vs.gs_regs.data_addr);
+
+	if (vs.vs_regs.data_addr != 0)
+	{
+		printf("\t vs.vgprs                     = 0x%02" PRIx8 "\n", vs.vs_regs.rsrc1.vgprs);
+		printf("\t vs.sgprs                     = 0x%02" PRIx8 "\n", vs.vs_regs.rsrc1.sgprs);
+		printf("\t vs.priority                  = 0x%02" PRIx8 "\n", vs.vs_regs.rsrc1.priority);
+		printf("\t vs.float_mode                = 0x%02" PRIx8 "\n", vs.vs_regs.rsrc1.float_mode);
+		printf("\t vs.dx10_clamp                = %s\n", vs.vs_regs.rsrc1.dx10_clamp ? "true" : "false");
+		printf("\t vs.ieee_mode                 = %s\n", vs.vs_regs.rsrc1.ieee_mode ? "true" : "false");
+		printf("\t vs.vgpr_component_count      = 0x%02" PRIx8 "\n", vs.vs_regs.rsrc1.vgpr_component_count);
+		printf("\t vs.cu_group_enable           = %s\n", vs.vs_regs.rsrc1.cu_group_enable ? "true" : "false");
+		printf("\t vs.require_forward_progress  = %s\n", vs.vs_regs.rsrc1.require_forward_progress ? "true" : "false");
+		printf("\t vs.fp16_overflow             = %s\n", vs.vs_regs.rsrc1.fp16_overflow ? "true" : "false");
+		printf("\t vs.scratch_en                = %s\n", vs.vs_regs.rsrc2.scratch_en ? "true" : "false");
+		printf("\t vs.user_sgpr                 = 0x%02" PRIx8 "\n", vs.vs_regs.rsrc2.user_sgpr);
+		printf("\t vs.offchip_lds               = %s\n", vs.vs_regs.rsrc2.offchip_lds ? "true" : "false");
+		printf("\t vs.streamout_enabled         = %s\n", vs.vs_regs.rsrc2.streamout_enabled ? "true" : "false");
+		printf("\t vs.shared_vgprs              = 0x%02" PRIx8 "\n", vs.vs_regs.rsrc2.shared_vgprs);
+	}
+
+	if (vs.gs_regs.data_addr != 0 || vs.es_regs.data_addr != 0)
+	{
+		printf("\t chksum                       = 0x%016" PRIx64 "\n", vs.gs_regs.chksum);
+		printf("\t gs.vgprs                     = 0x%02" PRIx8 "\n", vs.gs_regs.rsrc1.vgprs);
+		printf("\t gs.sgprs                     = 0x%02" PRIx8 "\n", vs.gs_regs.rsrc1.sgprs);
+		printf("\t gs.priority                  = 0x%02" PRIx8 "\n", vs.gs_regs.rsrc1.priority);
+		printf("\t gs.float_mode                = 0x%02" PRIx8 "\n", vs.gs_regs.rsrc1.float_mode);
+		printf("\t gs.dx10_clamp                = %s\n", vs.gs_regs.rsrc1.dx10_clamp ? "true" : "false");
+		printf("\t gs.ieee_mode                 = %s\n", vs.gs_regs.rsrc1.ieee_mode ? "true" : "false");
+		printf("\t gs.debug_mode                = %s\n", vs.gs_regs.rsrc1.debug_mode ? "true" : "false");
+		printf("\t gs.lds_configuration         = %s\n", vs.gs_regs.rsrc1.lds_configuration ? "true" : "false");
+		printf("\t gs.cu_group_enable           = %s\n", vs.gs_regs.rsrc1.cu_group_enable ? "true" : "false");
+		printf("\t gs.require_forward_progress  = %s\n", vs.gs_regs.rsrc1.require_forward_progress ? "true" : "false");
+		printf("\t gs.fp16_overflow             = %s\n", vs.gs_regs.rsrc1.fp16_overflow ? "true" : "false");
+		printf("\t gs.gs_vgpr_component_count   = 0x%02" PRIx8 "\n", vs.gs_regs.rsrc1.gs_vgpr_component_count);
+		printf("\t gs.scratch_en                = %s\n", vs.gs_regs.rsrc2.scratch_en ? "true" : "false");
+		printf("\t gs.user_sgpr                 = 0x%02" PRIx8 "\n", vs.gs_regs.rsrc2.user_sgpr);
+		printf("\t gs.offchip_lds               = %s\n", vs.gs_regs.rsrc2.offchip_lds ? "true" : "false");
+		printf("\t gs.shared_vgprs              = 0x%02" PRIx8 "\n", vs.gs_regs.rsrc2.shared_vgprs);
+		printf("\t gs.es_vgpr_component_count   = 0x%02" PRIx8 "\n", vs.gs_regs.rsrc2.es_vgpr_component_count);
+		printf("\t gs.lds_size                  = 0x%02" PRIx8 "\n", vs.gs_regs.rsrc2.lds_size);
+	}
+
 	printf("\t m_spiVsOutConfig          = 0x%08" PRIx32 "\n", sh.m_spiVsOutConfig);
 	printf("\t m_spiShaderPosFormat      = 0x%08" PRIx32 "\n", sh.m_spiShaderPosFormat);
 	printf("\t m_paClVsOutCntl           = 0x%08" PRIx32 "\n", sh.m_paClVsOutCntl);
-
 	printf("\t m_spiShaderIdxFormat      = 0x%08" PRIx32 "\n", sh.m_spiShaderIdxFormat);
 	printf("\t m_geNggSubgrpCntl         = 0x%08" PRIx32 "\n", sh.m_geNggSubgrpCntl);
 	printf("\t m_vgtGsInstanceCnt        = 0x%08" PRIx32 "\n", sh.m_vgtGsInstanceCnt);
@@ -2118,21 +2157,30 @@ static void ps_print(const char* func, const HW::PsStageRegisters& ps, const HW:
 {
 	printf("%s\n", func);
 
-	// printf("\t GetGpuAddress()               = 0x%016" PRIx64 "\n", ps.GetGpuAddress());
-	// printf("\t m_spiShaderPgmRsrc1Ps         = 0x%08" PRIx32 "\n", ps.m_spiShaderPgmRsrc1Ps);
-	// printf("\t m_spiShaderPgmRsrc2Ps         = 0x%08" PRIx32 "\n", ps.m_spiShaderPgmRsrc2Ps);
-	// printf("\t GetTargetOutputMode(0)        = 0x%08" PRIx32 "\n", ps.GetTargetOutputMode(0));
 	printf("\t data_addr                   = 0x%016" PRIx64 "\n", ps.data_addr);
+	printf("\t chksum                      = 0x%016" PRIx64 "\n", ps.chksum);
 	printf("\t conservative_z_export_value = 0x%08" PRIx32 "\n", sh.db_shader_control.conservative_z_export_value);
 	printf("\t shader_z_behavior           = 0x%08" PRIx32 "\n", sh.db_shader_control.shader_z_behavior);
 	printf("\t shader_kill_enable          = %s\n", sh.db_shader_control.shader_kill_enable ? "true" : "false");
 	printf("\t shader_z_export_enable      = %s\n", sh.db_shader_control.shader_z_export_enable ? "true" : "false");
 	printf("\t shader_execute_on_noop      = %s\n", sh.db_shader_control.shader_execute_on_noop ? "true" : "false");
-	printf("\t vgprs                       = 0x%02" PRIx8 "\n", ps.vgprs);
-	printf("\t sgprs                       = 0x%02" PRIx8 "\n", ps.sgprs);
-	printf("\t scratch_en                  = 0x%02" PRIx8 "\n", ps.scratch_en);
-	printf("\t user_sgpr                   = 0x%02" PRIx8 "\n", ps.user_sgpr);
-	printf("\t wave_cnt_en                 = 0x%02" PRIx8 "\n", ps.wave_cnt_en);
+	printf("\t vgprs                       = 0x%02" PRIx8 "\n", ps.rsrc1.vgprs);
+	printf("\t sgprs                       = 0x%02" PRIx8 "\n", ps.rsrc1.sgprs);
+	printf("\t priority                    = 0x%02" PRIx8 "\n", ps.rsrc1.priority);
+	printf("\t float_mode                  = 0x%02" PRIx8 "\n", ps.rsrc1.float_mode);
+	printf("\t dx10_clamp                  = %s\n", ps.rsrc1.dx10_clamp ? "true" : "false");
+	printf("\t debug_mode                  = %s\n", ps.rsrc1.debug_mode ? "true" : "false");
+	printf("\t ieee_mode                   = %s\n", ps.rsrc1.ieee_mode ? "true" : "false");
+	printf("\t cu_group_disable            = %s\n", ps.rsrc1.cu_group_disable ? "true" : "false");
+	printf("\t require_forward_progress    = %s\n", ps.rsrc1.require_forward_progress ? "true" : "false");
+	printf("\t fp16_overflow               = %s\n", ps.rsrc1.fp16_overflow ? "true" : "false");
+	printf("\t scratch_en                  = %s\n", ps.rsrc2.scratch_en ? "true" : "false");
+	printf("\t user_sgpr                   = 0x%02" PRIx8 "\n", ps.rsrc2.user_sgpr);
+	printf("\t wave_cnt_en                 = %s\n", ps.rsrc2.wave_cnt_en ? "true" : "false");
+	printf("\t extra_lds_size              = 0x%02" PRIx8 "\n", ps.rsrc2.extra_lds_size);
+	printf("\t raster_ordered_shading      = %s\n", ps.rsrc2.raster_ordered_shading ? "true" : "false");
+	printf("\t shared_vgprs                = 0x%02" PRIx8 "\n", ps.rsrc2.shared_vgprs);
+
 	printf("\t shader_z_format             = 0x%08" PRIx32 "\n", sh.shader_z_format);
 	printf("\t target_output_mode[0]       = 0x%02" PRIx8 "\n", sh.target_output_mode[0]);
 	printf("\t ps_input_ena                = 0x%08" PRIx32 "\n", sh.ps_input_ena);
@@ -2196,14 +2244,43 @@ static void bi_print(const char* func, const ShaderBinaryInfo& bi)
 	printf("\t crc32                      = 0x%08" PRIx32 "\n", bi.crc32);
 }
 
-static void vs_check(const HW::VsStageRegisters& vs, const HW::ShaderRegisters& sh)
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+static void vs_check(const HW::VertexShaderInfo& vs, const HW::ShaderRegisters& sh)
 {
-	EXIT_NOT_IMPLEMENTED(vs.GetStreamoutEnabled() != false);
-	// EXIT_NOT_IMPLEMENTED(vs.GetSgprCount() != 0x00000000);
-	// EXIT_NOT_IMPLEMENTED(vs.GetInputComponentsCount() != 0x00000003);
-	// EXIT_NOT_IMPLEMENTED(vs.GetUnknown1() != 0x002c0000);
-	// EXIT_NOT_IMPLEMENTED(vs.GetUnknown2() != 0x00000000);
-	// EXIT_NOT_IMPLEMENTED(vs.m_spiVsOutConfig != 0x00000000);
+	if (vs.vs_regs.data_addr != 0)
+	{
+		EXIT_NOT_IMPLEMENTED(vs.vs_regs.rsrc1.priority != 0);
+		EXIT_NOT_IMPLEMENTED(vs.vs_regs.rsrc1.float_mode != 192);
+		EXIT_NOT_IMPLEMENTED(vs.vs_regs.rsrc1.dx10_clamp != true);
+		EXIT_NOT_IMPLEMENTED(vs.vs_regs.rsrc1.ieee_mode != false);
+		EXIT_NOT_IMPLEMENTED(vs.vs_regs.rsrc1.cu_group_enable != false);
+		EXIT_NOT_IMPLEMENTED(vs.vs_regs.rsrc1.require_forward_progress != false);
+		EXIT_NOT_IMPLEMENTED(vs.vs_regs.rsrc1.fp16_overflow != false);
+		EXIT_NOT_IMPLEMENTED(vs.vs_regs.rsrc2.scratch_en != false);
+		EXIT_NOT_IMPLEMENTED(vs.vs_regs.rsrc2.offchip_lds != false);
+		EXIT_NOT_IMPLEMENTED(vs.vs_regs.rsrc2.streamout_enabled != false);
+		EXIT_NOT_IMPLEMENTED(vs.vs_regs.rsrc2.shared_vgprs != 0);
+	}
+
+	if (vs.es_regs.data_addr != 0 || vs.gs_regs.data_addr != 0)
+	{
+		EXIT_NOT_IMPLEMENTED(vs.gs_regs.rsrc1.priority != 0);
+		EXIT_NOT_IMPLEMENTED(vs.gs_regs.rsrc1.float_mode != 192);
+		EXIT_NOT_IMPLEMENTED(vs.gs_regs.rsrc1.dx10_clamp != true);
+		EXIT_NOT_IMPLEMENTED(vs.gs_regs.rsrc1.debug_mode != false);
+		EXIT_NOT_IMPLEMENTED(vs.gs_regs.rsrc1.ieee_mode != false);
+		EXIT_NOT_IMPLEMENTED(vs.gs_regs.rsrc1.cu_group_enable != false);
+		EXIT_NOT_IMPLEMENTED(vs.gs_regs.rsrc1.require_forward_progress != false);
+		EXIT_NOT_IMPLEMENTED(vs.gs_regs.rsrc1.lds_configuration != false);
+		EXIT_NOT_IMPLEMENTED(vs.gs_regs.rsrc1.gs_vgpr_component_count != 0);
+		EXIT_NOT_IMPLEMENTED(vs.gs_regs.rsrc1.fp16_overflow != false);
+		EXIT_NOT_IMPLEMENTED(vs.gs_regs.rsrc2.scratch_en != false);
+		EXIT_NOT_IMPLEMENTED(vs.gs_regs.rsrc2.offchip_lds != false);
+		EXIT_NOT_IMPLEMENTED(vs.gs_regs.rsrc2.es_vgpr_component_count != 0);
+		EXIT_NOT_IMPLEMENTED(vs.gs_regs.rsrc2.lds_size != 0);
+		EXIT_NOT_IMPLEMENTED(vs.gs_regs.rsrc2.shared_vgprs != 0);
+	}
+
 	EXIT_NOT_IMPLEMENTED(sh.m_spiShaderPosFormat != 0x00000004);
 	EXIT_NOT_IMPLEMENTED(sh.m_paClVsOutCntl != 0x00000000);
 
@@ -2231,9 +2308,21 @@ static void ps_check(const HW::PsStageRegisters& ps, const HW::ShaderRegisters& 
 	// EXIT_NOT_IMPLEMENTED(ps.m_spiShaderPgmRsrc2Ps != 0x00000000);
 	// EXIT_NOT_IMPLEMENTED(ps.vgprs != 0x00 && ps.vgprs != 0x01);
 	// EXIT_NOT_IMPLEMENTED(ps.sgprs != 0x00 && ps.sgprs != 0x01);
-	EXIT_NOT_IMPLEMENTED(ps.scratch_en != 0);
+	EXIT_NOT_IMPLEMENTED(ps.rsrc1.priority != 0);
+	EXIT_NOT_IMPLEMENTED(ps.rsrc1.float_mode != 192);
+	EXIT_NOT_IMPLEMENTED(ps.rsrc1.dx10_clamp != true);
+	EXIT_NOT_IMPLEMENTED(ps.rsrc1.debug_mode != false);
+	EXIT_NOT_IMPLEMENTED(ps.rsrc1.ieee_mode != false);
+	EXIT_NOT_IMPLEMENTED(ps.rsrc1.cu_group_disable != false);
+	EXIT_NOT_IMPLEMENTED(ps.rsrc1.require_forward_progress != false);
+	EXIT_NOT_IMPLEMENTED(ps.rsrc1.fp16_overflow != false);
+	EXIT_NOT_IMPLEMENTED(ps.rsrc2.scratch_en != false);
 	// EXIT_NOT_IMPLEMENTED(ps.user_sgpr != 0 && ps.user_sgpr != 4 && ps.user_sgpr != 12);
-	EXIT_NOT_IMPLEMENTED(ps.wave_cnt_en != 0);
+	EXIT_NOT_IMPLEMENTED(ps.rsrc2.wave_cnt_en != false);
+	EXIT_NOT_IMPLEMENTED(ps.rsrc2.extra_lds_size != 0);
+	EXIT_NOT_IMPLEMENTED(ps.rsrc2.raster_ordered_shading != false);
+	EXIT_NOT_IMPLEMENTED(ps.rsrc2.shared_vgprs != 0);
+
 	EXIT_NOT_IMPLEMENTED(sh.shader_z_format != 0x00000000);
 	EXIT_NOT_IMPLEMENTED(sh.ps_input_ena != 0x00000002 && sh.ps_input_ena != 0x00000302);
 	EXIT_NOT_IMPLEMENTED(sh.ps_input_addr != 0x00000002 && sh.ps_input_addr != 0x00000302);
@@ -2756,7 +2845,7 @@ void ShaderGetInputInfoVS(const HW::VertexShaderInfo* regs, const HW::ShaderRegi
 		return;
 	}
 
-	const auto* src = reinterpret_cast<const uint32_t*>(regs->vs_regs.GetGpuAddress());
+	const auto* src = reinterpret_cast<const uint32_t*>(regs->vs_regs.data_addr);
 
 	auto usages = GetUsageSlots(src);
 
@@ -3400,12 +3489,14 @@ ShaderCode ShaderParseVS(const HW::VertexShaderInfo* regs, const HW::ShaderRegis
 		code.SetVsEmbeddedId(regs->vs_embedded_id);
 	} else
 	{
-		const auto* src = reinterpret_cast<const uint32_t*>(regs->vs_regs.GetGpuAddress());
+		const auto* src = reinterpret_cast<const uint32_t*>(regs->vs_regs.data_addr);
 
 		EXIT_NOT_IMPLEMENTED(src == nullptr);
 
-		vs_print("ShaderParseVS()", regs->vs_regs, *sh);
-		vs_check(regs->vs_regs, *sh);
+		vs_print("ShaderParseVS()", *regs, *sh);
+		vs_check(*regs, *sh);
+
+		EXIT_NOT_IMPLEMENTED(regs->vs_regs.rsrc2.user_sgpr > regs->vs_user_sgpr.count);
 
 		const auto* header = GetBinaryInfo(src);
 
@@ -3489,7 +3580,7 @@ ShaderCode ShaderParsePS(const HW::PixelShaderInfo* regs, const HW::ShaderRegist
 		ps_print("ShaderParsePS()", regs->ps_regs, *sh);
 		ps_check(regs->ps_regs, *sh);
 
-		EXIT_NOT_IMPLEMENTED(regs->ps_regs.user_sgpr > regs->ps_user_sgpr.count);
+		EXIT_NOT_IMPLEMENTED(regs->ps_regs.rsrc2.user_sgpr > regs->ps_user_sgpr.count);
 
 		const auto* header = GetBinaryInfo(src);
 
@@ -3853,7 +3944,7 @@ ShaderId ShaderGetIdVS(const HW::VertexShaderInfo* regs, const ShaderVertexInput
 		return ret;
 	}
 
-	const auto* src = reinterpret_cast<const uint32_t*>(regs->vs_regs.GetGpuAddress());
+	const auto* src = reinterpret_cast<const uint32_t*>(regs->vs_regs.data_addr);
 
 	EXIT_NOT_IMPLEMENTED(src == nullptr);
 
@@ -3995,6 +4086,15 @@ bool ShaderIsDisabled(uint64_t addr)
 	bool disabled = (g_disabled_shaders != nullptr && g_disabled_shaders->Contains(id));
 
 	printf("Shader 0x%016" PRIx64 ": id = 0x%016" PRIx64 " - %s\n", addr, id, (disabled ? "disabled" : "enabled"));
+
+	return disabled;
+}
+
+bool ShaderIsDisabled2(uint64_t addr, uint64_t chksum)
+{
+	bool disabled = (g_disabled_shaders != nullptr && g_disabled_shaders->Contains(chksum));
+
+	printf("Shader 0x%016" PRIx64 ": id = 0x%016" PRIx64 " - %s\n", addr, chksum, (disabled ? "disabled" : "enabled"));
 
 	return disabled;
 }

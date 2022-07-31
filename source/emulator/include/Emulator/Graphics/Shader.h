@@ -823,6 +823,7 @@ Vector<uint32_t> ShaderRecompileVS(const ShaderCode& code, const ShaderVertexInp
 Vector<uint32_t> ShaderRecompilePS(const ShaderCode& code, const ShaderPixelInputInfo* input_info);
 Vector<uint32_t> ShaderRecompileCS(const ShaderCode& code, const ShaderComputeInputInfo* input_info);
 bool             ShaderIsDisabled(uint64_t addr);
+bool             ShaderIsDisabled2(uint64_t addr, uint64_t chksum);
 void             ShaderDisable(uint64_t id);
 void             ShaderInjectDebugPrintf(uint64_t id, const ShaderDebugPrintf& cmd);
 
