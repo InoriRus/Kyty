@@ -243,17 +243,34 @@ static void KYTY_SYSV_ABI KernelRtldSetApplicationHeapAPI(void* api[])
 	[[maybe_unused]] auto* heap_posix_memalign = api[6];
 }
 
-static int KYTY_SYSV_ABI write(int d, const char* str, int64_t size)
+static int64_t KYTY_SYSV_ABI write(int d, const char* str, int64_t size)
 {
 	// PRINT_NAME();
 
-	EXIT_NOT_IMPLEMENTED(d < 0 || d > 2);
+	EXIT_NOT_IMPLEMENTED(d < 0);
+
+	if (d > 2)
+	{
+		return POSIX_N_CALL(FileSystem::KernelWrite(d, str, size));
+	}
 
 	int size_int = static_cast<int>(size);
 
 	emu_printf(FG_BRIGHT_MAGENTA "%.*s" DEFAULT, size_int, str);
 
 	return size_int;
+}
+
+static int KYTY_SYSV_ABI open(const char* path, int flags, int mode)
+{
+	return POSIX_N_CALL(FileSystem::KernelOpen(path, flags, mode));
+}
+
+static int KYTY_SYSV_ABI close(int d)
+{
+	EXIT_NOT_IMPLEMENTED(d <= 2);
+
+	return POSIX_CALL(FileSystem::KernelClose(d));
 }
 
 static int64_t KYTY_SYSV_ABI read(int d, void* buf, uint64_t nbytes)
@@ -623,6 +640,7 @@ LIB_DEFINE(InitLibKernel_1)
 	LIB_OBJECT("djxxOmW6-aw", &LibKernel::g_progname);
 
 	LIB_FUNC("1jfXLRVzisc", LibKernel::KernelUsleep);
+	LIB_FUNC("6c3rCVE-fTU", LibKernel::open);
 	LIB_FUNC("6xVpy0Fdq+I", LibKernel::sigprocmask);
 	LIB_FUNC("6Z83sYWFlA8", LibKernel::exit);
 	LIB_FUNC("8OnWXlgQlvo", LibKernel::KernelRtldThreadAtexitDecrement);
@@ -636,6 +654,7 @@ LIB_DEFINE(InitLibKernel_1)
 	LIB_FUNC("FxVZqBAA7ks", LibKernel::write);
 	LIB_FUNC("kbw4UHHSYy0", LibKernel::pthread_cxa_finalize);
 	LIB_FUNC("lLMT9vJAck0", LibKernel::clock_gettime);
+	LIB_FUNC("NNtFaKJbPt0", LibKernel::close);
 	LIB_FUNC("OMDRKKAZ8I4", LibKernel::KernelDebugRaiseException);
 	LIB_FUNC("Ou3iL1abvng", LibKernel::stack_chk_fail);
 	LIB_FUNC("p5EcQeEeJAE", LibKernel::KernelRtldSetApplicationHeapAPI);

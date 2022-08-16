@@ -17,41 +17,51 @@
 
 namespace Kyty::Libs::Graphics {
 
-static VkFormat get_texture_format(uint32_t dfmt, uint32_t nfmt)
+static VkFormat get_texture_format(uint32_t dfmt, uint32_t nfmt, uint32_t fmt)
 {
-	if (nfmt == 9 && dfmt == 10)
+	if (fmt == 0)
 	{
-		return VK_FORMAT_R8G8B8A8_SRGB;
-	}
-	if (nfmt == 0 && dfmt == 10)
+		if (nfmt == 9 && dfmt == 10)
+		{
+			return VK_FORMAT_R8G8B8A8_SRGB;
+		}
+		if (nfmt == 0 && dfmt == 10)
+		{
+			return VK_FORMAT_R8G8B8A8_UNORM;
+		}
+		if (nfmt == 0 && dfmt == 1)
+		{
+			return VK_FORMAT_R8_UNORM;
+		}
+		if (nfmt == 0 && dfmt == 3)
+		{
+			return VK_FORMAT_R8G8_UNORM;
+		}
+		if (nfmt == 9 && dfmt == 37)
+		{
+			return VK_FORMAT_BC3_SRGB_BLOCK;
+		}
+		if (nfmt == 0 && dfmt == 37)
+		{
+			return VK_FORMAT_BC3_UNORM_BLOCK;
+		}
+		if (nfmt == 0 && dfmt == 36)
+		{
+			return VK_FORMAT_BC2_UNORM_BLOCK;
+		}
+		if (nfmt == 0 && dfmt == 35)
+		{
+			return VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
+		}
+		EXIT("unknown format: nfmt = %u, dfmt = %u\n", nfmt, dfmt);
+	} else
 	{
-		return VK_FORMAT_R8G8B8A8_UNORM;
+		if (fmt == 56)
+		{
+			return VK_FORMAT_R8G8B8A8_UNORM;
+		}
+		EXIT("unknown format: fmt = %u\n", fmt);
 	}
-	if (nfmt == 0 && dfmt == 1)
-	{
-		return VK_FORMAT_R8_UNORM;
-	}
-	if (nfmt == 0 && dfmt == 3)
-	{
-		return VK_FORMAT_R8G8_UNORM;
-	}
-	if (nfmt == 9 && dfmt == 37)
-	{
-		return VK_FORMAT_BC3_SRGB_BLOCK;
-	}
-	if (nfmt == 0 && dfmt == 37)
-	{
-		return VK_FORMAT_BC3_UNORM_BLOCK;
-	}
-	if (nfmt == 0 && dfmt == 36)
-	{
-		return VK_FORMAT_BC2_UNORM_BLOCK;
-	}
-	if (nfmt == 0 && dfmt == 35)
-	{
-		return VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
-	}
-	EXIT("unknown format: nfmt = %u, dfmt = %u\n", nfmt, dfmt);
 	return VK_FORMAT_UNDEFINED;
 }
 
@@ -150,8 +160,9 @@ static void update_func(GraphicContext* ctx, const uint64_t* params, void* obj, 
 	auto* vk_obj = static_cast<TextureVulkanImage*>(obj);
 
 	auto tile   = params[TextureObject::PARAM_TILE];
-	auto dfmt   = params[TextureObject::PARAM_DFMT_NFMT] >> 32u;
-	auto nfmt   = params[TextureObject::PARAM_DFMT_NFMT] & 0xffffffffu;
+	auto fmt    = (params[TextureObject::PARAM_FORMAT] >> 16u) & 0xffffu;
+	auto dfmt   = (params[TextureObject::PARAM_FORMAT] >> 8u) & 0xffu;
+	auto nfmt   = (params[TextureObject::PARAM_FORMAT]) & 0xffu;
 	auto width  = params[TextureObject::PARAM_WIDTH_HEIGHT] >> 32u;
 	auto height = params[TextureObject::PARAM_WIDTH_HEIGHT] & 0xffffffffu;
 	auto levels = params[TextureObject::PARAM_LEVELS] & 0xffffffffu;
@@ -162,11 +173,19 @@ static void update_func(GraphicContext* ctx, const uint64_t* params, void* obj, 
 
 	EXIT_NOT_IMPLEMENTED(levels >= 16);
 
-	EXIT_NOT_IMPLEMENTED(tile != 8 && tile != 13);
-
 	TileSizeOffset level_sizes[16];
 
-	TileGetTextureSize(dfmt, nfmt, width, height, pitch, levels, tile, neo, nullptr, level_sizes, nullptr);
+	if (fmt != 0)
+	{
+		EXIT_NOT_IMPLEMENTED(tile != 0);
+
+		TileGetTextureSize2(fmt, width, height, pitch, levels, tile, nullptr, level_sizes, nullptr);
+	} else
+	{
+		EXIT_NOT_IMPLEMENTED(tile != 8 && tile != 13);
+
+		TileGetTextureSize(dfmt, nfmt, width, height, pitch, levels, tile, neo, nullptr, level_sizes, nullptr);
+	}
 
 	// dbg_test_mipmaps(ctx, VK_FORMAT_BC3_SRGB_BLOCK, 512, 512);
 
@@ -201,17 +220,27 @@ static void update_func(GraphicContext* ctx, const uint64_t* params, void* obj, 
 		}
 	}
 
-	if (tile == 13)
+	if (fmt == 0)
 	{
-		// EXIT_NOT_IMPLEMENTED(pitch != width);
-		auto* temp_buf = new uint8_t[*size];
-		TileConvertTiledToLinear(temp_buf, reinterpret_cast<void*>(*vaddr), TileMode::TextureTiled, dfmt, nfmt, width, height, pitch,
-		                         levels, neo);
-		UtilFillImage(ctx, vk_obj, temp_buf, *size, regions, static_cast<uint64_t>(vk_layout));
-		delete[] temp_buf;
-	} else if (tile == 8)
+		if (tile == 13)
+		{
+			// EXIT_NOT_IMPLEMENTED(pitch != width);
+			EXIT_NOT_IMPLEMENTED(fmt != 0);
+			auto* temp_buf = new uint8_t[*size];
+			TileConvertTiledToLinear(temp_buf, reinterpret_cast<void*>(*vaddr), TileMode::TextureTiled, dfmt, nfmt, width, height, pitch,
+			                         levels, neo);
+			UtilFillImage(ctx, vk_obj, temp_buf, *size, regions, static_cast<uint64_t>(vk_layout));
+			delete[] temp_buf;
+		} else if (tile == 8)
+		{
+			UtilFillImage(ctx, vk_obj, reinterpret_cast<void*>(*vaddr), *size, regions, static_cast<uint64_t>(vk_layout));
+		}
+	} else
 	{
-		UtilFillImage(ctx, vk_obj, reinterpret_cast<void*>(*vaddr), *size, regions, static_cast<uint64_t>(vk_layout));
+		if (tile == 0)
+		{
+			UtilFillImage(ctx, vk_obj, reinterpret_cast<void*>(*vaddr), *size, regions, static_cast<uint64_t>(vk_layout));
+		}
 	}
 }
 
@@ -392,8 +421,9 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 	EXIT_IF(ctx == nullptr);
 	EXIT_IF(params == nullptr);
 
-	auto dfmt       = params[TextureObject::PARAM_DFMT_NFMT] >> 32u;
-	auto nfmt       = params[TextureObject::PARAM_DFMT_NFMT] & 0xffffffffu;
+	auto fmt        = (params[TextureObject::PARAM_FORMAT] >> 16u) & 0xffffu;
+	auto dfmt       = (params[TextureObject::PARAM_FORMAT] >> 8u) & 0xffu;
+	auto nfmt       = (params[TextureObject::PARAM_FORMAT]) & 0xffu;
 	auto width      = params[TextureObject::PARAM_WIDTH_HEIGHT] >> 32u;
 	auto height     = params[TextureObject::PARAM_WIDTH_HEIGHT] & 0xffffffffu;
 	auto base_level = params[TextureObject::PARAM_LEVELS] >> 32u;
@@ -409,7 +439,7 @@ static void* create_func(GraphicContext* ctx, const uint64_t* params, const uint
 	components.b = get_swizzle(GetDstSel(swizzle, 2));
 	components.a = get_swizzle(GetDstSel(swizzle, 3));
 
-	auto pixel_format = get_texture_format(dfmt, nfmt);
+	auto pixel_format = get_texture_format(dfmt, nfmt, fmt);
 
 	EXIT_NOT_IMPLEMENTED(pixel_format == VK_FORMAT_UNDEFINED);
 	EXIT_NOT_IMPLEMENTED(width == 0);
@@ -504,8 +534,9 @@ static void* create2_func(GraphicContext* ctx, CommandBuffer* buffer, const uint
 	EXIT_IF(ctx == nullptr);
 	EXIT_IF(params == nullptr);
 
-	auto dfmt       = params[TextureObject::PARAM_DFMT_NFMT] >> 32u;
-	auto nfmt       = params[TextureObject::PARAM_DFMT_NFMT] & 0xffffffffu;
+	auto fmt        = (params[TextureObject::PARAM_FORMAT] >> 16u) & 0xffffu;
+	auto dfmt       = (params[TextureObject::PARAM_FORMAT] >> 8u) & 0xffu;
+	auto nfmt       = (params[TextureObject::PARAM_FORMAT]) & 0xffu;
 	auto width      = params[TextureObject::PARAM_WIDTH_HEIGHT] >> 32u;
 	auto height     = params[TextureObject::PARAM_WIDTH_HEIGHT] & 0xffffffffu;
 	auto base_level = params[TextureObject::PARAM_LEVELS] >> 32u;
@@ -521,7 +552,7 @@ static void* create2_func(GraphicContext* ctx, CommandBuffer* buffer, const uint
 	components.b = get_swizzle(GetDstSel(swizzle, 2));
 	components.a = get_swizzle(GetDstSel(swizzle, 3));
 
-	auto pixel_format = get_texture_format(dfmt, nfmt);
+	auto pixel_format = get_texture_format(dfmt, nfmt, fmt);
 
 	EXIT_NOT_IMPLEMENTED(pixel_format == VK_FORMAT_UNDEFINED);
 	EXIT_NOT_IMPLEMENTED(width == 0);
@@ -628,7 +659,7 @@ static void delete_func(GraphicContext* ctx, void* obj, VulkanMemory* mem)
 
 bool TextureObject::Equal(const uint64_t* other) const
 {
-	return (params[PARAM_DFMT_NFMT] == other[PARAM_DFMT_NFMT] && params[PARAM_PITCH] == other[PARAM_PITCH] &&
+	return (params[PARAM_FORMAT] == other[PARAM_FORMAT] && params[PARAM_PITCH] == other[PARAM_PITCH] &&
 	        params[PARAM_WIDTH_HEIGHT] == other[PARAM_WIDTH_HEIGHT] && params[PARAM_LEVELS] == other[PARAM_LEVELS] &&
 	        params[PARAM_TILE] == other[PARAM_TILE] && params[PARAM_NEO] == other[PARAM_NEO] &&
 	        params[PARAM_SWIZZLE] == other[PARAM_SWIZZLE]);

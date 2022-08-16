@@ -5,6 +5,7 @@
 #include "Kyty/Core/String.h"
 #include "Kyty/Core/Threads.h"
 
+#include "Emulator/Config.h"
 #include "Emulator/Graphics/AsyncJob.h"
 #include "Emulator/Graphics/GraphicContext.h"
 #include "Emulator/Graphics/Graphics.h"
@@ -309,7 +310,7 @@ private:
 	CommandProcessor* m_compute_cp[8]    = {};
 	ComputeRing*      m_compute_ring[64] = {};
 
-	int m_done_num = 0;
+	std::atomic_int m_done_num = 0;
 };
 
 using hw_ctx_parser_func_t   = uint32_t (*)(KYTY_HW_CTX_PARSER_ARGS);
@@ -452,7 +453,7 @@ bool Gpu::AreSubmitsAllowed()
 
 int Gpu::GetFrameNum()
 {
-	Core::LockGuard lock(m_mutex);
+	// Core::LockGuard lock(m_mutex);
 
 	return m_done_num;
 }
@@ -1179,7 +1180,8 @@ void CommandProcessor::WriteAtEndOfPipe64(uint32_t cache_policy, uint32_t event_
 	           cache_action == 0x38 && source64 && !with_interrupt)
 	{
 		GraphicsRenderWriteAtEndOfPipeWithWriteBack64(m_sumbit_id, m_buffer[m_current_buffer], static_cast<uint64_t*>(dst_gpu_addr), value);
-	} else if (eop_event_type == 0x04 && cache_action == 0x00 && event_index == 0x05 && source_counter && !with_interrupt)
+	} else if (((eop_event_type == 0x04 && event_index == 0x05) || (eop_event_type == 0x28 && event_index == 0x00)) &&
+	           cache_action == 0x00 && source_counter && !with_interrupt)
 	{
 		GraphicsRenderWriteAtEndOfPipeClockCounter(m_sumbit_id, m_buffer[m_current_buffer], static_cast<uint64_t*>(dst_gpu_addr));
 	} else if ((eop_event_type == 0x04 && event_index == 0x05) && cache_action == 0x00 && source64 && with_interrupt)
@@ -1581,6 +1583,11 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_color_info)
 	r.cmask_tile_mode_neo            = KYTY_PM4_GET(buffer[0], CB_COLOR0_INFO, CMASK_ADDR_TYPE);
 	r.neo_mode                       = KYTY_PM4_GET(buffer[0], CB_COLOR0_INFO, ALT_TILE_MODE) != 0;
 
+	if (!r.neo_mode && Config::IsNextGen())
+	{
+		r.neo_mode = true;
+	}
+
 	cp->GetCtx()->SetColorInfo(param, r);
 
 	return 1;
@@ -1956,6 +1963,11 @@ KYTY_HW_CTX_PARSER(hw_ctx_set_render_target)
 	info.dcc_compression_enable         = KYTY_PM4_GET(buffer[4], CB_COLOR0_INFO, DCC_ENABLE) != 0;
 	info.cmask_tile_mode_neo            = KYTY_PM4_GET(buffer[4], CB_COLOR0_INFO, CMASK_ADDR_TYPE);
 	info.neo_mode                       = KYTY_PM4_GET(buffer[4], CB_COLOR0_INFO, ALT_TILE_MODE) != 0;
+
+	if (!info.neo_mode && Config::IsNextGen())
+	{
+		info.neo_mode = true;
+	}
 
 	//	attrib.force_dest_alpha_to_one  = (buffer[5] & 0x20000u) != 0;
 	//	attrib.tile_mode                = buffer[5] & 0x1fu;
@@ -3223,21 +3235,39 @@ KYTY_CP_OP_PARSER(cp_op_release_mem)
 
 	if (custom)
 	{
-		uint32_t gcr_cntl = buffer[1];
+		uint32_t gcr_cntl = buffer[1] & 0xffffu;
+		uint32_t data_sel = (buffer[1] >> 16u) & 0xffu;
 
-		EXIT_NOT_IMPLEMENTED(gcr_cntl != 0x200);
-		EXIT_NOT_IMPLEMENTED((buffer[0] >> 8u) != 0x3);
+		EXIT_NOT_IMPLEMENTED(data_sel != 2 && data_sel != 3);
 
-		if (gcr_cntl == 0x200)
+		if (data_sel == 2)
 		{
-			cache_action = 0x38;
-		}
+			EXIT_NOT_IMPLEMENTED(gcr_cntl != 0x0200);
+			EXIT_NOT_IMPLEMENTED((buffer[0] >> 8u) != 0x3);
 
-		cache_policy       = 0;
-		event_index        = 0;
-		event_write_dest   = 0;
-		event_write_source = 2;
-		interrupt_selector = 0;
+			if (gcr_cntl == 0x200)
+			{
+				cache_action = 0x38;
+			}
+
+			cache_policy       = 0;
+			event_index        = 0;
+			event_write_dest   = 0;
+			event_write_source = 2;
+			interrupt_selector = 0;
+		} else if (data_sel == 3)
+		{
+			EXIT_NOT_IMPLEMENTED(gcr_cntl != 0x0000);
+			EXIT_NOT_IMPLEMENTED((buffer[0] >> 8u) != 0x0);
+
+			cache_action = 0x00;
+
+			cache_policy       = 0;
+			event_index        = 0;
+			event_write_dest   = 0;
+			event_write_source = 4;
+			interrupt_selector = 0;
+		}
 	}
 
 	cp->WriteAtEndOfPipe64(cache_policy, event_write_dest, eop_event_type, cache_action, event_index, event_write_source, dst_gpu_addr,
@@ -3513,6 +3543,10 @@ static void graphics_init_jmp_tables_cx_indirect()
 			info.dcc_compression_enable         = KYTY_PM4_GET(value, CB_COLOR0_INFO, DCC_ENABLE) != 0;
 			info.cmask_tile_mode_neo            = KYTY_PM4_GET(value, CB_COLOR0_INFO, CMASK_ADDR_TYPE);
 			info.neo_mode                       = KYTY_PM4_GET(value, CB_COLOR0_INFO, ALT_TILE_MODE) != 0;
+			if (!info.neo_mode && Config::IsNextGen())
+			{
+				info.neo_mode = true;
+			}
 			cp->GetCtx()->SetColorInfo(slot, info);
 		};
 	}

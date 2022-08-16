@@ -185,32 +185,22 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../forms/configuration_edit_dialog.ui" line="513"/>
-        <source>Select libraries to load</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../forms/configuration_edit_dialog.ui" line="523"/>
-        <source>Load library:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../forms/configuration_edit_dialog.ui" line="550"/>
+        <location filename="../forms/configuration_edit_dialog.ui" line="515"/>
         <source>Save</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../forms/configuration_edit_dialog.ui" line="566"/>
+        <location filename="../forms/configuration_edit_dialog.ui" line="531"/>
         <source>Cancel</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../forms/configuration_edit_dialog.ui" line="586"/>
+        <location filename="../forms/configuration_edit_dialog.ui" line="551"/>
         <source>Clear</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../forms/configuration_edit_dialog.ui" line="602"/>
+        <location filename="../forms/configuration_edit_dialog.ui" line="567"/>
         <source>Test</source>
         <translation type="unfinished"></translation>
     </message>
@@ -338,12 +328,12 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/MainDialog.cpp" line="276"/>
+        <location filename="../src/MainDialog.cpp" line="279"/>
         <source>Error</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/MainDialog.cpp" line="276"/>
+        <location filename="../src/MainDialog.cpp" line="279"/>
         <source>Can&apos;t create file:
 </source>
         <translation type="unfinished"></translation>
@@ -352,27 +342,27 @@
 <context>
     <name>MainDialogPrivate</name>
     <message>
-        <location filename="../src/MainDialog.cpp" line="139"/>
+        <location filename="../src/MainDialog.cpp" line="140"/>
         <source>Settings file: </source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/MainDialog.cpp" line="165"/>
+        <location filename="../src/MainDialog.cpp" line="166"/>
         <source>Emulator: </source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/MainDialog.cpp" line="177"/>
+        <location filename="../src/MainDialog.cpp" line="178"/>
         <source>Version: </source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/MainDialog.cpp" line="193"/>
+        <location filename="../src/MainDialog.cpp" line="194"/>
         <source>Error</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/MainDialog.cpp" line="193"/>
+        <location filename="../src/MainDialog.cpp" line="194"/>
         <source>Can&apos;t find emulator</source>
         <translation type="unfinished"></translation>
     </message>

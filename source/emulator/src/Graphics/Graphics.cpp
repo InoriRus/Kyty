@@ -12,6 +12,7 @@
 #include "Emulator/Graphics/Objects/IndexBuffer.h"
 #include "Emulator/Graphics/Objects/Label.h"
 #include "Emulator/Graphics/Pm4.h"
+#include "Emulator/Graphics/Shader.h"
 #include "Emulator/Graphics/Tile.h"
 #include "Emulator/Graphics/VideoOut.h"
 #include "Emulator/Graphics/Window.h"
@@ -40,6 +41,7 @@ KYTY_SUBSYSTEM_INIT(Graphics)
 	LabelInit();
 	TileInit();
 	IndexBufferInit();
+	ShaderInit();
 }
 
 KYTY_SUBSYSTEM_UNEXPECTED_SHUTDOWN(Graphics) {}
@@ -755,12 +757,6 @@ namespace Gen5 {
 
 LIB_NAME("Graphics5", "Graphics5");
 
-struct ShaderRegister
-{
-	uint32_t offset;
-	uint32_t value;
-};
-
 struct RegisterDefaultInfo
 {
 	uint32_t       type;
@@ -776,93 +772,6 @@ struct RegisterDefaults
 	uint64_t         unknown[2] = {};
 	uint32_t*        types      = nullptr;
 	uint32_t         count      = 0;
-};
-
-struct ShaderSharp
-{
-	uint16_t offset_dw : 15;
-	uint16_t size      : 1;
-};
-
-struct ShaderUserData
-{
-	uint16_t*    direct_resource_offset;
-	ShaderSharp* sharp_resource_offset[4];
-	uint16_t     eud_size_dw;
-	uint16_t     srt_size_dw;
-	uint16_t     direct_resource_count;
-	uint16_t     sharp_resource_count[4];
-};
-
-struct ShaderRegisterRange
-{
-	uint16_t start;
-	uint16_t end;
-};
-
-struct ShaderDrawModifier
-{
-	uint32_t enbl_start_vertex_offset   : 1;
-	uint32_t enbl_start_index_offset    : 1;
-	uint32_t enbl_start_instance_offset : 1;
-	uint32_t enbl_draw_index            : 1;
-	uint32_t enbl_user_vgprs            : 1;
-	uint32_t render_target_slice_offset : 3;
-	uint32_t fuse_draws                 : 1;
-	uint32_t compiler_flags             : 23;
-	uint32_t is_default                 : 1;
-	uint32_t reserved                   : 31;
-};
-
-struct ShaderSpecialRegs
-{
-	ShaderRegister      ge_cntl;
-	ShaderRegister      vgt_shader_stages_en;
-	uint32_t            dispatch_modifier;
-	ShaderRegisterRange user_data_range;
-	ShaderDrawModifier  draw_modifier;
-	ShaderRegister      vgt_gs_out_prim_type;
-	ShaderRegister      ge_user_vgpr_en;
-};
-
-struct ShaderSemantic
-{
-	uint32_t semantic         : 8;
-	uint32_t hardware_mapping : 8;
-	uint32_t size_in_elements : 4;
-	uint32_t is_f16           : 2;
-	uint32_t is_flat_shaded   : 1;
-	uint32_t is_linear        : 1;
-	uint32_t is_custom        : 1;
-	uint32_t static_vb_index  : 1;
-	uint32_t static_attribute : 1;
-	uint32_t reserved         : 1;
-	uint32_t default_value    : 2;
-	uint32_t default_value_hi : 2;
-};
-
-struct Shader
-{
-	uint32_t             file_header;
-	uint32_t             version;
-	ShaderUserData*      user_data;
-	const volatile void* code;
-	ShaderRegister*      cx_registers;
-	ShaderRegister*      sh_registers;
-	ShaderSpecialRegs*   specials;
-	ShaderSemantic*      input_semantics;
-	ShaderSemantic*      output_semantics;
-	uint32_t             header_size;
-	uint32_t             shader_size;
-	uint32_t             embedded_constant_buffer_size_dqw;
-	uint32_t             target;
-	uint32_t             num_input_semantics;
-	uint16_t             scratch_size_dw_per_thread;
-	uint16_t             num_output_semantics;
-	uint16_t             special_sizes_bytes;
-	uint8_t              type;
-	uint8_t              num_cx_registers;
-	uint8_t              num_sh_registers;
 };
 
 struct CommandBuffer
@@ -1561,6 +1470,17 @@ int KYTY_SYSV_ABI GraphicsCreateShader(Shader** dst, void* header, const volatil
 
 	auto base = reinterpret_cast<uint64_t>(code);
 
+	printf("\t base   = 0x%016" PRIx64 "\n", base);
+
+	ShaderMappedData map;
+	map.user_data           = h->user_data;
+	map.input_semantics     = h->input_semantics;
+	map.num_input_semantics = h->num_input_semantics;
+
+	ShaderMapUserData(base, map);
+
+	EXIT_NOT_IMPLEMENTED((base & 0xFFFF0000000000FFull) != 0);
+
 	if (h->type == 2 && h->num_sh_registers >= 2 && h->sh_registers[0].offset == Pm4::SPI_SHADER_PGM_LO_ES &&
 	    h->sh_registers[1].offset == Pm4::SPI_SHADER_PGM_HI_ES)
 	{
@@ -1716,6 +1636,7 @@ int KYTY_SYSV_ABI GraphicsCreatePrimState(ShaderRegister* cx_regs, ShaderRegiste
 	return OK;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 int KYTY_SYSV_ABI GraphicsCreateInterpolantMapping(ShaderRegister* regs, const Shader* gs, const Shader* ps)
 {
 	PRINT_NAME();
@@ -1733,20 +1654,42 @@ int KYTY_SYSV_ABI GraphicsCreateInterpolantMapping(ShaderRegister* regs, const S
 
 	EXIT_NOT_IMPLEMENTED(sizeof(ShaderSemantic) != 4);
 	EXIT_NOT_IMPLEMENTED(ps != nullptr && gs->num_output_semantics != ps->num_input_semantics);
+	EXIT_NOT_IMPLEMENTED(ps != nullptr && ps->num_output_semantics != 0);
 
-	auto* out32 = reinterpret_cast<uint32_t*>(gs->output_semantics);
-	auto* in32  = (ps != nullptr ? reinterpret_cast<uint32_t*>(ps->input_semantics) : nullptr);
-
-	for (int i = 0; i < 32; i++)
+	for (uint16_t i = 0; i < 32; i++)
 	{
 		regs[i].offset = Pm4::SPI_PS_INPUT_CNTL_0 + i;
 		regs[i].value  = 0;
 
 		if (i < static_cast<int>(gs->num_output_semantics))
 		{
-			EXIT_NOT_IMPLEMENTED(out32[i] != 0x0000000f);
-			EXIT_NOT_IMPLEMENTED(in32 != nullptr && out32[i] != in32[i]);
-			regs[i].value = i;
+			EXIT_NOT_IMPLEMENTED(gs->output_semantics[i].semantic != 15 + i);
+			EXIT_NOT_IMPLEMENTED(gs->output_semantics[i].hardware_mapping != i);
+			EXIT_NOT_IMPLEMENTED(gs->output_semantics[i].size_in_elements != 0);
+			EXIT_NOT_IMPLEMENTED(gs->output_semantics[i].is_f16 != 0);
+			EXIT_NOT_IMPLEMENTED(gs->output_semantics[i].is_flat_shaded != 0);
+			EXIT_NOT_IMPLEMENTED(gs->output_semantics[i].is_linear != 0);
+			EXIT_NOT_IMPLEMENTED(gs->output_semantics[i].is_custom != 0);
+			EXIT_NOT_IMPLEMENTED(gs->output_semantics[i].static_vb_index != 0);
+			EXIT_NOT_IMPLEMENTED(gs->output_semantics[i].static_attribute != 0);
+			EXIT_NOT_IMPLEMENTED(gs->output_semantics[i].default_value != 0);
+			EXIT_NOT_IMPLEMENTED(gs->output_semantics[i].default_value_hi != 0);
+			bool flat = false;
+			if (ps != nullptr)
+			{
+				EXIT_NOT_IMPLEMENTED(ps->input_semantics[i].semantic != gs->output_semantics[i].semantic);
+				EXIT_NOT_IMPLEMENTED(ps->input_semantics[i].hardware_mapping != 0);
+				EXIT_NOT_IMPLEMENTED(ps->input_semantics[i].size_in_elements != 0);
+				EXIT_NOT_IMPLEMENTED(ps->input_semantics[i].is_f16 != 0);
+				EXIT_NOT_IMPLEMENTED(ps->input_semantics[i].is_linear != 0);
+				EXIT_NOT_IMPLEMENTED(ps->input_semantics[i].is_custom != 0);
+				EXIT_NOT_IMPLEMENTED(ps->input_semantics[i].static_vb_index != 0);
+				EXIT_NOT_IMPLEMENTED(ps->input_semantics[i].static_attribute != 0);
+				EXIT_NOT_IMPLEMENTED(ps->input_semantics[i].default_value != 0);
+				EXIT_NOT_IMPLEMENTED(ps->input_semantics[i].default_value_hi != 0);
+				flat = ps->input_semantics[i].is_flat_shaded != 0;
+			}
+			regs[i].value = i | (flat ? 0x400u : 0u);
 		}
 	}
 
@@ -1837,7 +1780,7 @@ uint32_t* KYTY_SYSV_ABI GraphicsCbReleaseMem(CommandBuffer* buf, uint8_t action,
 
 	EXIT_NOT_IMPLEMENTED(buf == nullptr);
 	EXIT_NOT_IMPLEMENTED(dst != 1);
-	EXIT_NOT_IMPLEMENTED(data_sel != 2);
+	EXIT_NOT_IMPLEMENTED(data_sel != 2 && data_sel != 3);
 	EXIT_NOT_IMPLEMENTED(gds_offset != 0);
 	EXIT_NOT_IMPLEMENTED(gds_size != 1);
 	EXIT_NOT_IMPLEMENTED(interrupt != 0);
@@ -1851,7 +1794,7 @@ uint32_t* KYTY_SYSV_ABI GraphicsCbReleaseMem(CommandBuffer* buf, uint8_t action,
 
 	cmd[0] = KYTY_PM4(7, Pm4::IT_NOP, Pm4::R_RELEASE_MEM);
 	cmd[1] = action | (static_cast<uint32_t>(cache_policy) << 8u);
-	cmd[2] = gcr_cntl;
+	cmd[2] = gcr_cntl | (static_cast<uint32_t>(data_sel) << 16u);
 	cmd[3] = static_cast<uint32_t>(reinterpret_cast<uint64_t>(address) & 0xffffffffu);
 	cmd[4] = static_cast<uint32_t>((reinterpret_cast<uint64_t>(address) >> 32u) & 0xffffffffu);
 	cmd[5] = static_cast<uint32_t>(data & 0xffffffffu);
@@ -1905,6 +1848,25 @@ uint32_t* KYTY_SYSV_ABI GraphicsDcbWaitUntilSafeForRendering(CommandBuffer* buf,
 	cmd[4] = 0;
 	cmd[5] = 0;
 	cmd[6] = 0;
+
+	return cmd;
+}
+
+uint32_t* KYTY_SYSV_ABI GraphicsDcbSetShRegisterDirect(CommandBuffer* buf, ShaderRegister reg)
+{
+	PRINT_NAME();
+
+	EXIT_NOT_IMPLEMENTED(buf == nullptr);
+
+	buf->DbgDump();
+
+	auto* cmd = buf->AllocateDW(3);
+
+	EXIT_NOT_IMPLEMENTED(cmd == nullptr);
+
+	cmd[0] = KYTY_PM4(3, Pm4::IT_SET_SH_REG, 0u);
+	cmd[1] = reg.offset;
+	cmd[2] = reg.value;
 
 	return cmd;
 }

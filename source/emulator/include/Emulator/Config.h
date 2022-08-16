@@ -41,9 +41,12 @@ enum class ProfilerDirection
 
 void Load(const Scripts::ScriptVar& cfg);
 
+void SetNextGen(bool mode);
+
 uint32_t GetScreenWidth();
 uint32_t GetScreenHeight();
 bool     IsNeo();
+bool     IsNextGen();
 bool     VulkanValidationEnabled();
 
 bool                   ShaderValidationEnabled();

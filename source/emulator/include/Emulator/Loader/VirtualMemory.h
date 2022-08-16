@@ -60,6 +60,7 @@ public:
 		uint64_t            access_violation_vaddr = 0;
 		uint64_t            exception_address      = 0;
 		uint64_t            rbp                    = 0;
+		uint32_t            exception_win_code     = 0;
 	};
 
 	using handler_func_t = void (*)(const ExceptionInfo*);

@@ -80,7 +80,7 @@ ConfigurationEditDialog::ConfigurationEditDialog(Kyty::Configuration* info, Conf
 	connect(m_ui->base_directory_lineedit, &QLineEdit::textChanged, this, &ConfigurationEditDialog::scan_elfs);
 	connect(m_ui->param_file_lineedit, &QLineEdit::textChanged, this, &ConfigurationEditDialog::load_param_sfo);
 	connect(m_ui->listWidget_elfs, &QListWidget::itemChanged, this, &ChangeColor);
-	connect(m_ui->listWidget_libs, &QListWidget::itemChanged, this, &ChangeColor);
+	// connect(m_ui->listWidget_libs, &QListWidget::itemChanged, this, &ChangeColor);
 	connect(&m_process, static_cast<void (QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished),
 	        [=](int /*exitCode*/, QProcess::ExitStatus /*exitStatus*/) { m_ui->test_button->setEnabled(true); });
 
@@ -96,7 +96,7 @@ ConfigurationEditDialog::ConfigurationEditDialog(Kyty::Configuration* info, Conf
 
 	Init();
 
-	scan_libs();
+	// scan_libs();
 	scan_elfs();
 	load_param_sfo();
 }
@@ -231,7 +231,7 @@ static void UpdateInfo(Kyty::Configuration* info, Ui::ConfigurationEditDialog* u
 	}
 
 	UpdateList(&info->elfs, &info->elfs_selected, ui->listWidget_elfs);
-	UpdateList(&info->libs, &info->libs_selected, ui->listWidget_libs);
+	// UpdateList(&info->libs, &info->libs_selected, ui->listWidget_libs);
 }
 
 void ConfigurationEditDialog::update_info()
@@ -344,46 +344,46 @@ void ConfigurationEditDialog::scan_elfs()
 	m_ui->test_button->setEnabled(m_process.state() == QProcess::NotRunning && dir_exists);
 }
 
-void ConfigurationEditDialog::scan_libs()
-{
-	QStringList libs = KYTY_LIBS;
-
-	m_ui->listWidget_libs->clear();
-
-	// int selected_num = 0;
-
-	for (const auto& lib: m_info->libs)
-	{
-		bool not_enabled = !libs.contains(lib);
-		bool selected    = m_info->libs_selected.contains(lib);
-
-		auto* item = new QListWidgetItem(lib, m_ui->listWidget_libs);
-		item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
-
-		if (not_enabled)
-		{
-			item->setCheckState(Qt::Unchecked);
-			item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
-		} else
-		{
-			item->setCheckState(selected ? Qt::Checked : Qt::Unchecked);
-		}
-
-		// selected_num += (selected ? 1 : 0);
-	}
-
-	for (const auto& lib: libs)
-	{
-		if (!m_info->libs.contains(lib))
-		{
-			auto* item = new QListWidgetItem(lib, m_ui->listWidget_libs);
-			item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
-			item->setCheckState(Qt::Unchecked);
-		}
-	}
-
-	m_ui->listWidget_libs->sortItems();
-}
+// void ConfigurationEditDialog::scan_libs()
+//{
+//	QStringList libs = KYTY_LIBS;
+//
+//	m_ui->listWidget_libs->clear();
+//
+//	// int selected_num = 0;
+//
+//	for (const auto& lib: m_info->libs)
+//	{
+//		bool not_enabled = !libs.contains(lib);
+//		bool selected    = m_info->libs_selected.contains(lib);
+//
+//		auto* item = new QListWidgetItem(lib, m_ui->listWidget_libs);
+//		item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+//
+//		if (not_enabled)
+//		{
+//			item->setCheckState(Qt::Unchecked);
+//			item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
+//		} else
+//		{
+//			item->setCheckState(selected ? Qt::Checked : Qt::Unchecked);
+//		}
+//
+//		// selected_num += (selected ? 1 : 0);
+//	}
+//
+//	for (const auto& lib: libs)
+//	{
+//		if (!m_info->libs.contains(lib))
+//		{
+//			auto* item = new QListWidgetItem(lib, m_ui->listWidget_libs);
+//			item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+//			item->setCheckState(Qt::Unchecked);
+//		}
+//	}
+//
+//	m_ui->listWidget_libs->sortItems();
+// }
 
 void ConfigurationEditDialog::load_param_sfo()
 {
@@ -452,7 +452,7 @@ void ConfigurationEditDialog::clear()
 	m_info = old_info;
 
 	scan_elfs();
-	scan_libs();
+	// scan_libs();
 	load_param_sfo();
 }
 

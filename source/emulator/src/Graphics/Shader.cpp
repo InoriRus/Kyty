@@ -5,11 +5,13 @@
 #include "Kyty/Core/File.h"
 #include "Kyty/Core/MagicEnum.h"
 #include "Kyty/Core/String.h"
+#include "Kyty/Core/String8.h"
 #include "Kyty/Core/Vector.h"
 
 #include "Emulator/Config.h"
 #include "Emulator/Graphics/GraphicsRun.h"
 #include "Emulator/Graphics/HardwareContext.h"
+#include "Emulator/Graphics/ShaderParse.h"
 #include "Emulator/Graphics/ShaderSpirv.h"
 #include "Emulator/Profiler.h"
 
@@ -20,21 +22,13 @@
 #include <algorithm>
 #include <atomic>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 //#define SPIRV_CROSS_EXCEPTIONS_TO_ASSERTIONS
 //#include "spirv_cross/spirv_glsl.hpp"
 
 #ifdef KYTY_EMU_ENABLED
-
-#define KYTY_SHADER_PARSER_ARGS                                                                                                            \
-	[[maybe_unused]] uint32_t pc, [[maybe_unused]] const uint32_t *src, [[maybe_unused]] const uint32_t *buffer,                           \
-	    [[maybe_unused]] ShaderCode *dst
-#define KYTY_SHADER_PARSER(f) static uint32_t f(KYTY_SHADER_PARSER_ARGS)
-#define KYTY_CP_OP_PARSER_ARGS                                                                                                             \
-	[[maybe_unused]] CommandProcessor *cp, [[maybe_unused]] uint32_t cmd_id, [[maybe_unused]] const uint32_t *buffer,                      \
-	    [[maybe_unused]] uint32_t dw, [[maybe_unused]] uint32_t num_dw
-#define KYTY_CP_OP_PARSER(f) static uint32_t f(KYTY_CP_OP_PARSER_ARGS)
 
 KYTY_ENUM_RANGE(Kyty::Libs::Graphics::ShaderInstructionType, 0, static_cast<int>(Kyty::Libs::Graphics::ShaderInstructionType::ZMax));
 
@@ -74,6 +68,25 @@ struct ShaderUsageInfo
 	const uint32_t*        usage_masks = nullptr;
 	const ShaderUsageSlot* slots       = nullptr;
 	int                    slots_num   = 0;
+	bool                   valid       = false;
+};
+
+struct ShaderParsedUsage
+{
+	bool fetch                     = false;
+	int  fetch_reg                 = 0;
+	bool vertex_buffer             = false;
+	int  vertex_buffer_reg         = 0;
+	bool vertex_attrib             = false;
+	int  vertex_attrib_reg         = 0;
+	int  storage_buffers_readwrite = 0;
+	int  storage_buffers_readonly  = 0;
+	int  storage_buffers_constant  = 0;
+	int  textures2D_readonly       = 0;
+	int  textures2D_readwrite      = 0;
+	bool extended_buffer           = false;
+	int  samplers                  = 0;
+	int  gds_pointers              = 0;
 };
 
 struct ShaderDebugPrintfCmds
@@ -82,28 +95,43 @@ struct ShaderDebugPrintfCmds
 	Vector<ShaderDebugPrintf> cmds;
 };
 
-static Vector<uint64_t>*              g_disabled_shaders = nullptr;
-static Vector<ShaderDebugPrintfCmds>* g_debug_printfs    = nullptr;
+static Vector<uint64_t>*                               g_disabled_shaders = nullptr;
+static Vector<ShaderDebugPrintfCmds>*                  g_debug_printfs    = nullptr;
+static std::unordered_map<uint64_t, ShaderMappedData>* g_shader_map       = nullptr;
 
-static String operand_to_str(ShaderOperand op)
+void ShaderInit()
 {
-	String ret = U"???";
+	EXIT_IF(g_shader_map != nullptr);
+
+	g_shader_map = new std::unordered_map<uint64_t, ShaderMappedData>();
+}
+
+void ShaderMapUserData(uint64_t addr, const ShaderMappedData& data)
+{
+	EXIT_IF(g_shader_map == nullptr);
+
+	g_shader_map->insert({addr, data});
+}
+
+static String8 operand_to_str(ShaderOperand op)
+{
+	String8 ret = "???";
 	switch (op.type)
 	{
 		case ShaderOperandType::LiteralConstant:
 			EXIT_IF(op.size != 0);
 			EXIT_IF(op.negate || op.absolute);
-			return String::FromPrintf("%f (%u)", op.constant.f, op.constant.u);
+			return String8::FromPrintf("%f (%u)", op.constant.f, op.constant.u);
 			break;
 		case ShaderOperandType::IntegerInlineConstant:
 			EXIT_IF(op.size != 0);
 			EXIT_IF(op.negate || op.absolute);
-			return String::FromPrintf("%d", op.constant.i);
+			return String8::FromPrintf("%d", op.constant.i);
 			break;
 		case ShaderOperandType::FloatInlineConstant:
 			EXIT_IF(op.size != 0);
 			EXIT_IF(op.negate || op.absolute);
-			return String::FromPrintf("%f", op.constant.f);
+			return String8::FromPrintf("%f", op.constant.f);
 			break;
 		default: break;
 	}
@@ -112,34 +140,35 @@ static String operand_to_str(ShaderOperand op)
 
 	switch (op.type)
 	{
-		case ShaderOperandType::VccHi: ret = U"vcc_hi"; break;
-		case ShaderOperandType::VccLo: ret = U"vcc_lo"; break;
-		case ShaderOperandType::ExecHi: ret = U"exec_hi"; break;
-		case ShaderOperandType::ExecLo: ret = U"exec_lo"; break;
-		case ShaderOperandType::ExecZ: ret = U"execz"; break;
-		case ShaderOperandType::Scc: ret = U"scc"; break;
-		case ShaderOperandType::M0: ret = U"m0"; break;
-		case ShaderOperandType::Vgpr: ret = String::FromPrintf("v%d", op.register_id); break;
-		case ShaderOperandType::Sgpr: ret = String::FromPrintf("s%d", op.register_id); break;
+		case ShaderOperandType::VccHi: ret = "vcc_hi"; break;
+		case ShaderOperandType::VccLo: ret = "vcc_lo"; break;
+		case ShaderOperandType::ExecHi: ret = "exec_hi"; break;
+		case ShaderOperandType::ExecLo: ret = "exec_lo"; break;
+		case ShaderOperandType::ExecZ: ret = "execz"; break;
+		case ShaderOperandType::Scc: ret = "scc"; break;
+		case ShaderOperandType::M0: ret = "m0"; break;
+		case ShaderOperandType::Vgpr: ret = String8::FromPrintf("v%d", op.register_id); break;
+		case ShaderOperandType::Sgpr: ret = String8::FromPrintf("s%d", op.register_id); break;
+		case ShaderOperandType::Null: ret = "null"; break;
 		default: break;
 	}
 
 	if (op.absolute)
 	{
-		ret = U"abs(" + ret + U")";
+		ret = "abs(" + ret + ")";
 	}
 
 	if (op.negate)
 	{
-		return U"-" + ret;
+		return "-" + ret;
 	}
 
 	return ret;
 }
 
-static String operand_array_to_str(ShaderOperand op, int n)
+static String8 operand_array_to_str(ShaderOperand op, int n)
 {
-	String ret = U"???";
+	String8 ret = "???";
 
 	EXIT_IF(op.size != n);
 
@@ -148,109 +177,112 @@ static String operand_array_to_str(ShaderOperand op, int n)
 		case ShaderOperandType::VccLo:
 			if (n == 2)
 			{
-				ret = U"vcc";
+				ret = "vcc";
 			}
 			break;
 		case ShaderOperandType::ExecLo:
 			if (n == 2)
 			{
-				ret = U"exec";
+				ret = "exec";
 			}
 			break;
-		case ShaderOperandType::Sgpr: ret = String::FromPrintf("s[%d:%d]", op.register_id, op.register_id + n - 1); break;
-		case ShaderOperandType::Vgpr: ret = String::FromPrintf("v[%d:%d]", op.register_id, op.register_id + n - 1); break;
+		case ShaderOperandType::Sgpr: ret = String8::FromPrintf("s[%d:%d]", op.register_id, op.register_id + n - 1); break;
+		case ShaderOperandType::Vgpr: ret = String8::FromPrintf("v[%d:%d]", op.register_id, op.register_id + n - 1); break;
 		case ShaderOperandType::LiteralConstant:
 			if (n == 2)
 			{
-				ret = String::FromPrintf("%f (%u)", op.constant.f, op.constant.u);
+				ret = String8::FromPrintf("%f (%u)", op.constant.f, op.constant.u);
 			}
 			break;
 		case ShaderOperandType::IntegerInlineConstant:
 			if (n == 2)
 			{
-				ret = String::FromPrintf("%d", op.constant.i);
+				ret = String8::FromPrintf("%d", op.constant.i);
 			}
 			break;
 		default: break;
 	}
 
-	EXIT_IF(ret == U"???");
+	EXIT_IF(ret == "???");
 
 	if (op.absolute)
 	{
-		ret = U"abs(" + ret + U")";
+		ret = "abs(" + ret + ")";
 	}
 
 	if (op.negate)
 	{
-		return U"-" + ret;
+		return "-" + ret;
 	}
 
 	return ret;
 }
 
-static String dbg_fmt_to_str(const ShaderInstruction& inst)
+static String8 dbg_fmt_to_str(const ShaderInstruction& inst)
 {
 	switch (inst.format)
 	{
-		case ShaderInstructionFormat::Unknown: return U"Unknown"; break;
-		case ShaderInstructionFormat::Empty: return U"Empty"; break;
-		case ShaderInstructionFormat::Imm: return U"Imm"; break;
-		case ShaderInstructionFormat::Mrt0OffOffComprVmDone: return U"Mrt0OffOffComprVmDone"; break;
-		case ShaderInstructionFormat::Mrt0Vsrc0Vsrc1ComprVmDone: return U"Mrt0Vsrc0Vsrc1ComprVmDone"; break;
-		case ShaderInstructionFormat::Mrt0Vsrc0Vsrc1Vsrc2Vsrc3VmDone: return U"Mrt0Vsrc0Vsrc1Vsrc2Vsrc3VmDone"; break;
-		case ShaderInstructionFormat::Param0Vsrc0Vsrc1Vsrc2Vsrc3: return U"Param0Vsrc0Vsrc1Vsrc2Vsrc3"; break;
-		case ShaderInstructionFormat::Param1Vsrc0Vsrc1Vsrc2Vsrc3: return U"Param1Vsrc0Vsrc1Vsrc2Vsrc3"; break;
-		case ShaderInstructionFormat::Param2Vsrc0Vsrc1Vsrc2Vsrc3: return U"Param2Vsrc0Vsrc1Vsrc2Vsrc3"; break;
-		case ShaderInstructionFormat::Param3Vsrc0Vsrc1Vsrc2Vsrc3: return U"Param3Vsrc0Vsrc1Vsrc2Vsrc3"; break;
-		case ShaderInstructionFormat::Param4Vsrc0Vsrc1Vsrc2Vsrc3: return U"Param4Vsrc0Vsrc1Vsrc2Vsrc3"; break;
-		case ShaderInstructionFormat::Pos0Vsrc0Vsrc1Vsrc2Vsrc3Done: return U"Pos0Vsrc0Vsrc1Vsrc2Vsrc3Done"; break;
-		case ShaderInstructionFormat::Saddr: return U"Saddr"; break;
-		case ShaderInstructionFormat::Sdst4SbaseSoffset: return U"Sdst4SbaseSoffset"; break;
-		case ShaderInstructionFormat::Sdst8SbaseSoffset: return U"Sdst8SbaseSoffset"; break;
-		case ShaderInstructionFormat::SdstSvSoffset: return U"SdstSvSoffset"; break;
-		case ShaderInstructionFormat::Sdst2SvSoffset: return U"Sdst2SvSoffset"; break;
-		case ShaderInstructionFormat::Sdst4SvSoffset: return U"Sdst4SvSoffset"; break;
-		case ShaderInstructionFormat::Sdst8SvSoffset: return U"Sdst8SvSoffset"; break;
-		case ShaderInstructionFormat::Sdst16SvSoffset: return U"Sdst16SvSoffset"; break;
-		case ShaderInstructionFormat::SVdstSVsrc0: return U"SVdstSVsrc0"; break;
-		case ShaderInstructionFormat::Sdst2Ssrc02: return U"Sdst2Ssrc02"; break;
-		case ShaderInstructionFormat::Sdst2Ssrc02Ssrc12: return U"Sdst2Ssrc02Ssrc12"; break;
-		case ShaderInstructionFormat::SmaskVsrc0Vsrc1: return U"SmaskVsrc0Vsrc1"; break;
-		case ShaderInstructionFormat::Ssrc0Ssrc1: return U"Ssrc0Ssrc1"; break;
-		case ShaderInstructionFormat::Vdata1VaddrSvSoffsIdxen: return U"Vdata1VaddrSvSoffsIdxen"; break;
-		case ShaderInstructionFormat::Vdata1VaddrSvSoffsIdxenFloat1: return U"Vdata1VaddrSvSoffsIdxenFloat1"; break;
-		case ShaderInstructionFormat::Vdata2VaddrSvSoffsIdxen: return U"Vdata2VaddrSvSoffsIdxen"; break;
-		case ShaderInstructionFormat::Vdata3VaddrSvSoffsIdxen: return U"Vdata3VaddrSvSoffsIdxen"; break;
-		case ShaderInstructionFormat::Vdata4VaddrSvSoffsIdxen: return U"Vdata4VaddrSvSoffsIdxen"; break;
-		case ShaderInstructionFormat::Vdata4VaddrSvSoffsIdxenFloat4: return U"Vdata4VaddrSvSoffsIdxenFloat4"; break;
-		case ShaderInstructionFormat::Vdata4Vaddr2SvSoffsOffenIdxenFloat4: return U"Vdata4Vaddr2SvSoffsOffenIdxenFloat4"; break;
-		case ShaderInstructionFormat::Vdata1Vaddr3StSsDmask1: return U"Vdata1Vaddr3StSsDmask1"; break;
-		case ShaderInstructionFormat::Vdata1Vaddr3StSsDmask8: return U"Vdata1Vaddr3StSsDmask8"; break;
-		case ShaderInstructionFormat::Vdata2Vaddr3StSsDmask3: return U"Vdata2Vaddr3StSsDmask3"; break;
-		case ShaderInstructionFormat::Vdata2Vaddr3StSsDmask5: return U"Vdata2Vaddr3StSsDmask5"; break;
-		case ShaderInstructionFormat::Vdata2Vaddr3StSsDmask9: return U"Vdata2Vaddr3StSsDmask9"; break;
-		case ShaderInstructionFormat::Vdata3Vaddr3StSsDmask7: return U"Vdata3Vaddr3StSsDmask7"; break;
-		case ShaderInstructionFormat::Vdata3Vaddr4StSsDmask7: return U"Vdata3Vaddr4StSsDmask7"; break;
-		case ShaderInstructionFormat::Vdata4Vaddr3StSsDmaskF: return U"Vdata4Vaddr3StSsDmaskF"; break;
-		case ShaderInstructionFormat::Vdata4Vaddr3StDmaskF: return U"Vdata4Vaddr3StDmaskF"; break;
-		case ShaderInstructionFormat::Vdata4Vaddr4StDmaskF: return U"Vdata4Vaddr4StDmaskF"; break;
-		case ShaderInstructionFormat::SVdstSVsrc0SVsrc1: return U"SVdstSVsrc0SVsrc1"; break;
-		case ShaderInstructionFormat::VdstVsrc0Vsrc1Smask2: return U"VdstVsrc0Vsrc1Smask2"; break;
-		case ShaderInstructionFormat::VdstVsrc0Vsrc1Vsrc2: return U"VdstVsrc0Vsrc1Vsrc2"; break;
-		case ShaderInstructionFormat::VdstVsrcAttrChan: return U"VdstVsrcAttrChan"; break;
-		case ShaderInstructionFormat::VdstSdst2Vsrc0Vsrc1: return U"VdstSdst2Vsrc0Vsrc1"; break;
-		case ShaderInstructionFormat::VdstGds: return U"VdstGds"; break;
-		case ShaderInstructionFormat::Label: return U"Label"; break;
-		default: return U"????"; break;
+		case ShaderInstructionFormat::Unknown: return "Unknown"; break;
+		case ShaderInstructionFormat::Empty: return "Empty"; break;
+		case ShaderInstructionFormat::Imm: return "Imm"; break;
+		case ShaderInstructionFormat::Mrt0OffOffComprVmDone: return "Mrt0OffOffComprVmDone"; break;
+		case ShaderInstructionFormat::Mrt0Vsrc0Vsrc1ComprVmDone: return "Mrt0Vsrc0Vsrc1ComprVmDone"; break;
+		case ShaderInstructionFormat::Mrt0Vsrc0Vsrc1Vsrc2Vsrc3VmDone: return "Mrt0Vsrc0Vsrc1Vsrc2Vsrc3VmDone"; break;
+		case ShaderInstructionFormat::Param0Vsrc0Vsrc1Vsrc2Vsrc3: return "Param0Vsrc0Vsrc1Vsrc2Vsrc3"; break;
+		case ShaderInstructionFormat::Param1Vsrc0Vsrc1Vsrc2Vsrc3: return "Param1Vsrc0Vsrc1Vsrc2Vsrc3"; break;
+		case ShaderInstructionFormat::Param2Vsrc0Vsrc1Vsrc2Vsrc3: return "Param2Vsrc0Vsrc1Vsrc2Vsrc3"; break;
+		case ShaderInstructionFormat::Param3Vsrc0Vsrc1Vsrc2Vsrc3: return "Param3Vsrc0Vsrc1Vsrc2Vsrc3"; break;
+		case ShaderInstructionFormat::Param4Vsrc0Vsrc1Vsrc2Vsrc3: return "Param4Vsrc0Vsrc1Vsrc2Vsrc3"; break;
+		case ShaderInstructionFormat::Pos0Vsrc0Vsrc1Vsrc2Vsrc3Done: return "Pos0Vsrc0Vsrc1Vsrc2Vsrc3Done"; break;
+		case ShaderInstructionFormat::PrimVsrc0OffOffOffDone: return "PrimVsrc0OffOffOffDone"; break;
+		case ShaderInstructionFormat::Saddr: return "Saddr"; break;
+		case ShaderInstructionFormat::SdstSbaseSoffset: return "SdstSbaseSoffset"; break;
+		case ShaderInstructionFormat::Sdst4SbaseSoffset: return "Sdst4SbaseSoffset"; break;
+		case ShaderInstructionFormat::Sdst8SbaseSoffset: return "Sdst8SbaseSoffset"; break;
+		case ShaderInstructionFormat::SdstSvSoffset: return "SdstSvSoffset"; break;
+		case ShaderInstructionFormat::Sdst2SvSoffset: return "Sdst2SvSoffset"; break;
+		case ShaderInstructionFormat::Sdst4SvSoffset: return "Sdst4SvSoffset"; break;
+		case ShaderInstructionFormat::Sdst8SvSoffset: return "Sdst8SvSoffset"; break;
+		case ShaderInstructionFormat::Sdst16SvSoffset: return "Sdst16SvSoffset"; break;
+		case ShaderInstructionFormat::SVdstSVsrc0: return "SVdstSVsrc0"; break;
+		case ShaderInstructionFormat::Sdst2Ssrc02: return "Sdst2Ssrc02"; break;
+		case ShaderInstructionFormat::Sdst2Ssrc02Ssrc1: return "Sdst2Ssrc02Ssrc1"; break;
+		case ShaderInstructionFormat::Sdst2Ssrc02Ssrc12: return "Sdst2Ssrc02Ssrc12"; break;
+		case ShaderInstructionFormat::SmaskVsrc0Vsrc1: return "SmaskVsrc0Vsrc1"; break;
+		case ShaderInstructionFormat::Ssrc0Ssrc1: return "Ssrc0Ssrc1"; break;
+		case ShaderInstructionFormat::Vdata1VaddrSvSoffsIdxen: return "Vdata1VaddrSvSoffsIdxen"; break;
+		case ShaderInstructionFormat::Vdata1VaddrSvSoffsIdxenFloat1: return "Vdata1VaddrSvSoffsIdxenFloat1"; break;
+		case ShaderInstructionFormat::Vdata2VaddrSvSoffsIdxen: return "Vdata2VaddrSvSoffsIdxen"; break;
+		case ShaderInstructionFormat::Vdata3VaddrSvSoffsIdxen: return "Vdata3VaddrSvSoffsIdxen"; break;
+		case ShaderInstructionFormat::Vdata4VaddrSvSoffsIdxen: return "Vdata4VaddrSvSoffsIdxen"; break;
+		case ShaderInstructionFormat::Vdata4VaddrSvSoffsIdxenFloat4: return "Vdata4VaddrSvSoffsIdxenFloat4"; break;
+		case ShaderInstructionFormat::Vdata4Vaddr2SvSoffsOffenIdxenFloat4: return "Vdata4Vaddr2SvSoffsOffenIdxenFloat4"; break;
+		case ShaderInstructionFormat::Vdata1Vaddr3StSsDmask1: return "Vdata1Vaddr3StSsDmask1"; break;
+		case ShaderInstructionFormat::Vdata1Vaddr3StSsDmask8: return "Vdata1Vaddr3StSsDmask8"; break;
+		case ShaderInstructionFormat::Vdata2Vaddr3StSsDmask3: return "Vdata2Vaddr3StSsDmask3"; break;
+		case ShaderInstructionFormat::Vdata2Vaddr3StSsDmask5: return "Vdata2Vaddr3StSsDmask5"; break;
+		case ShaderInstructionFormat::Vdata2Vaddr3StSsDmask9: return "Vdata2Vaddr3StSsDmask9"; break;
+		case ShaderInstructionFormat::Vdata3Vaddr3StSsDmask7: return "Vdata3Vaddr3StSsDmask7"; break;
+		case ShaderInstructionFormat::Vdata3Vaddr4StSsDmask7: return "Vdata3Vaddr4StSsDmask7"; break;
+		case ShaderInstructionFormat::Vdata4Vaddr3StSsDmaskF: return "Vdata4Vaddr3StSsDmaskF"; break;
+		case ShaderInstructionFormat::Vdata4Vaddr3StDmaskF: return "Vdata4Vaddr3StDmaskF"; break;
+		case ShaderInstructionFormat::Vdata4Vaddr4StDmaskF: return "Vdata4Vaddr4StDmaskF"; break;
+		case ShaderInstructionFormat::SVdstSVsrc0SVsrc1: return "SVdstSVsrc0SVsrc1"; break;
+		case ShaderInstructionFormat::VdstVsrc0Vsrc1Smask2: return "VdstVsrc0Vsrc1Smask2"; break;
+		case ShaderInstructionFormat::VdstVsrc0Vsrc1Vsrc2: return "VdstVsrc0Vsrc1Vsrc2"; break;
+		case ShaderInstructionFormat::VdstVsrcAttrChan: return "VdstVsrcAttrChan"; break;
+		case ShaderInstructionFormat::VdstSdst2Vsrc0Vsrc1: return "VdstSdst2Vsrc0Vsrc1"; break;
+		case ShaderInstructionFormat::VdstGds: return "VdstGds"; break;
+		case ShaderInstructionFormat::Label: return "Label"; break;
+		default: return "????"; break;
 	}
 }
 
-static String dbg_fmt_print(const ShaderInstruction& inst)
+static String8 dbg_fmt_print(const ShaderInstruction& inst)
 {
 	uint64_t f = inst.format;
 	EXIT_IF(f == ShaderInstructionFormat::Unknown);
-	String str;
+	String8 str;
 	if (f == ShaderInstructionFormat::Empty)
 	{
 		return str;
@@ -258,8 +290,8 @@ static String dbg_fmt_print(const ShaderInstruction& inst)
 	int src_num = 0;
 	for (;;)
 	{
-		String s;
-		auto   fu = f & 0xffu;
+		String8 s;
+		auto    fu = f & 0xffu;
 		if (fu == 0)
 		{
 			break;
@@ -290,31 +322,32 @@ static String dbg_fmt_print(const ShaderInstruction& inst)
 			case ShaderInstructionFormat::S2A2: s = operand_array_to_str(inst.src[2], 2); break;
 			case ShaderInstructionFormat::S2A3: s = operand_array_to_str(inst.src[2], 3); break;
 			case ShaderInstructionFormat::S2A4: s = operand_array_to_str(inst.src[2], 4); break;
-			case ShaderInstructionFormat::Attr: s = String::FromPrintf("attr%u.%u", inst.src[1].constant.u, inst.src[2].constant.u); break;
-			case ShaderInstructionFormat::Idxen: s = U"idxen"; break;
-			case ShaderInstructionFormat::Offen: s = U"offen"; break;
-			case ShaderInstructionFormat::Float1: s = U"format:float1"; break;
-			case ShaderInstructionFormat::Float4: s = U"format:float4"; break;
-			case ShaderInstructionFormat::Pos0: s = U"pos0"; break;
-			case ShaderInstructionFormat::Done: s = U"done"; break;
-			case ShaderInstructionFormat::Param0: s = U"param0"; break;
-			case ShaderInstructionFormat::Param1: s = U"param1"; break;
-			case ShaderInstructionFormat::Param2: s = U"param2"; break;
-			case ShaderInstructionFormat::Param3: s = U"param3"; break;
-			case ShaderInstructionFormat::Param4: s = U"param4"; break;
-			case ShaderInstructionFormat::Mrt0: s = U"mrt_color0"; break;
-			case ShaderInstructionFormat::Off: s = U"off"; break;
-			case ShaderInstructionFormat::Compr: s = U"compr"; break;
-			case ShaderInstructionFormat::Vm: s = U"vm"; break;
-			case ShaderInstructionFormat::L: s = String::FromPrintf("label_%04" PRIx32, inst.pc + 4 + inst.src[0].constant.i); break;
-			case ShaderInstructionFormat::Dmask1: s = U"dmask:0x1"; break;
-			case ShaderInstructionFormat::Dmask8: s = U"dmask:0x8"; break;
-			case ShaderInstructionFormat::Dmask3: s = U"dmask:0x3"; break;
-			case ShaderInstructionFormat::Dmask5: s = U"dmask:0x5"; break;
-			case ShaderInstructionFormat::Dmask7: s = U"dmask:0x7"; break;
-			case ShaderInstructionFormat::Dmask9: s = U"dmask:0x9"; break;
-			case ShaderInstructionFormat::DmaskF: s = U"dmask:0xf"; break;
-			case ShaderInstructionFormat::Gds: s = U"gds"; break;
+			case ShaderInstructionFormat::Attr: s = String8::FromPrintf("attr%u.%u", inst.src[1].constant.u, inst.src[2].constant.u); break;
+			case ShaderInstructionFormat::Idxen: s = "idxen"; break;
+			case ShaderInstructionFormat::Offen: s = "offen"; break;
+			case ShaderInstructionFormat::Float1: s = "format:float1"; break;
+			case ShaderInstructionFormat::Float4: s = "format:float4"; break;
+			case ShaderInstructionFormat::Pos0: s = "pos0"; break;
+			case ShaderInstructionFormat::Done: s = "done"; break;
+			case ShaderInstructionFormat::Param0: s = "param0"; break;
+			case ShaderInstructionFormat::Param1: s = "param1"; break;
+			case ShaderInstructionFormat::Param2: s = "param2"; break;
+			case ShaderInstructionFormat::Param3: s = "param3"; break;
+			case ShaderInstructionFormat::Param4: s = "param4"; break;
+			case ShaderInstructionFormat::Mrt0: s = "mrt_color0"; break;
+			case ShaderInstructionFormat::Prim: s = "prim"; break;
+			case ShaderInstructionFormat::Off: s = "off"; break;
+			case ShaderInstructionFormat::Compr: s = "compr"; break;
+			case ShaderInstructionFormat::Vm: s = "vm"; break;
+			case ShaderInstructionFormat::L: s = String8::FromPrintf("label_%04" PRIx32, inst.pc + 4 + inst.src[0].constant.i); break;
+			case ShaderInstructionFormat::Dmask1: s = "dmask:0x1"; break;
+			case ShaderInstructionFormat::Dmask8: s = "dmask:0x8"; break;
+			case ShaderInstructionFormat::Dmask3: s = "dmask:0x3"; break;
+			case ShaderInstructionFormat::Dmask5: s = "dmask:0x5"; break;
+			case ShaderInstructionFormat::Dmask7: s = "dmask:0x7"; break;
+			case ShaderInstructionFormat::Dmask9: s = "dmask:0x9"; break;
+			case ShaderInstructionFormat::DmaskF: s = "dmask:0xf"; break;
+			case ShaderInstructionFormat::Gds: s = "gds"; break;
 			default: EXIT("unknown code: %u\n", static_cast<uint32_t>(fu));
 		}
 		switch (fu)
@@ -337,7 +370,7 @@ static String dbg_fmt_print(const ShaderInstruction& inst)
 			case ShaderInstructionFormat::S3: src_num = std::max(src_num, 4); break;
 			default: break;
 		}
-		str = s + (str.IsEmpty() ? U"" : U", " + str);
+		str = s + (str.IsEmpty() ? "" : ", " + str);
 		f >>= 8u;
 	}
 	EXIT_IF(src_num != inst.src_num);
@@ -355,34 +388,38 @@ static String dbg_fmt_print(const ShaderInstruction& inst)
 	}
 	if (inst.dst.clamp)
 	{
-		str += U" clamp";
+		str += " clamp";
 	}
 	return str;
 }
 
-String ShaderCode::DbgInstructionToStr(const ShaderInstruction& inst)
+String8 ShaderCode::DbgInstructionToStr(const ShaderInstruction& inst)
 {
-	String ret;
+	String8 ret;
 
-	String name   = Core::EnumName(inst.type);
-	String format = dbg_fmt_to_str(inst);
+	String8 name   = Core::EnumName8(inst.type);
+	String8 format = dbg_fmt_to_str(inst);
 
-	ret += String::FromPrintf("%-20s [%-30s] ", name.C_Str(), format.C_Str());
+	ret += String8::FromPrintf("%-20s [%-30s] ", name.c_str(), format.c_str());
 	ret += dbg_fmt_print(inst);
 
 	return ret;
 }
 
-String ShaderCode::DbgDump() const
+String8 ShaderCode::DbgDump() const
 {
-	String ret;
+	String8 ret;
 	for (const auto& inst: m_instructions)
 	{
 		if (m_labels.Contains(inst.pc, [](auto label, auto pc) { return (!label.IsDisabled() && label.GetDst() == pc); }))
 		{
-			ret += String::FromPrintf("label_%04" PRIx32 ":\n", inst.pc);
+			ret += String8::FromPrintf("\nlabel_%04" PRIx32 ":\n", inst.pc);
 		}
-		ret += String::FromPrintf("  %s\n", DbgInstructionToStr(inst).C_Str());
+		if (m_indirect_labels.Contains(inst.pc, [](auto label, auto pc) { return (!label.IsDisabled() && label.GetDst() == pc); }))
+		{
+			ret += "\n";
+		}
+		ret += String8::FromPrintf("  %s\n", DbgInstructionToStr(inst).c_str());
 	}
 	return ret;
 }
@@ -494,1598 +531,6 @@ Vector<ShaderInstruction> ShaderCode::ReadIntructions(const ShaderControlFlowBlo
 	}
 
 	return ret;
-}
-
-// Vector<ShaderInstruction> ShaderCode::GetDiscardBlock(uint32_t pc) const
-//{
-//	Vector<ShaderInstruction> ret;
-//
-//	auto inst_count = m_instructions.Size();
-//	for (uint32_t index = 0; index < inst_count; index++)
-//	{
-//		const auto& inst = m_instructions.At(index);
-//		if (inst.pc == pc)
-//		{
-//			for (uint32_t i = index; i < inst_count; i++)
-//			{
-//				const auto& inst = m_instructions.At(i);
-//
-//				ret.Add(inst);
-//
-//				if (IsDiscardInstruction(i))
-//				{
-//					ret.Add(m_instructions.At(i + 1));
-//					break;
-//				}
-//			}
-//			break;
-//		}
-//	}
-//
-//	return ret;
-// }
-
-static ShaderOperand operand_parse(uint32_t code)
-{
-	ShaderOperand ret;
-
-	ret.size = 1;
-
-	if (code >= 0 && code <= 103)
-	{
-		ret.type        = ShaderOperandType::Sgpr;
-		ret.register_id = static_cast<int>(code);
-	} else if (code == 106)
-	{
-		ret.type = ShaderOperandType::VccLo;
-	} else if (code == 107)
-	{
-		ret.type = ShaderOperandType::VccHi;
-	} else if (code == 124)
-	{
-		ret.type = ShaderOperandType::M0;
-	} else if (code == 126)
-	{
-		ret.type = ShaderOperandType::ExecLo;
-	} else if (code == 127)
-	{
-		ret.type = ShaderOperandType::ExecHi;
-	} else if (code >= 128 && code <= 192)
-	{
-		ret.type       = ShaderOperandType::IntegerInlineConstant;
-		ret.constant.i = static_cast<int>(code) - 128;
-		ret.size       = 0;
-	} else if (code >= 193 && code <= 208)
-	{
-		ret.type       = ShaderOperandType::IntegerInlineConstant;
-		ret.constant.i = 192 - static_cast<int>(code);
-		ret.size       = 0;
-	} else if (code >= 240 && code <= 247)
-	{
-		static const float fv[] = {0.5f, -0.5f, 1.0f, -1.0f, 2.0f, -2.0f, 4.0f, -4.0f};
-		ret.type                = ShaderOperandType::FloatInlineConstant;
-		ret.constant.f          = fv[static_cast<int>(code) - 240];
-		ret.size                = 0;
-	} else if (code == 252)
-	{
-		ret.type = ShaderOperandType::ExecZ;
-	} else if (code == 255)
-	{
-		ret.type = ShaderOperandType::LiteralConstant;
-		ret.size = 0;
-	} else if (code >= 256)
-	{
-		ret.type        = ShaderOperandType::Vgpr;
-		ret.register_id = static_cast<int>(code) - 256;
-	} else
-	{
-		EXIT("unknown operand: %u\n", code);
-	}
-
-	return ret;
-}
-
-KYTY_SHADER_PARSER(shader_parse_sopc)
-{
-	EXIT_IF(dst == nullptr);
-	EXIT_IF(src == nullptr);
-	EXIT_IF(buffer == nullptr || buffer < src);
-
-	uint32_t ssrc1  = (buffer[0] >> 8u) & 0xffu;
-	uint32_t ssrc0  = (buffer[0] >> 0u) & 0xffu;
-	uint32_t opcode = (buffer[0] >> 16u) & 0x7fu;
-
-	ShaderInstruction inst;
-	inst.pc      = pc;
-	inst.src[0]  = operand_parse(ssrc0);
-	inst.src[1]  = operand_parse(ssrc1);
-	inst.src_num = 2;
-
-	uint32_t size = 1;
-
-	if (inst.src[0].type == ShaderOperandType::LiteralConstant)
-	{
-		inst.src[0].constant.u = buffer[size];
-		size++;
-	}
-
-	if (inst.src[1].type == ShaderOperandType::LiteralConstant)
-	{
-		inst.src[1].constant.u = buffer[size];
-		size++;
-	}
-
-	inst.format = ShaderInstructionFormat::Ssrc0Ssrc1;
-
-	switch (opcode)
-	{
-		case 0x00: inst.type = ShaderInstructionType::SCmpEqI32; break;
-		case 0x01: inst.type = ShaderInstructionType::SCmpLgI32; break;
-		case 0x02: inst.type = ShaderInstructionType::SCmpGtI32; break;
-		case 0x03: inst.type = ShaderInstructionType::SCmpGeI32; break;
-		case 0x04: inst.type = ShaderInstructionType::SCmpLtI32; break;
-		case 0x05: inst.type = ShaderInstructionType::SCmpLeI32; break;
-		case 0x06: inst.type = ShaderInstructionType::SCmpEqU32; break;
-		case 0x07: inst.type = ShaderInstructionType::SCmpLgU32; break;
-		case 0x08: inst.type = ShaderInstructionType::SCmpGtU32; break;
-		case 0x09: inst.type = ShaderInstructionType::SCmpGeU32; break;
-		case 0x0a: inst.type = ShaderInstructionType::SCmpLtU32; break;
-		case 0x0b: inst.type = ShaderInstructionType::SCmpLeU32; break;
-
-		default:
-			printf("%s", dst->DbgDump().C_Str());
-			EXIT("unknown sopc opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 " (hash0 = 0x%08" PRIx32 ")\n", opcode, pc, dst->GetHash0());
-	}
-
-	dst->GetInstructions().Add(inst);
-
-	return size;
-}
-
-KYTY_SHADER_PARSER(shader_parse_sopk)
-{
-	EXIT_IF(dst == nullptr);
-	EXIT_IF(src == nullptr);
-	EXIT_IF(buffer == nullptr || buffer < src);
-
-	uint32_t opcode = (buffer[0] >> 23u) & 0x1fu;
-	auto     imm    = static_cast<int16_t>(buffer[0] >> 0u & 0xffffu);
-	uint32_t sdst   = (buffer[0] >> 16u) & 0x7fu;
-
-	ShaderInstruction inst;
-	inst.pc  = pc;
-	inst.dst = operand_parse(sdst);
-
-	switch (opcode) // NOLINT
-	{
-		case 0x00:
-			inst.type              = ShaderInstructionType::SMovkI32;
-			inst.format            = ShaderInstructionFormat::SVdstSVsrc0;
-			inst.src[0].type       = ShaderOperandType::IntegerInlineConstant;
-			inst.src[0].constant.i = imm;
-			inst.src_num           = 1;
-			break;
-		default:
-			printf("%s", dst->DbgDump().C_Str());
-			EXIT("unknown sopk opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 " (hash0 = 0x%08" PRIx32 ")\n", opcode, pc, dst->GetHash0());
-	}
-
-	dst->GetInstructions().Add(inst);
-
-	return 1;
-}
-
-KYTY_SHADER_PARSER(shader_parse_sopp)
-{
-	EXIT_IF(dst == nullptr);
-	EXIT_IF(src == nullptr);
-	EXIT_IF(buffer == nullptr || buffer < src);
-
-	uint32_t opcode = (buffer[0] >> 16u) & 0x7fu;
-	uint32_t simm   = (buffer[0] >> 0u) & 0xffffu;
-
-	ShaderInstruction inst;
-	inst.pc = pc;
-
-	inst.format            = ShaderInstructionFormat::Label;
-	inst.src[0].type       = ShaderOperandType::LiteralConstant;
-	inst.src[0].constant.i = static_cast<int16_t>(simm) * 4;
-	inst.src_num           = 1;
-
-	switch (opcode)
-	{
-		case 0x01:
-			inst.type    = ShaderInstructionType::SEndpgm;
-			inst.format  = ShaderInstructionFormat::Empty;
-			inst.src_num = 0;
-			break;
-		case 0x02: inst.type = ShaderInstructionType::SBranch; break;
-		case 0x04: inst.type = ShaderInstructionType::SCbranchScc0; break;
-		case 0x05: inst.type = ShaderInstructionType::SCbranchScc1; break;
-		case 0x06: inst.type = ShaderInstructionType::SCbranchVccz; break;
-		case 0x07: inst.type = ShaderInstructionType::SCbranchVccnz; break;
-		case 0x08: inst.type = ShaderInstructionType::SCbranchExecz; break;
-		case 0x0c:
-			inst.type              = ShaderInstructionType::SWaitcnt;
-			inst.format            = ShaderInstructionFormat::Imm;
-			inst.src[0].type       = ShaderOperandType::LiteralConstant;
-			inst.src[0].constant.u = simm;
-			inst.src_num           = 1;
-			break;
-		default:
-			printf("%s", dst->DbgDump().C_Str());
-			EXIT("unknown sopp opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 " (hash0 = 0x%08" PRIx32 ")\n", opcode, pc, dst->GetHash0());
-	}
-
-	dst->GetInstructions().Add(inst);
-
-	if (inst.type == ShaderInstructionType::SCbranchScc0 || inst.type == ShaderInstructionType::SCbranchScc1 ||
-	    inst.type == ShaderInstructionType::SCbranchVccz || inst.type == ShaderInstructionType::SCbranchVccnz ||
-	    inst.type == ShaderInstructionType::SCbranchExecz || inst.type == ShaderInstructionType::SBranch)
-	{
-		dst->GetLabels().Add(ShaderLabel(inst));
-	}
-
-	return 1;
-}
-
-KYTY_SHADER_PARSER(shader_parse_sop1)
-{
-	EXIT_IF(dst == nullptr);
-	EXIT_IF(src == nullptr);
-	EXIT_IF(buffer == nullptr || buffer < src);
-
-	uint32_t opcode = (buffer[0] >> 8u) & 0xffu;
-	uint32_t ssrc0  = (buffer[0] >> 0u) & 0xffu;
-	uint32_t sdst   = (buffer[0] >> 16u) & 0x7fu;
-
-	ShaderInstruction inst;
-	inst.pc      = pc;
-	inst.src[0]  = operand_parse(ssrc0);
-	inst.src_num = 1;
-	inst.dst     = operand_parse(sdst);
-
-	uint32_t size = 1;
-
-	if (inst.src[0].type == ShaderOperandType::LiteralConstant)
-	{
-		inst.src[0].constant.u = buffer[size];
-		size++;
-	}
-
-	switch (opcode)
-	{
-		case 0x03:
-			inst.type   = ShaderInstructionType::SMovB32;
-			inst.format = ShaderInstructionFormat::SVdstSVsrc0;
-			break;
-		case 0x04:
-			inst.type        = ShaderInstructionType::SMovB64;
-			inst.format      = ShaderInstructionFormat::Sdst2Ssrc02;
-			inst.dst.size    = 2;
-			inst.src[0].size = 2;
-			break;
-		case 0x0a:
-			inst.type        = ShaderInstructionType::SWqmB64;
-			inst.format      = ShaderInstructionFormat::Sdst2Ssrc02;
-			inst.dst.size    = 2;
-			inst.src[0].size = 2;
-			break;
-		case 0x20:
-			inst.type        = ShaderInstructionType::SSetpcB64;
-			inst.format      = ShaderInstructionFormat::Saddr;
-			inst.src[0].size = 2;
-			break;
-		case 0x21:
-			inst.type        = ShaderInstructionType::SSwappcB64;
-			inst.format      = ShaderInstructionFormat::Sdst2Ssrc02;
-			inst.src[0].size = 2;
-			inst.dst.size    = 2;
-			break;
-		case 0x24:
-			inst.type        = ShaderInstructionType::SAndSaveexecB64;
-			inst.format      = ShaderInstructionFormat::Sdst2Ssrc02;
-			inst.dst.size    = 2;
-			inst.src[0].size = 2;
-			break;
-		default: printf("%s", dst->DbgDump().C_Str()); EXIT("unknown sop1 opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 "\n", opcode, pc);
-	}
-
-	dst->GetInstructions().Add(inst);
-
-	return size;
-}
-
-KYTY_SHADER_PARSER(shader_parse_sop2)
-{
-	EXIT_IF(dst == nullptr);
-	EXIT_IF(src == nullptr);
-	EXIT_IF(buffer == nullptr || buffer < src);
-
-	uint32_t opcode = (buffer[0] >> 23u) & 0x7fu;
-
-	switch (opcode)
-	{
-		case 0x7d: return shader_parse_sop1(pc, src, buffer, dst); break;
-		case 0x7e: return shader_parse_sopc(pc, src, buffer, dst); break;
-		case 0x7f: return shader_parse_sopp(pc, src, buffer, dst); break;
-		default: break;
-	}
-
-	if (opcode >= 0x60)
-	{
-		return shader_parse_sopk(pc, src, buffer, dst);
-	}
-
-	uint32_t ssrc1 = (buffer[0] >> 8u) & 0xffu;
-	uint32_t ssrc0 = (buffer[0] >> 0u) & 0xffu;
-	uint32_t sdst  = (buffer[0] >> 16u) & 0x7fu;
-
-	ShaderInstruction inst;
-	inst.pc      = pc;
-	inst.src[0]  = operand_parse(ssrc0);
-	inst.src[1]  = operand_parse(ssrc1);
-	inst.src_num = 2;
-	inst.dst     = operand_parse(sdst);
-
-	uint32_t size = 1;
-
-	if (inst.src[0].type == ShaderOperandType::LiteralConstant)
-	{
-		inst.src[0].constant.u = buffer[size];
-		size++;
-	}
-
-	if (inst.src[1].type == ShaderOperandType::LiteralConstant)
-	{
-		inst.src[1].constant.u = buffer[size];
-		size++;
-	}
-
-	inst.format = ShaderInstructionFormat::SVdstSVsrc0SVsrc1;
-
-	switch (opcode)
-	{
-		case 0x00: inst.type = ShaderInstructionType::SAddU32; break;
-		case 0x02: inst.type = ShaderInstructionType::SAddI32; break;
-		case 0x04: inst.type = ShaderInstructionType::SAddcU32; break;
-		case 0x0a: inst.type = ShaderInstructionType::SCselectB32; break;
-		case 0x0b:
-			inst.type        = ShaderInstructionType::SCselectB64;
-			inst.format      = ShaderInstructionFormat::Sdst2Ssrc02Ssrc12;
-			inst.dst.size    = 2;
-			inst.src[0].size = 2;
-			inst.src[1].size = 2;
-			break;
-		case 0x0e: inst.type = ShaderInstructionType::SAndB32; break;
-		case 0x0f:
-			inst.type        = ShaderInstructionType::SAndB64;
-			inst.format      = ShaderInstructionFormat::Sdst2Ssrc02Ssrc12;
-			inst.dst.size    = 2;
-			inst.src[0].size = 2;
-			inst.src[1].size = 2;
-			break;
-		case 0x11:
-			inst.type        = ShaderInstructionType::SOrB64;
-			inst.format      = ShaderInstructionFormat::Sdst2Ssrc02Ssrc12;
-			inst.dst.size    = 2;
-			inst.src[0].size = 2;
-			inst.src[1].size = 2;
-			break;
-		case 0x13:
-			inst.type        = ShaderInstructionType::SXorB64;
-			inst.format      = ShaderInstructionFormat::Sdst2Ssrc02Ssrc12;
-			inst.dst.size    = 2;
-			inst.src[0].size = 2;
-			inst.src[1].size = 2;
-			break;
-		case 0x15:
-			inst.type        = ShaderInstructionType::SAndn2B64;
-			inst.format      = ShaderInstructionFormat::Sdst2Ssrc02Ssrc12;
-			inst.dst.size    = 2;
-			inst.src[0].size = 2;
-			inst.src[1].size = 2;
-			break;
-		case 0x17:
-			inst.type        = ShaderInstructionType::SOrn2B64;
-			inst.format      = ShaderInstructionFormat::Sdst2Ssrc02Ssrc12;
-			inst.dst.size    = 2;
-			inst.src[0].size = 2;
-			inst.src[1].size = 2;
-			break;
-		case 0x19:
-			inst.type        = ShaderInstructionType::SNandB64;
-			inst.format      = ShaderInstructionFormat::Sdst2Ssrc02Ssrc12;
-			inst.dst.size    = 2;
-			inst.src[0].size = 2;
-			inst.src[1].size = 2;
-			break;
-		case 0x1b:
-			inst.type        = ShaderInstructionType::SNorB64;
-			inst.format      = ShaderInstructionFormat::Sdst2Ssrc02Ssrc12;
-			inst.dst.size    = 2;
-			inst.src[0].size = 2;
-			inst.src[1].size = 2;
-			break;
-		case 0x1d:
-			inst.type        = ShaderInstructionType::SXnorB64;
-			inst.format      = ShaderInstructionFormat::Sdst2Ssrc02Ssrc12;
-			inst.dst.size    = 2;
-			inst.src[0].size = 2;
-			inst.src[1].size = 2;
-			break;
-		case 0x1e: inst.type = ShaderInstructionType::SLshlB32; break;
-		case 0x20: inst.type = ShaderInstructionType::SLshrB32; break;
-		case 0x24: inst.type = ShaderInstructionType::SBfmB32; break;
-		case 0x26: inst.type = ShaderInstructionType::SMulI32; break;
-		default: printf("%s", dst->DbgDump().C_Str()); EXIT("unknown sop2 opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 "\n", opcode, pc);
-	}
-
-	dst->GetInstructions().Add(inst);
-
-	return size;
-}
-
-KYTY_SHADER_PARSER(shader_parse_vopc)
-{
-	EXIT_IF(dst == nullptr);
-	EXIT_IF(src == nullptr);
-	EXIT_IF(buffer == nullptr || buffer < src);
-
-	uint32_t opcode = (buffer[0] >> 17u) & 0xffu;
-	uint32_t src0   = (buffer[0] >> 0u) & 0x1ffu;
-	uint32_t vsrc1  = (buffer[0] >> 9u) & 0xffu;
-
-	ShaderInstruction inst;
-	inst.pc      = pc;
-	inst.src[0]  = operand_parse(src0);
-	inst.src[1]  = operand_parse(vsrc1 + 256);
-	inst.src_num = 2;
-
-	uint32_t size = 1;
-
-	if (inst.src[0].type == ShaderOperandType::LiteralConstant)
-	{
-		inst.src[0].constant.u = buffer[size];
-		size++;
-	}
-
-	inst.format   = ShaderInstructionFormat::SmaskVsrc0Vsrc1;
-	inst.dst.type = ShaderOperandType::VccLo;
-	inst.dst.size = 2;
-
-	switch (opcode)
-	{
-		case 0x00: inst.type = ShaderInstructionType::VCmpFF32; break;
-		case 0x01: inst.type = ShaderInstructionType::VCmpLtF32; break;
-		case 0x02: inst.type = ShaderInstructionType::VCmpEqF32; break;
-		case 0x03: inst.type = ShaderInstructionType::VCmpLeF32; break;
-		case 0x04: inst.type = ShaderInstructionType::VCmpGtF32; break;
-		case 0x05: inst.type = ShaderInstructionType::VCmpLgF32; break;
-		case 0x06: inst.type = ShaderInstructionType::VCmpGeF32; break;
-		case 0x07: inst.type = ShaderInstructionType::VCmpOF32; break;
-		case 0x08: inst.type = ShaderInstructionType::VCmpUF32; break;
-		case 0x09: inst.type = ShaderInstructionType::VCmpNgeF32; break;
-		case 0x0a: inst.type = ShaderInstructionType::VCmpNlgF32; break;
-		case 0x0b: inst.type = ShaderInstructionType::VCmpNgtF32; break;
-		case 0x0c: inst.type = ShaderInstructionType::VCmpNleF32; break;
-		case 0x0d: inst.type = ShaderInstructionType::VCmpNeqF32; break;
-		case 0x0e: inst.type = ShaderInstructionType::VCmpNltF32; break;
-		case 0x0f: inst.type = ShaderInstructionType::VCmpTruF32; break;
-		case 0x11: inst.type = ShaderInstructionType::VCmpxLtF32; break;
-		case 0x14: inst.type = ShaderInstructionType::VCmpxGtF32; break;
-		case 0x1d: inst.type = ShaderInstructionType::VCmpxNeqF32; break;
-		case 0x80: inst.type = ShaderInstructionType::VCmpFI32; break;
-		case 0x81: inst.type = ShaderInstructionType::VCmpLtI32; break;
-		case 0x82: inst.type = ShaderInstructionType::VCmpEqI32; break;
-		case 0x83: inst.type = ShaderInstructionType::VCmpLeI32; break;
-		case 0x84: inst.type = ShaderInstructionType::VCmpGtI32; break;
-		case 0x85: inst.type = ShaderInstructionType::VCmpNeI32; break;
-		case 0x86: inst.type = ShaderInstructionType::VCmpGeI32; break;
-		case 0x87: inst.type = ShaderInstructionType::VCmpTI32; break;
-		case 0xc0: inst.type = ShaderInstructionType::VCmpFU32; break;
-		case 0xc1: inst.type = ShaderInstructionType::VCmpLtU32; break;
-		case 0xc2: inst.type = ShaderInstructionType::VCmpEqU32; break;
-		case 0xc3: inst.type = ShaderInstructionType::VCmpLeU32; break;
-		case 0xc4: inst.type = ShaderInstructionType::VCmpGtU32; break;
-		case 0xc5: inst.type = ShaderInstructionType::VCmpNeU32; break;
-		case 0xc6: inst.type = ShaderInstructionType::VCmpGeU32; break;
-		case 0xc7: inst.type = ShaderInstructionType::VCmpTU32; break;
-		case 0xd2: inst.type = ShaderInstructionType::VCmpxEqU32; break;
-		case 0xd4: inst.type = ShaderInstructionType::VCmpxGtU32; break;
-		case 0xd5: inst.type = ShaderInstructionType::VCmpxNeU32; break;
-		case 0xd6: inst.type = ShaderInstructionType::VCmpxGeU32; break;
-		default:
-			printf("%s", dst->DbgDump().C_Str());
-			EXIT("unknown vopc opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 " (hash0 = 0x%08" PRIx32 ")\n", opcode, pc, dst->GetHash0());
-	}
-
-	dst->GetInstructions().Add(inst);
-
-	return size;
-}
-
-KYTY_SHADER_PARSER(shader_parse_vop1)
-{
-	EXIT_IF(dst == nullptr);
-	EXIT_IF(src == nullptr);
-	EXIT_IF(buffer == nullptr || buffer < src);
-
-	uint32_t vdst   = (buffer[0] >> 17u) & 0xffu;
-	uint32_t src0   = (buffer[0] >> 0u) & 0x1ffu;
-	uint32_t opcode = (buffer[0] >> 9u) & 0xffu;
-
-	ShaderInstruction inst;
-	inst.pc      = pc;
-	inst.src[0]  = operand_parse(src0);
-	inst.dst     = operand_parse(vdst + 256);
-	inst.src_num = 1;
-
-	uint32_t size = 1;
-
-	if (inst.src[0].type == ShaderOperandType::LiteralConstant)
-	{
-		inst.src[0].constant.u = buffer[size];
-		size++;
-	}
-
-	inst.format = ShaderInstructionFormat::SVdstSVsrc0;
-
-	switch (opcode)
-	{
-		case 0x01: inst.type = ShaderInstructionType::VMovB32; break;
-		case 0x05: inst.type = ShaderInstructionType::VCvtF32I32; break;
-		case 0x06: inst.type = ShaderInstructionType::VCvtF32U32; break;
-		case 0x07: inst.type = ShaderInstructionType::VCvtU32F32; break;
-		case 0x0b: inst.type = ShaderInstructionType::VCvtF32F16; break;
-		case 0x11: inst.type = ShaderInstructionType::VCvtF32Ubyte0; break;
-		case 0x12: inst.type = ShaderInstructionType::VCvtF32Ubyte1; break;
-		case 0x13: inst.type = ShaderInstructionType::VCvtF32Ubyte2; break;
-		case 0x14: inst.type = ShaderInstructionType::VCvtF32Ubyte3; break;
-		case 0x20: inst.type = ShaderInstructionType::VFractF32; break;
-		case 0x21: inst.type = ShaderInstructionType::VTruncF32; break;
-		case 0x22: inst.type = ShaderInstructionType::VCeilF32; break;
-		case 0x23: inst.type = ShaderInstructionType::VRndneF32; break;
-		case 0x24: inst.type = ShaderInstructionType::VFloorF32; break;
-		case 0x25: inst.type = ShaderInstructionType::VExpF32; break;
-		case 0x27: inst.type = ShaderInstructionType::VLogF32; break;
-		case 0x2a: inst.type = ShaderInstructionType::VRcpF32; break;
-		case 0x2e: inst.type = ShaderInstructionType::VRsqF32; break;
-		case 0x33: inst.type = ShaderInstructionType::VSqrtF32; break;
-		case 0x35: inst.type = ShaderInstructionType::VSinF32; break;
-		case 0x36: inst.type = ShaderInstructionType::VCosF32; break;
-		case 0x37: inst.type = ShaderInstructionType::VNotB32; break;
-		case 0x38: inst.type = ShaderInstructionType::VBfrevB32; break;
-		default:
-			printf("%s", dst->DbgDump().C_Str());
-			EXIT("unknown vop1 opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 " (hash0 = 0x%08" PRIx32 ")\n", opcode, pc, dst->GetHash0());
-	}
-
-	dst->GetInstructions().Add(inst);
-
-	return size;
-}
-
-KYTY_SHADER_PARSER(shader_parse_vop2)
-{
-	EXIT_IF(dst == nullptr);
-	EXIT_IF(src == nullptr);
-	EXIT_IF(buffer == nullptr || buffer < src);
-
-	uint32_t opcode = (buffer[0] >> 25u) & 0x3fu;
-	uint32_t vdst   = (buffer[0] >> 17u) & 0xffu;
-	uint32_t src0   = (buffer[0] >> 0u) & 0x1ffu;
-	uint32_t vsrc1  = (buffer[0] >> 9u) & 0xffu;
-
-	ShaderInstruction inst;
-	inst.pc      = pc;
-	inst.src[0]  = operand_parse(src0);
-	inst.src[1]  = operand_parse(vsrc1 + 256);
-	inst.dst     = operand_parse(vdst + 256);
-	inst.src_num = 2;
-
-	uint32_t size = 1;
-
-	if (inst.src[0].type == ShaderOperandType::LiteralConstant)
-	{
-		inst.src[0].constant.u = buffer[size];
-		size++;
-	}
-
-	inst.format = ShaderInstructionFormat::SVdstSVsrc0SVsrc1;
-
-	switch (opcode)
-	{
-		case 0x00:
-			inst.type        = ShaderInstructionType::VCndmaskB32;
-			inst.format      = ShaderInstructionFormat::VdstVsrc0Vsrc1Smask2;
-			inst.src[2].type = ShaderOperandType::VccLo;
-			inst.src[2].size = 2;
-			inst.src_num     = 3;
-			break;
-		case 0x03: inst.type = ShaderInstructionType::VAddF32; break;
-		case 0x04: inst.type = ShaderInstructionType::VSubF32; break;
-		case 0x05: inst.type = ShaderInstructionType::VSubrevF32; break;
-		case 0x08: inst.type = ShaderInstructionType::VMulF32; break;
-		case 0x0b: inst.type = ShaderInstructionType::VMulU32U24; break;
-		case 0x0f: inst.type = ShaderInstructionType::VMinF32; break;
-		case 0x10: inst.type = ShaderInstructionType::VMaxF32; break;
-		case 0x15: inst.type = ShaderInstructionType::VLshrB32; break;
-		case 0x16: inst.type = ShaderInstructionType::VLshrrevB32; break;
-		case 0x17: inst.type = ShaderInstructionType::VAshrI32; break;
-		case 0x18: inst.type = ShaderInstructionType::VAshrrevI32; break;
-		case 0x19: inst.type = ShaderInstructionType::VLshlB32; break;
-		case 0x1a: inst.type = ShaderInstructionType::VLshlrevB32; break;
-		case 0x1b: inst.type = ShaderInstructionType::VAndB32; break;
-		case 0x1c: inst.type = ShaderInstructionType::VOrB32; break;
-		case 0x1d: inst.type = ShaderInstructionType::VXorB32; break;
-		case 0x1e: inst.type = ShaderInstructionType::VBfmB32; break;
-		case 0x1f: inst.type = ShaderInstructionType::VMacF32; break;
-		case 0x20:
-			inst.type              = ShaderInstructionType::VMadmkF32;
-			inst.format            = ShaderInstructionFormat::VdstVsrc0Vsrc1Vsrc2;
-			inst.src_num           = 3;
-			inst.src[2]            = inst.src[1];
-			inst.src[1].type       = ShaderOperandType::LiteralConstant;
-			inst.src[1].constant.u = buffer[size];
-			inst.src[1].size       = 0;
-			size++;
-			break;
-		case 0x21:
-			inst.type              = ShaderInstructionType::VMadakF32;
-			inst.format            = ShaderInstructionFormat::VdstVsrc0Vsrc1Vsrc2;
-			inst.src_num           = 3;
-			inst.src[2].type       = ShaderOperandType::LiteralConstant;
-			inst.src[2].constant.u = buffer[size];
-			inst.src[2].size       = 0;
-			size++;
-			break;
-		case 0x22: inst.type = ShaderInstructionType::VBcntU32B32; break;
-		case 0x23: inst.type = ShaderInstructionType::VMbcntLoU32B32; break;
-		case 0x24: inst.type = ShaderInstructionType::VMbcntHiU32B32; break;
-		case 0x25:
-			inst.type      = ShaderInstructionType::VAddI32;
-			inst.format    = ShaderInstructionFormat::VdstSdst2Vsrc0Vsrc1;
-			inst.dst2.type = ShaderOperandType::VccLo;
-			inst.dst2.size = 2;
-			break;
-		case 0x26:
-			inst.type      = ShaderInstructionType::VSubI32;
-			inst.format    = ShaderInstructionFormat::VdstSdst2Vsrc0Vsrc1;
-			inst.dst2.type = ShaderOperandType::VccLo;
-			inst.dst2.size = 2;
-			break;
-		case 0x27:
-			inst.type      = ShaderInstructionType::VSubrevI32;
-			inst.format    = ShaderInstructionFormat::VdstSdst2Vsrc0Vsrc1;
-			inst.dst2.type = ShaderOperandType::VccLo;
-			inst.dst2.size = 2;
-			break;
-		case 0x2f: inst.type = ShaderInstructionType::VCvtPkrtzF16F32; break;
-		case 0x3e: return shader_parse_vopc(pc, src, buffer, dst); break;
-		case 0x3f: return shader_parse_vop1(pc, src, buffer, dst); break;
-		default: printf("%s", dst->DbgDump().C_Str()); EXIT("unknown vop2 opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 "\n", opcode, pc);
-	}
-
-	dst->GetInstructions().Add(inst);
-
-	return size;
-}
-
-KYTY_SHADER_PARSER(shader_parse_vop3)
-{
-	EXIT_IF(dst == nullptr);
-	EXIT_IF(src == nullptr);
-	EXIT_IF(buffer == nullptr || buffer < src);
-
-	uint32_t opcode = (buffer[0] >> 17u) & 0x1ffu;
-	uint32_t clamp  = (buffer[0] >> 11u) & 0x1u;
-	uint32_t abs    = (buffer[0] >> 8u) & 0x7u;
-	uint32_t vdst   = (buffer[0] >> 0u) & 0xffu;
-	uint32_t sdst   = (buffer[0] >> 8u) & 0x7fu;
-	uint32_t neg    = (buffer[1] >> 29u) & 0x7u;
-	uint32_t omod   = (buffer[1] >> 27u) & 0x3u;
-	uint32_t src0   = (buffer[1] >> 0u) & 0x1ffu;
-	uint32_t src1   = (buffer[1] >> 9u) & 0x1ffu;
-	uint32_t src2   = (buffer[1] >> 18u) & 0x1ffu;
-
-	// EXIT_NOT_IMPLEMENTED(abs != 0);
-	// EXIT_NOT_IMPLEMENTED(sdst != 0);
-
-	ShaderInstruction inst;
-	inst.pc      = pc;
-	inst.src[0]  = operand_parse(src0);
-	inst.src[1]  = operand_parse(src1);
-	inst.src[2]  = operand_parse(src2);
-	inst.src_num = 3;
-	inst.dst     = operand_parse(vdst + 256);
-
-	switch (omod)
-	{
-		case 0: inst.dst.multiplier = 1.0f; break;
-		case 1: inst.dst.multiplier = 2.0f; break;
-		case 2: inst.dst.multiplier = 4.0f; break;
-		case 3: inst.dst.multiplier = 0.5f; break;
-		default: break;
-	}
-
-	if ((neg & 0x1u) != 0)
-	{
-		inst.src[0].negate = true;
-	}
-	if ((neg & 0x2u) != 0)
-	{
-		inst.src[1].negate = true;
-	}
-	if ((neg & 0x4u) != 0)
-	{
-		inst.src[2].negate = true;
-	}
-
-	uint32_t size = 2;
-
-	if (inst.src[0].type == ShaderOperandType::LiteralConstant)
-	{
-		inst.src[0].constant.u = buffer[size];
-		size++;
-	}
-
-	if (inst.src[1].type == ShaderOperandType::LiteralConstant)
-	{
-		inst.src[1].constant.u = buffer[size];
-		size++;
-	}
-
-	if (inst.src[2].type == ShaderOperandType::LiteralConstant)
-	{
-		inst.src[2].constant.u = buffer[size];
-		size++;
-	}
-
-	inst.format = ShaderInstructionFormat::VdstVsrc0Vsrc1Vsrc2;
-
-	if (opcode >= 0 && opcode <= 0xff)
-	{
-		/* VOPC using VOP3 encoding */
-		inst.format   = ShaderInstructionFormat::SmaskVsrc0Vsrc1;
-		inst.src_num  = 2;
-		inst.dst      = operand_parse(vdst);
-		inst.dst.size = 2;
-	}
-
-	if (opcode >= 0x100 && opcode <= 0x13d)
-	{
-		/* VOP2 using VOP3 encoding */
-		inst.format  = ShaderInstructionFormat::SVdstSVsrc0SVsrc1;
-		inst.src_num = 2;
-	}
-
-	if (opcode >= 0x180 && opcode <= 0x1e8)
-	{
-		/* VOP1 using VOP3 encoding */
-		inst.format  = ShaderInstructionFormat::SVdstSVsrc0;
-		inst.src_num = 1;
-	}
-
-	switch (opcode)
-	{
-		/* VOPC using VOP3 encoding */
-		case 0x00: inst.type = ShaderInstructionType::VCmpFF32; break;
-		case 0x01: inst.type = ShaderInstructionType::VCmpLtF32; break;
-		case 0x02: inst.type = ShaderInstructionType::VCmpEqF32; break;
-		case 0x03: inst.type = ShaderInstructionType::VCmpLeF32; break;
-		case 0x04: inst.type = ShaderInstructionType::VCmpGtF32; break;
-		case 0x05: inst.type = ShaderInstructionType::VCmpLgF32; break;
-		case 0x06: inst.type = ShaderInstructionType::VCmpGeF32; break;
-		case 0x07: inst.type = ShaderInstructionType::VCmpOF32; break;
-		case 0x08: inst.type = ShaderInstructionType::VCmpUF32; break;
-		case 0x09: inst.type = ShaderInstructionType::VCmpNgeF32; break;
-		case 0x0a: inst.type = ShaderInstructionType::VCmpNlgF32; break;
-		case 0x0b: inst.type = ShaderInstructionType::VCmpNgtF32; break;
-		case 0x0c: inst.type = ShaderInstructionType::VCmpNleF32; break;
-		case 0x0d: inst.type = ShaderInstructionType::VCmpNeqF32; break;
-		case 0x0e: inst.type = ShaderInstructionType::VCmpNltF32; break;
-		case 0x0f: inst.type = ShaderInstructionType::VCmpTruF32; break;
-		case 0x1d: inst.type = ShaderInstructionType::VCmpxNeqF32; break;
-		case 0x80: inst.type = ShaderInstructionType::VCmpFI32; break;
-		case 0x81: inst.type = ShaderInstructionType::VCmpLtI32; break;
-		case 0x82: inst.type = ShaderInstructionType::VCmpEqI32; break;
-		case 0x83: inst.type = ShaderInstructionType::VCmpLeI32; break;
-		case 0x84: inst.type = ShaderInstructionType::VCmpGtI32; break;
-		case 0x85: inst.type = ShaderInstructionType::VCmpNeI32; break;
-		case 0x86: inst.type = ShaderInstructionType::VCmpGeI32; break;
-		case 0x87: inst.type = ShaderInstructionType::VCmpTI32; break;
-		case 0xc0: inst.type = ShaderInstructionType::VCmpFU32; break;
-		case 0xc1: inst.type = ShaderInstructionType::VCmpLtU32; break;
-		case 0xc2: inst.type = ShaderInstructionType::VCmpEqU32; break;
-		case 0xc3: inst.type = ShaderInstructionType::VCmpLeU32; break;
-		case 0xc4: inst.type = ShaderInstructionType::VCmpGtU32; break;
-		case 0xc5: inst.type = ShaderInstructionType::VCmpNeU32; break;
-		case 0xc6: inst.type = ShaderInstructionType::VCmpGeU32; break;
-		case 0xc7: inst.type = ShaderInstructionType::VCmpTU32; break;
-		case 0xd2: inst.type = ShaderInstructionType::VCmpxEqU32; break;
-		case 0xd4: inst.type = ShaderInstructionType::VCmpxGtU32; break;
-		case 0xd5: inst.type = ShaderInstructionType::VCmpxNeU32; break;
-		case 0xd6: inst.type = ShaderInstructionType::VCmpxGeU32; break;
-
-		/* VOP2 using VOP3 encoding */
-		case 0x100:
-			inst.type        = ShaderInstructionType::VCndmaskB32;
-			inst.format      = ShaderInstructionFormat::VdstVsrc0Vsrc1Smask2;
-			inst.src_num     = 3;
-			inst.src[2].size = 2;
-			break;
-		case 0x103: inst.type = ShaderInstructionType::VAddF32; break;
-		case 0x104: inst.type = ShaderInstructionType::VSubF32; break;
-		case 0x105: inst.type = ShaderInstructionType::VSubrevF32; break;
-		case 0x108: inst.type = ShaderInstructionType::VMulF32; break;
-		case 0x10b: inst.type = ShaderInstructionType::VMulU32U24; break;
-		case 0x10f: inst.type = ShaderInstructionType::VMinF32; break;
-		case 0x110: inst.type = ShaderInstructionType::VMaxF32; break;
-		case 0x115: inst.type = ShaderInstructionType::VLshrB32; break;
-		case 0x116: inst.type = ShaderInstructionType::VLshrrevB32; break;
-		case 0x117: inst.type = ShaderInstructionType::VAshrI32; break;
-		case 0x118: inst.type = ShaderInstructionType::VAshrrevI32; break;
-		case 0x119: inst.type = ShaderInstructionType::VLshlB32; break;
-		case 0x11a: inst.type = ShaderInstructionType::VLshlrevB32; break;
-		case 0x11b: inst.type = ShaderInstructionType::VAndB32; break;
-		case 0x11c: inst.type = ShaderInstructionType::VOrB32; break;
-		case 0x11d: inst.type = ShaderInstructionType::VXorB32; break;
-		case 0x11e: inst.type = ShaderInstructionType::VBfmB32; break;
-		case 0x11f: inst.type = ShaderInstructionType::VMacF32; break;
-		case 0x122: inst.type = ShaderInstructionType::VBcntU32B32; break;
-		case 0x123: inst.type = ShaderInstructionType::VMbcntLoU32B32; break;
-		case 0x124: inst.type = ShaderInstructionType::VMbcntHiU32B32; break;
-		case 0x125:
-			inst.type      = ShaderInstructionType::VAddI32;
-			inst.format    = ShaderInstructionFormat::VdstSdst2Vsrc0Vsrc1;
-			inst.dst2      = operand_parse(sdst);
-			inst.dst2.size = 2;
-			break;
-		case 0x126:
-			inst.type      = ShaderInstructionType::VSubI32;
-			inst.format    = ShaderInstructionFormat::VdstSdst2Vsrc0Vsrc1;
-			inst.dst2      = operand_parse(sdst);
-			inst.dst2.size = 2;
-			break;
-		case 0x127:
-			inst.type      = ShaderInstructionType::VSubrevI32;
-			inst.format    = ShaderInstructionFormat::VdstSdst2Vsrc0Vsrc1;
-			inst.dst2      = operand_parse(sdst);
-			inst.dst2.size = 2;
-			break;
-		case 0x12f: inst.type = ShaderInstructionType::VCvtPkrtzF16F32; break;
-
-		/* VOP3 instructions */
-		case 0x141: inst.type = ShaderInstructionType::VMadF32; break;
-		case 0x143: inst.type = ShaderInstructionType::VMadU32U24; break;
-		case 0x148: inst.type = ShaderInstructionType::VBfeU32; break;
-		case 0x14b: inst.type = ShaderInstructionType::VFmaF32; break;
-		case 0x151: inst.type = ShaderInstructionType::VMin3F32; break;
-		case 0x154: inst.type = ShaderInstructionType::VMax3F32; break;
-		case 0x157: inst.type = ShaderInstructionType::VMed3F32; break;
-		case 0x15d: inst.type = ShaderInstructionType::VSadU32; break;
-		case 0x169:
-			inst.type    = ShaderInstructionType::VMulLoU32;
-			inst.format  = ShaderInstructionFormat::SVdstSVsrc0SVsrc1;
-			inst.src_num = 2;
-			break;
-		case 0x16a:
-			inst.type    = ShaderInstructionType::VMulHiU32;
-			inst.format  = ShaderInstructionFormat::SVdstSVsrc0SVsrc1;
-			inst.src_num = 2;
-			break;
-		case 0x16b:
-			inst.type    = ShaderInstructionType::VMulLoI32;
-			inst.format  = ShaderInstructionFormat::SVdstSVsrc0SVsrc1;
-			inst.src_num = 2;
-			break;
-
-		/* VOP1 using VOP3 encoding */
-		case 0x1a0: inst.type = ShaderInstructionType::VFractF32; break;
-		case 0x1a1: inst.type = ShaderInstructionType::VTruncF32; break;
-		case 0x1a2: inst.type = ShaderInstructionType::VCeilF32; break;
-		case 0x1a3: inst.type = ShaderInstructionType::VRndneF32; break;
-		case 0x1a4: inst.type = ShaderInstructionType::VFloorF32; break;
-		case 0x1a5: inst.type = ShaderInstructionType::VExpF32; break;
-		case 0x1a7: inst.type = ShaderInstructionType::VLogF32; break;
-		case 0x1aa: inst.type = ShaderInstructionType::VRcpF32; break;
-		case 0x1ae: inst.type = ShaderInstructionType::VRsqF32; break;
-		case 0x1b3: inst.type = ShaderInstructionType::VSqrtF32; break;
-		case 0x1b5: inst.type = ShaderInstructionType::VSinF32; break;
-		case 0x1b6: inst.type = ShaderInstructionType::VCosF32; break;
-
-		default:
-			printf("%s", dst->DbgDump().C_Str());
-			EXIT("unknown vop3 opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 " (hash0 = 0x%08" PRIx32 ")\n", opcode, pc, dst->GetHash0());
-	}
-
-	if (inst.dst2.type == ShaderOperandType::Unknown)
-	{
-		if ((abs & 0x1u) != 0)
-		{
-			inst.src[0].absolute = true;
-		}
-		if ((abs & 0x2u) != 0)
-		{
-			inst.src[1].absolute = true;
-		}
-		if ((abs & 0x4u) != 0)
-		{
-			inst.src[2].absolute = true;
-		}
-
-		inst.dst.clamp = (clamp != 0);
-	}
-
-	dst->GetInstructions().Add(inst);
-
-	return size;
-}
-
-KYTY_SHADER_PARSER(shader_parse_exp)
-{
-	EXIT_IF(dst == nullptr);
-	EXIT_IF(src == nullptr);
-	EXIT_IF(buffer == nullptr || buffer < src);
-
-	uint32_t vm     = (buffer[0] >> 12u) & 0x1u;
-	uint32_t done   = (buffer[0] >> 11u) & 0x1u;
-	uint32_t compr  = (buffer[0] >> 10u) & 0x1u;
-	uint32_t target = (buffer[0] >> 4u) & 0x3fu;
-	uint32_t en     = (buffer[0] >> 0u) & 0xfu;
-
-	uint32_t vsrc0 = (buffer[1] >> 0u) & 0xffu;
-	uint32_t vsrc1 = (buffer[1] >> 8u) & 0xffu;
-	uint32_t vsrc2 = (buffer[1] >> 16u) & 0xffu;
-	uint32_t vsrc3 = (buffer[1] >> 24u) & 0xffu;
-
-	ShaderInstruction inst;
-	inst.pc      = pc;
-	inst.src[0]  = operand_parse(vsrc0 + 256);
-	inst.src[1]  = operand_parse(vsrc1 + 256);
-	inst.src[2]  = operand_parse(vsrc2 + 256);
-	inst.src[3]  = operand_parse(vsrc3 + 256);
-	inst.src_num = 4;
-
-	inst.type = ShaderInstructionType::Exp;
-
-	switch (target)
-	{
-		case 0x00:
-			if (done != 0 && compr != 0 && vm != 0 && en == 0x0)
-			{
-				inst.format  = ShaderInstructionFormat::Mrt0OffOffComprVmDone;
-				inst.src_num = 0;
-			} else if (done != 0 && compr != 0 && vm != 0 && en == 0xf)
-			{
-				inst.format  = ShaderInstructionFormat::Mrt0Vsrc0Vsrc1ComprVmDone;
-				inst.src_num = 2;
-			} else if (done != 0 && compr == 0 && vm != 0 && en == 0xf)
-			{
-				inst.format = ShaderInstructionFormat::Mrt0Vsrc0Vsrc1Vsrc2Vsrc3VmDone;
-			};
-			break;
-		case 0x0c:
-			if (done != 0 && en == 0xf)
-			{
-				inst.format = ShaderInstructionFormat::Pos0Vsrc0Vsrc1Vsrc2Vsrc3Done;
-			};
-			break;
-		default: break;
-	}
-
-	if (inst.format == ShaderInstructionFormat::Unknown && done == 0 && compr == 0 && vm == 0 && en == 0xf)
-	{
-		switch (target)
-		{
-			case 0x20: inst.format = ShaderInstructionFormat::Param0Vsrc0Vsrc1Vsrc2Vsrc3; break;
-			case 0x21: inst.format = ShaderInstructionFormat::Param1Vsrc0Vsrc1Vsrc2Vsrc3; break;
-			case 0x22: inst.format = ShaderInstructionFormat::Param2Vsrc0Vsrc1Vsrc2Vsrc3; break;
-			case 0x23: inst.format = ShaderInstructionFormat::Param3Vsrc0Vsrc1Vsrc2Vsrc3; break;
-			case 0x24: inst.format = ShaderInstructionFormat::Param4Vsrc0Vsrc1Vsrc2Vsrc3; break;
-			default: break;
-		}
-	}
-
-	if (inst.format == ShaderInstructionFormat::Unknown)
-	{
-		printf("%s", dst->DbgDump().C_Str());
-		EXIT("%s\n"
-		     "unknown exp target: 0x%02" PRIx32 " at addr 0x%08" PRIx32 " (hash0 = 0x%08" PRIx32 ")\n",
-		     dst->DbgDump().C_Str(), target, pc, dst->GetHash0());
-	}
-
-	dst->GetInstructions().Add(inst);
-
-	return 2;
-}
-
-KYTY_SHADER_PARSER(shader_parse_smrd)
-{
-	EXIT_IF(dst == nullptr);
-	EXIT_IF(src == nullptr);
-	EXIT_IF(buffer == nullptr || buffer < src);
-
-	uint32_t opcode = (buffer[0] >> 22u) & 0x1fu;
-	uint32_t sdst   = (buffer[0] >> 15u) & 0x7fu;
-	uint32_t sbase  = (buffer[0] >> 9u) & 0x3fu;
-	uint32_t imm    = (buffer[0] >> 8u) & 0x1u;
-	uint32_t offset = (buffer[0] >> 0u) & 0xffu;
-
-	ShaderInstruction inst;
-	inst.pc      = pc;
-	inst.dst     = operand_parse(sdst);
-	inst.src_num = 2;
-	inst.src[0]  = operand_parse(sbase * 2);
-
-	uint32_t size = 1;
-
-	if (imm == 1)
-	{
-		inst.src[1].type       = ShaderOperandType::LiteralConstant;
-		inst.src[1].constant.u = offset << 2u;
-	} else
-	{
-		inst.src[1] = operand_parse(offset);
-
-		if (inst.src[1].type == ShaderOperandType::LiteralConstant)
-		{
-			inst.src[1].constant.u = buffer[size];
-			size++;
-		}
-	}
-
-	switch (opcode)
-	{
-		case 0x02:
-			inst.type        = ShaderInstructionType::SLoadDwordx4;
-			inst.format      = ShaderInstructionFormat::Sdst4SbaseSoffset;
-			inst.src[0].size = 2;
-			inst.dst.size    = 4;
-			break;
-		case 0x03:
-			inst.type        = ShaderInstructionType::SLoadDwordx8;
-			inst.format      = ShaderInstructionFormat::Sdst8SbaseSoffset;
-			inst.src[0].size = 2;
-			inst.dst.size    = 8;
-			break;
-		case 0x08:
-			inst.type        = ShaderInstructionType::SBufferLoadDword;
-			inst.format      = ShaderInstructionFormat::SdstSvSoffset;
-			inst.src[0].size = 4;
-			break;
-		case 0x09:
-			inst.type        = ShaderInstructionType::SBufferLoadDwordx2;
-			inst.format      = ShaderInstructionFormat::Sdst2SvSoffset;
-			inst.src[0].size = 4;
-			inst.dst.size    = 2;
-			break;
-		case 0x0a:
-			inst.type        = ShaderInstructionType::SBufferLoadDwordx4;
-			inst.format      = ShaderInstructionFormat::Sdst4SvSoffset;
-			inst.src[0].size = 4;
-			inst.dst.size    = 4;
-			break;
-		case 0x0b:
-			inst.type        = ShaderInstructionType::SBufferLoadDwordx8;
-			inst.format      = ShaderInstructionFormat::Sdst8SvSoffset;
-			inst.src[0].size = 4;
-			inst.dst.size    = 8;
-			break;
-		case 0x0c:
-			inst.type        = ShaderInstructionType::SBufferLoadDwordx16;
-			inst.format      = ShaderInstructionFormat::Sdst16SvSoffset;
-			inst.src[0].size = 4;
-			inst.dst.size    = 16;
-			break;
-		default: printf("%s", dst->DbgDump().C_Str()); EXIT("unknown smrd opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 "\n", opcode, pc);
-	}
-
-	dst->GetInstructions().Add(inst);
-
-	return size;
-}
-
-KYTY_SHADER_PARSER(shader_parse_mubuf)
-{
-	EXIT_IF(dst == nullptr);
-	EXIT_IF(src == nullptr);
-	EXIT_IF(buffer == nullptr || buffer < src);
-
-	uint32_t opcode = (buffer[0] >> 18u) & 0x1fu;
-	uint32_t lds    = (buffer[0] >> 16u) & 0x1u;
-	uint32_t glc    = (buffer[0] >> 14u) & 0x1u;
-	uint32_t idxen  = (buffer[0] >> 13u) & 0x1u;
-	uint32_t offen  = (buffer[0] >> 12u) & 0x1u;
-	uint32_t offset = (buffer[0] >> 0u) & 0xfffu;
-
-	uint32_t soffset = (buffer[1] >> 24u) & 0xffu;
-	uint32_t tfe     = (buffer[1] >> 23u) & 0x1u;
-	uint32_t slc     = (buffer[1] >> 22u) & 0x1u;
-	uint32_t srsrc   = (buffer[1] >> 16u) & 0x1fu;
-	uint32_t vdata   = (buffer[1] >> 8u) & 0xffu;
-	uint32_t vaddr   = (buffer[1] >> 0u) & 0xffu;
-
-	EXIT_NOT_IMPLEMENTED(idxen == 0);
-	EXIT_NOT_IMPLEMENTED(offen == 1);
-	EXIT_NOT_IMPLEMENTED(offset != 0);
-	EXIT_NOT_IMPLEMENTED(glc == 1);
-	EXIT_NOT_IMPLEMENTED(slc == 1);
-	EXIT_NOT_IMPLEMENTED(lds == 1);
-	EXIT_NOT_IMPLEMENTED(tfe == 1);
-
-	uint32_t size = 2;
-
-	ShaderInstruction inst;
-	inst.pc      = pc;
-	inst.dst     = operand_parse(vdata + 256);
-	inst.src_num = 3;
-	inst.src[0]  = operand_parse(vaddr + 256);
-	inst.src[1]  = operand_parse(srsrc * 4);
-	inst.src[2]  = operand_parse(soffset);
-
-	if (inst.src[2].type == ShaderOperandType::LiteralConstant)
-	{
-		inst.src[2].constant.u = buffer[size];
-		size++;
-	}
-
-	switch (opcode)
-	{
-		case 0x00:
-			inst.type        = ShaderInstructionType::BufferLoadFormatX;
-			inst.format      = ShaderInstructionFormat::Vdata1VaddrSvSoffsIdxen;
-			inst.src[1].size = 4;
-			break;
-		case 0x01:
-			inst.type        = ShaderInstructionType::BufferLoadFormatXy;
-			inst.format      = ShaderInstructionFormat::Vdata2VaddrSvSoffsIdxen;
-			inst.src[1].size = 4;
-			inst.dst.size    = 2;
-			break;
-		case 0x02:
-			inst.type        = ShaderInstructionType::BufferLoadFormatXyz;
-			inst.format      = ShaderInstructionFormat::Vdata3VaddrSvSoffsIdxen;
-			inst.src[1].size = 4;
-			inst.dst.size    = 3;
-			break;
-		case 0x03:
-			inst.type        = ShaderInstructionType::BufferLoadFormatXyzw;
-			inst.format      = ShaderInstructionFormat::Vdata4VaddrSvSoffsIdxen;
-			inst.src[1].size = 4;
-			inst.dst.size    = 4;
-			break;
-		case 0x04:
-			inst.type        = ShaderInstructionType::BufferStoreFormatX;
-			inst.format      = ShaderInstructionFormat::Vdata1VaddrSvSoffsIdxen;
-			inst.src[1].size = 4;
-			break;
-		case 0x05:
-			inst.type        = ShaderInstructionType::BufferStoreFormatXy;
-			inst.format      = ShaderInstructionFormat::Vdata2VaddrSvSoffsIdxen;
-			inst.src[1].size = 4;
-			inst.dst.size    = 2;
-			break;
-		case 0x0c:
-			inst.type        = ShaderInstructionType::BufferLoadDword;
-			inst.format      = ShaderInstructionFormat::Vdata1VaddrSvSoffsIdxen;
-			inst.src[1].size = 4;
-			break;
-		case 0x1c:
-			inst.type        = ShaderInstructionType::BufferStoreDword;
-			inst.format      = ShaderInstructionFormat::Vdata1VaddrSvSoffsIdxen;
-			inst.src[1].size = 4;
-			break;
-		default: printf("%s", dst->DbgDump().C_Str()); EXIT("unknown mubuf opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 "\n", opcode, pc);
-	}
-
-	dst->GetInstructions().Add(inst);
-
-	return size;
-}
-
-KYTY_SHADER_PARSER(shader_parse_ds)
-{
-	EXIT_IF(dst == nullptr);
-	EXIT_IF(src == nullptr);
-	EXIT_IF(buffer == nullptr || buffer < src);
-
-	uint32_t opcode  = (buffer[0] >> 18u) & 0xffu;
-	uint32_t gds     = (buffer[0] >> 17u) & 0x1u;
-	uint32_t offset0 = (buffer[0] >> 0u) & 0xffu;
-	uint32_t offset1 = (buffer[0] >> 8u) & 0xffu;
-
-	uint32_t vdst  = (buffer[1] >> 24u) & 0xffu;
-	uint32_t data1 = (buffer[1] >> 16u) & 0xffu;
-	uint32_t data0 = (buffer[1] >> 8u) & 0xffu;
-	uint32_t addr  = (buffer[1] >> 0u) & 0xffu;
-
-	EXIT_NOT_IMPLEMENTED(addr != 0);
-	EXIT_NOT_IMPLEMENTED(data0 != 0);
-	EXIT_NOT_IMPLEMENTED(data1 != 0);
-	EXIT_NOT_IMPLEMENTED(offset0 != 0);
-	EXIT_NOT_IMPLEMENTED(offset1 != 0);
-	EXIT_NOT_IMPLEMENTED(gds == 0);
-
-	uint32_t size = 2;
-
-	ShaderInstruction inst;
-	inst.pc      = pc;
-	inst.dst     = operand_parse(vdst + 256);
-	inst.src_num = 0;
-
-	switch (opcode) // NOLINT
-	{
-		case 0x3d:
-			inst.type   = ShaderInstructionType::DsConsume;
-			inst.format = ShaderInstructionFormat::VdstGds;
-			break;
-		case 0x3e:
-			inst.type   = ShaderInstructionType::DsAppend;
-			inst.format = ShaderInstructionFormat::VdstGds;
-			break;
-		default: printf("%s", dst->DbgDump().C_Str()); EXIT("unknown ds opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 "\n", opcode, pc);
-	}
-
-	dst->GetInstructions().Add(inst);
-
-	return size;
-}
-
-KYTY_SHADER_PARSER(shader_parse_mimg)
-{
-	EXIT_IF(dst == nullptr);
-	EXIT_IF(src == nullptr);
-	EXIT_IF(buffer == nullptr || buffer < src);
-
-	uint32_t slc    = (buffer[0] >> 25u) & 0x1u;
-	uint32_t opcode = (buffer[0] >> 18u) & 0x7fu;
-	uint32_t lwe    = (buffer[0] >> 17u) & 0x1u;
-	uint32_t tff    = (buffer[0] >> 16u) & 0x1u;
-	uint32_t r128   = (buffer[0] >> 15u) & 0x1u;
-	uint32_t da     = (buffer[0] >> 14u) & 0x1u;
-	uint32_t glc    = (buffer[0] >> 13u) & 0x1u;
-	uint32_t unrm   = (buffer[0] >> 12u) & 0x1u;
-	uint32_t dmask  = (buffer[0] >> 8u) & 0xfu;
-
-	uint32_t ssamp = (buffer[1] >> 21u) & 0x1fu; // S#
-	uint32_t srsrc = (buffer[1] >> 16u) & 0x1fu; // T#
-	uint32_t vdata = (buffer[1] >> 8u) & 0xffu;
-	uint32_t vaddr = (buffer[1] >> 0u) & 0xffu;
-
-	EXIT_NOT_IMPLEMENTED(da == 1);
-	EXIT_NOT_IMPLEMENTED(r128 == 1);
-	EXIT_NOT_IMPLEMENTED(tff == 1);
-	EXIT_NOT_IMPLEMENTED(lwe == 1);
-	EXIT_NOT_IMPLEMENTED(glc == 1);
-	EXIT_NOT_IMPLEMENTED(slc == 1);
-	EXIT_NOT_IMPLEMENTED(unrm == 1);
-	// EXIT_NOT_IMPLEMENTED(dmask != 0xf && dmask != 0x7);
-
-	uint32_t size = 2;
-
-	ShaderInstruction inst;
-	inst.pc      = pc;
-	inst.dst     = operand_parse(vdata + 256);
-	inst.src_num = 3;
-	inst.src[0]  = operand_parse(vaddr + 256);
-	inst.src[1]  = operand_parse(srsrc * 4);
-	inst.src[2]  = operand_parse(ssamp * 4);
-
-	switch (opcode)
-	{
-		case 0x00:
-			inst.type        = ShaderInstructionType::ImageLoad;
-			inst.src[0].size = 3;
-			inst.src[1].size = 8;
-			inst.src_num     = 2;
-			if (dmask == 0xf)
-			{
-				inst.format   = ShaderInstructionFormat::Vdata4Vaddr3StDmaskF;
-				inst.dst.size = 4;
-			}
-			break;
-		case 0x08:
-			inst.type        = ShaderInstructionType::ImageStore;
-			inst.src[0].size = 3;
-			inst.src[1].size = 8;
-			inst.src_num     = 2;
-			if (dmask == 0xf)
-			{
-				inst.format   = ShaderInstructionFormat::Vdata4Vaddr3StDmaskF;
-				inst.dst.size = 4;
-			}
-			break;
-		case 0x09:
-			inst.type        = ShaderInstructionType::ImageStoreMip;
-			inst.src[0].size = 4;
-			inst.src[1].size = 8;
-			inst.src_num     = 2;
-			if (dmask == 0xf)
-			{
-				inst.format   = ShaderInstructionFormat::Vdata4Vaddr4StDmaskF;
-				inst.dst.size = 4;
-			}
-			break;
-		case 0x20:
-			inst.type        = ShaderInstructionType::ImageSample;
-			inst.src[0].size = 3;
-			inst.src[1].size = 8;
-			inst.src[2].size = 4;
-			switch (dmask)
-			{
-				case 0x1:
-				{
-					inst.format   = ShaderInstructionFormat::Vdata1Vaddr3StSsDmask1;
-					inst.dst.size = 1;
-					break;
-				}
-				case 0x3:
-				{
-					inst.format   = ShaderInstructionFormat::Vdata2Vaddr3StSsDmask3;
-					inst.dst.size = 2;
-					break;
-				}
-				case 0x5:
-				{
-					inst.format   = ShaderInstructionFormat::Vdata2Vaddr3StSsDmask5;
-					inst.dst.size = 2;
-					break;
-				}
-				case 0x7:
-				{
-					inst.format   = ShaderInstructionFormat::Vdata3Vaddr3StSsDmask7;
-					inst.dst.size = 3;
-					break;
-				}
-				case 0x8:
-				{
-					inst.format   = ShaderInstructionFormat::Vdata1Vaddr3StSsDmask8;
-					inst.dst.size = 1;
-					break;
-				}
-				case 0x9:
-				{
-					inst.format   = ShaderInstructionFormat::Vdata2Vaddr3StSsDmask9;
-					inst.dst.size = 2;
-					break;
-				}
-				case 0xf:
-				{
-					inst.format   = ShaderInstructionFormat::Vdata4Vaddr3StSsDmaskF;
-					inst.dst.size = 4;
-					break;
-				}
-				default:;
-			}
-			break;
-		case 0x27:
-			inst.type        = ShaderInstructionType::ImageSampleLz;
-			inst.src[0].size = 3;
-			inst.src[1].size = 8;
-			inst.src[2].size = 4;
-			switch (dmask) // NOLINT
-			{
-				case 0x7:
-				{
-					inst.format   = ShaderInstructionFormat::Vdata3Vaddr3StSsDmask7;
-					inst.dst.size = 3;
-					break;
-				}
-				default:;
-			}
-			break;
-		case 0x37:
-			inst.type        = ShaderInstructionType::ImageSampleLzO;
-			inst.src[0].size = 4;
-			inst.src[1].size = 8;
-			inst.src[2].size = 4;
-			switch (dmask) // NOLINT
-			{
-				case 0x7:
-				{
-					inst.format   = ShaderInstructionFormat::Vdata3Vaddr4StSsDmask7;
-					inst.dst.size = 3;
-					break;
-				}
-				default:;
-			}
-			break;
-		default: printf("%s", dst->DbgDump().C_Str()); EXIT("unknown mimg opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 "\n", opcode, pc);
-	}
-
-	if (inst.format == ShaderInstructionFormat::Unknown)
-	{
-		printf("%s", dst->DbgDump().C_Str());
-		EXIT("unknown mimg format for opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 ", dmask: 0x%" PRIx32 "\n", opcode, pc, dmask);
-	}
-
-	dst->GetInstructions().Add(inst);
-
-	return size;
-}
-
-KYTY_SHADER_PARSER(shader_parse_mtbuf)
-{
-	EXIT_IF(dst == nullptr);
-	EXIT_IF(src == nullptr);
-	EXIT_IF(buffer == nullptr || buffer < src);
-
-	uint32_t opcode = (buffer[0] >> 16u) & 0x7u;
-	uint32_t dfmt   = (buffer[0] >> 19u) & 0xfu;
-	uint32_t nfmt   = (buffer[0] >> 23u) & 0x7u;
-	uint32_t glc    = (buffer[0] >> 14u) & 0x1u;
-	uint32_t idxen  = (buffer[0] >> 13u) & 0x1u;
-	uint32_t offen  = (buffer[0] >> 12u) & 0x1u;
-	uint32_t offset = (buffer[0] >> 0u) & 0xfffu;
-
-	uint32_t soffset = (buffer[1] >> 24u) & 0xffu;
-	uint32_t tfe     = (buffer[1] >> 23u) & 0x1u;
-	uint32_t slc     = (buffer[1] >> 22u) & 0x1u;
-	uint32_t srsrc   = (buffer[1] >> 16u) & 0x1fu;
-	uint32_t vdata   = (buffer[1] >> 8u) & 0xffu;
-	uint32_t vaddr   = (buffer[1] >> 0u) & 0xffu;
-
-	EXIT_NOT_IMPLEMENTED(idxen == 0);
-	// EXIT_NOT_IMPLEMENTED(offen == 1);
-	EXIT_NOT_IMPLEMENTED(offset != 0);
-	EXIT_NOT_IMPLEMENTED(glc == 1);
-	EXIT_NOT_IMPLEMENTED(slc == 1);
-	EXIT_NOT_IMPLEMENTED(tfe == 1);
-	// EXIT_NOT_IMPLEMENTED(dfmt != 14);
-	// EXIT_NOT_IMPLEMENTED(nfmt != 7);
-
-	if ((dfmt != 14 && dfmt != 4) || nfmt != 7)
-	{
-		EXIT("unknown format: dfmt = %d, nfmt = %d at addr 0x%08" PRIx32 " (hash0 = 0x%08" PRIx32 ")\n", dfmt, nfmt, pc, dst->GetHash0());
-	}
-
-	uint32_t size = 2;
-
-	ShaderInstruction inst;
-	inst.pc      = pc;
-	inst.dst     = operand_parse(vdata + 256);
-	inst.src_num = 3;
-	inst.src[0]  = operand_parse(vaddr + 256);
-	inst.src[1]  = operand_parse(srsrc * 4);
-	inst.src[2]  = operand_parse(soffset);
-
-	if (inst.src[2].type == ShaderOperandType::LiteralConstant)
-	{
-		inst.src[2].constant.u = buffer[size];
-		size++;
-	}
-
-	inst.src[1].size = 4;
-
-	switch (opcode)
-	{
-		case 0x00:
-			inst.type   = ShaderInstructionType::TBufferLoadFormatX;
-			inst.format = ShaderInstructionFormat::Vdata1VaddrSvSoffsIdxenFloat1;
-			EXIT_NOT_IMPLEMENTED(offen == 1);
-			EXIT_NOT_IMPLEMENTED(!(dfmt == 4 && nfmt == 7));
-			break;
-
-		case 0x03:
-			inst.type   = ShaderInstructionType::TBufferLoadFormatXyzw;
-			inst.format = (offen == 1 ? ShaderInstructionFormat::Vdata4Vaddr2SvSoffsOffenIdxenFloat4
-			                          : ShaderInstructionFormat::Vdata4VaddrSvSoffsIdxenFloat4);
-			inst.src[0].size += static_cast<int>(offen);
-			inst.dst.size = 4;
-			EXIT_NOT_IMPLEMENTED(!(dfmt == 14 && nfmt == 7));
-			break;
-		default: printf("%s", dst->DbgDump().C_Str()); EXIT("unknown mtbuf opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 "\n", opcode, pc);
-	}
-
-	dst->GetInstructions().Add(inst);
-
-	return size;
-}
-
-KYTY_SHADER_PARSER(shader_parse_vintrp)
-{
-	EXIT_IF(dst == nullptr);
-	EXIT_IF(src == nullptr);
-	EXIT_IF(buffer == nullptr || buffer < src);
-
-	uint32_t opcode = (buffer[0] >> 16u) & 0x3u;
-	uint32_t vdst   = (buffer[0] >> 18u) & 0xffu;
-	uint32_t attr   = (buffer[0] >> 10u) & 0x3fu;
-	uint32_t chan   = (buffer[0] >> 8u) & 0x3u;
-	uint32_t vsrc   = (buffer[0] >> 0u) & 0xffu;
-
-	ShaderInstruction inst;
-	inst.pc                = pc;
-	inst.src[0]            = operand_parse(vsrc + 256);
-	inst.dst               = operand_parse(vdst + 256);
-	inst.src[1].type       = ShaderOperandType::IntegerInlineConstant;
-	inst.src[1].constant.u = attr;
-	inst.src[2].type       = ShaderOperandType::IntegerInlineConstant;
-	inst.src[2].constant.u = chan;
-	inst.src_num           = 3;
-
-	switch (opcode)
-	{
-		case 0x0:
-			inst.type   = ShaderInstructionType::VInterpP1F32;
-			inst.format = ShaderInstructionFormat::VdstVsrcAttrChan;
-			break;
-		case 0x1:
-			inst.type   = ShaderInstructionType::VInterpP2F32;
-			inst.format = ShaderInstructionFormat::VdstVsrcAttrChan;
-			break;
-		default: printf("%s", dst->DbgDump().C_Str()); EXIT("unknown vintrp opcode: 0x%02" PRIx32 " at addr 0x%08" PRIx32 "\n", opcode, pc);
-	}
-
-	dst->GetInstructions().Add(inst);
-
-	return 1;
-}
-
-KYTY_SHADER_PARSER(shader_parse)
-{
-	EXIT_IF(dst == nullptr);
-	EXIT_IF(src == nullptr);
-	EXIT_IF(buffer != nullptr);
-
-	auto type = dst->GetType();
-
-	dst->GetInstructions().Clear();
-	dst->GetLabels().Clear();
-
-	const auto* ptr = src + pc / 4;
-	for (;;)
-	{
-		auto instruction = ptr[0];
-		auto pc          = 4 * static_cast<uint32_t>(ptr - src);
-
-		if ((instruction & 0xF8000000u) == 0xC0000000)
-		{
-			ptr += shader_parse_smrd(pc, src, ptr, dst);
-		} else if ((instruction & 0xC0000000u) == 0x80000000)
-		{
-			ptr += shader_parse_sop2(pc, src, ptr, dst);
-		} else if ((instruction & 0xFC000000u) == 0xE0000000)
-		{
-			ptr += shader_parse_mubuf(pc, src, ptr, dst);
-		} else if ((instruction & 0xFC000000u) == 0xE8000000)
-		{
-			ptr += shader_parse_mtbuf(pc, src, ptr, dst);
-		} else if ((instruction & 0x80000000u) == 0x00000000)
-		{
-			ptr += shader_parse_vop2(pc, src, ptr, dst);
-		} else if ((instruction & 0xFC000000u) == 0xD0000000)
-		{
-			ptr += shader_parse_vop3(pc, src, ptr, dst);
-		} else if ((instruction & 0xFC000000u) == 0xF8000000)
-		{
-			ptr += shader_parse_exp(pc, src, ptr, dst);
-		} else if ((instruction & 0xFC000000u) == 0xC8000000)
-		{
-			ptr += shader_parse_vintrp(pc, src, ptr, dst);
-		} else if ((instruction & 0xFC000000u) == 0xF0000000)
-		{
-			ptr += shader_parse_mimg(pc, src, ptr, dst);
-		} else if ((instruction & 0xFC000000u) == 0xD8000000)
-		{
-			ptr += shader_parse_ds(pc, src, ptr, dst);
-		} else
-		{
-			printf("%s", dst->DbgDump().C_Str());
-			EXIT("unknown code 0x%08" PRIx32 " at addr 0x%08" PRIx32 "\n", ptr[0], pc);
-		}
-
-		if ((instruction == 0xBF810000 && (type == ShaderType::Vertex || type == ShaderType::Pixel || type == ShaderType::Compute) &&
-		     !dst->GetLabels().Contains(4 * static_cast<uint32_t>(ptr - src), [](auto label, auto pc) { return label.GetDst() == pc; })) ||
-		    (instruction == 0xBE802000 && type == ShaderType::Fetch))
-		{
-			break;
-		}
-	}
-
-	return ptr - src;
 }
 
 static void vs_print(const char* func, const HW::VertexShaderInfo& vs, const HW::ShaderRegisters& sh)
@@ -2272,11 +717,11 @@ static void vs_check(const HW::VertexShaderInfo& vs, const HW::ShaderRegisters& 
 		EXIT_NOT_IMPLEMENTED(vs.gs_regs.rsrc1.cu_group_enable != false);
 		EXIT_NOT_IMPLEMENTED(vs.gs_regs.rsrc1.require_forward_progress != false);
 		EXIT_NOT_IMPLEMENTED(vs.gs_regs.rsrc1.lds_configuration != false);
-		EXIT_NOT_IMPLEMENTED(vs.gs_regs.rsrc1.gs_vgpr_component_count != 0);
+		EXIT_NOT_IMPLEMENTED(vs.gs_regs.rsrc1.gs_vgpr_component_count != 3);
 		EXIT_NOT_IMPLEMENTED(vs.gs_regs.rsrc1.fp16_overflow != false);
 		EXIT_NOT_IMPLEMENTED(vs.gs_regs.rsrc2.scratch_en != false);
 		EXIT_NOT_IMPLEMENTED(vs.gs_regs.rsrc2.offchip_lds != false);
-		EXIT_NOT_IMPLEMENTED(vs.gs_regs.rsrc2.es_vgpr_component_count != 0);
+		EXIT_NOT_IMPLEMENTED(vs.gs_regs.rsrc2.es_vgpr_component_count != 3);
 		EXIT_NOT_IMPLEMENTED(vs.gs_regs.rsrc2.lds_size != 0);
 		EXIT_NOT_IMPLEMENTED(vs.gs_regs.rsrc2.shared_vgprs != 0);
 	}
@@ -2287,11 +732,11 @@ static void vs_check(const HW::VertexShaderInfo& vs, const HW::ShaderRegisters& 
 	EXIT_NOT_IMPLEMENTED(sh.m_spiShaderIdxFormat != 0x00000000 && sh.m_spiShaderIdxFormat != 0x00000001);
 	EXIT_NOT_IMPLEMENTED(sh.m_geNggSubgrpCntl != 0x00000000 && sh.m_geNggSubgrpCntl != 0x00000001);
 	EXIT_NOT_IMPLEMENTED(sh.m_vgtGsInstanceCnt != 0x00000000);
-	EXIT_NOT_IMPLEMENTED(sh.GetEsVertsPerSubgrp() != 0x00000000);
-	EXIT_NOT_IMPLEMENTED(sh.GetGsPrimsPerSubgrp() != 0x00000000);
-	EXIT_NOT_IMPLEMENTED(sh.GetGsInstPrimsInSubgrp() != 0x00000000);
-	EXIT_NOT_IMPLEMENTED(sh.m_geMaxOutputPerSubgroup != 0x00000000);
-	EXIT_NOT_IMPLEMENTED(sh.m_vgtEsgsRingItemsize != 0x00000000);
+	EXIT_NOT_IMPLEMENTED(sh.GetEsVertsPerSubgrp() != 0x00000000 && sh.GetEsVertsPerSubgrp() != 0x00000040);
+	EXIT_NOT_IMPLEMENTED(sh.GetGsPrimsPerSubgrp() != 0x00000000 && sh.GetGsPrimsPerSubgrp() != 0x00000040);
+	EXIT_NOT_IMPLEMENTED(sh.GetGsInstPrimsInSubgrp() != 0x00000000 && sh.GetGsInstPrimsInSubgrp() != 0x00000040);
+	EXIT_NOT_IMPLEMENTED(sh.m_geMaxOutputPerSubgroup != 0x00000000 && sh.m_geMaxOutputPerSubgroup != 0x00000040);
+	EXIT_NOT_IMPLEMENTED(sh.m_vgtEsgsRingItemsize != 0x00000000 && sh.m_vgtEsgsRingItemsize != 0x00000004);
 	EXIT_NOT_IMPLEMENTED(sh.m_vgtGsMaxVertOut != 0x00000000);
 	EXIT_NOT_IMPLEMENTED(sh.m_vgtGsOutPrimType != 0x00000000);
 }
@@ -2327,7 +772,7 @@ static void ps_check(const HW::PsStageRegisters& ps, const HW::ShaderRegisters& 
 	EXIT_NOT_IMPLEMENTED(sh.ps_input_ena != 0x00000002 && sh.ps_input_ena != 0x00000302);
 	EXIT_NOT_IMPLEMENTED(sh.ps_input_addr != 0x00000002 && sh.ps_input_addr != 0x00000302);
 	// EXIT_NOT_IMPLEMENTED(ps.m_spiPsInControl != 0x00000000);
-	EXIT_NOT_IMPLEMENTED(sh.baryc_cntl != 0x00000000);
+	EXIT_NOT_IMPLEMENTED(sh.baryc_cntl != 0x00000000 && sh.baryc_cntl != 0x01000000);
 	EXIT_NOT_IMPLEMENTED(sh.m_cbShaderMask != 0x0000000f);
 
 	EXIT_NOT_IMPLEMENTED(sh.db_shader_control.other_bits != 0x00000000);
@@ -2358,7 +803,7 @@ static void cs_check(const HW::CsStageRegisters& cs, const HW::ShaderRegisters& 
 	//	EXIT_NOT_IMPLEMENTED(cs.m_computeNumThreadZ != 0x00000001);
 }
 
-static bool SpirvDisassemble(const uint32_t* src_binary, size_t src_binary_size, String* dst_disassembly)
+static bool SpirvDisassemble(const uint32_t* src_binary, size_t src_binary_size, String8* dst_disassembly)
 {
 	if (dst_disassembly != nullptr)
 	{
@@ -2383,7 +828,7 @@ static bool SpirvDisassemble(const uint32_t* src_binary, size_t src_binary_size,
 	return true;
 }
 
-static bool SpirvToGlsl(const uint32_t* /*src_binary*/, size_t /*src_binary_size*/, String* /*dst_code*/)
+static bool SpirvToGlsl(const uint32_t* /*src_binary*/, size_t /*src_binary_size*/, String8* /*dst_code*/)
 {
 	//	if (dst_code != nullptr)
 	//	{
@@ -2396,7 +841,7 @@ static bool SpirvToGlsl(const uint32_t* /*src_binary*/, size_t /*src_binary_size
 	return true;
 }
 
-static bool SpirvRun(const String& src, Vector<uint32_t>* dst, String* err_msg)
+static bool SpirvRun(const String8& src, Vector<uint32_t>* dst, String8* err_msg)
 {
 	EXIT_IF(dst == nullptr);
 	EXIT_IF(err_msg == nullptr);
@@ -2405,39 +850,38 @@ static bool SpirvRun(const String& src, Vector<uint32_t>* dst, String* err_msg)
 	spvtools::Optimizer  opt(SPV_ENV_VULKAN_1_2);
 
 	spv_position_t error_position {};
-	String         error_msg;
+	String8        error_msg;
 
 	auto print_msg_to_stderr = [&error_position, &error_msg](spv_message_level_t /* level */, const char* /*source*/,
 	                                                         [[maybe_unused]] const spv_position_t& position, const char* m)
 	{
 		// printf("%s\n", source);
-		error_msg = String::FromPrintf("%d: %d (%d) %s", static_cast<int>(position.line), static_cast<int>(position.column),
-		                               static_cast<int>(position.index), m);
-		printf(FG_BRIGHT_RED "error: %s\n" FG_DEFAULT, error_msg.C_Str());
+		error_msg = String8::FromPrintf("%d: %d (%d) %s", static_cast<int>(position.line), static_cast<int>(position.column),
+		                                static_cast<int>(position.index), m);
+		printf(FG_BRIGHT_RED "error: %s\n" FG_DEFAULT, error_msg.c_str());
 		error_position = position;
 	};
 	core.SetMessageConsumer(print_msg_to_stderr);
 	opt.SetMessageConsumer(print_msg_to_stderr);
 
-	String::Utf8 src_utf8 = src.utf8_str();
-
 	dst->Clear();
 
 	std::vector<uint32_t> spirv;
-	if (!core.Assemble(src_utf8.GetDataConst(), src_utf8.Size(), &spirv))
+	if (!core.Assemble(src.GetDataConst(), src.Size(), &spirv))
 	{
-		printf("Assemble failed at:\n%s\n", src.Mid(src.FindIndex(U'\n', error_position.index - 100), 200).C_Str());
-		*err_msg = String::FromPrintf("Assemble failed at:\n%s\n", src.Mid(src.FindIndex(U'\n', error_position.index - 100), 200).C_Str());
+		printf("Assemble failed at:\n%s\n", src.Mid(src.FindIndex('\n', error_position.index - 100), 200).c_str());
+		*err_msg = String8::FromPrintf("Assemble failed at:\n%s\n", src.Mid(src.FindIndex('\n', error_position.index - 100), 200).c_str());
 		return false;
 	}
 
 	if (Config::ShaderValidationEnabled() && !core.Validate(spirv))
 	{
-		String disassembly;
+		String8 disassembly;
 		SpirvDisassemble(spirv.data(), spirv.size(), &disassembly);
-		printf("%s\n", disassembly.C_Str());
+		printf("%s\n", disassembly.c_str());
 		printf("Validate failed\n");
-		*err_msg = String::FromPrintf("%s\n\nValidate failed:\n%s\n", Log::RemoveColors(disassembly).C_Str(), error_msg.C_Str());
+		*err_msg = String8::FromPrintf("%s\n\nValidate failed:\n%s\n", Log::RemoveColors(String::FromUtf8(disassembly.c_str())).C_Str(),
+		                               error_msg.c_str());
 		return false;
 	}
 
@@ -2452,7 +896,7 @@ static bool SpirvRun(const String& src, Vector<uint32_t>* dst, String* err_msg)
 	if (optimize && !opt.Run(spirv.data(), spirv.size(), &spirv))
 	{
 		printf("Optimize failed\n");
-		*err_msg = String::FromPrintf("Optimize failed\n");
+		*err_msg = String8::FromPrintf("Optimize failed\n");
 		return false;
 	}
 
@@ -2479,21 +923,24 @@ static ShaderUsageInfo GetUsageSlots(const uint32_t* code)
 
 	const auto* binary_info = GetBinaryInfo(code);
 
-	EXIT_NOT_IMPLEMENTED(binary_info == nullptr);
-	EXIT_NOT_IMPLEMENTED(binary_info->chunk_usage_base_offset_dw == 0);
-
 	ShaderUsageInfo ret;
 
-	ret.usage_masks = (binary_info->chunk_usage_base_offset_dw == 0
-	                       ? nullptr
-	                       : reinterpret_cast<const uint32_t*>(binary_info) - binary_info->chunk_usage_base_offset_dw);
-	ret.slots_num   = binary_info->num_input_usage_slots;
-	ret.slots       = (ret.slots_num == 0 ? nullptr : reinterpret_cast<const ShaderUsageSlot*>(ret.usage_masks) - ret.slots_num);
+	if (binary_info != nullptr)
+	{
+		EXIT_NOT_IMPLEMENTED(binary_info->chunk_usage_base_offset_dw == 0);
+
+		ret.usage_masks = (binary_info->chunk_usage_base_offset_dw == 0
+		                       ? nullptr
+		                       : reinterpret_cast<const uint32_t*>(binary_info) - binary_info->chunk_usage_base_offset_dw);
+		ret.slots_num   = binary_info->num_input_usage_slots;
+		ret.slots       = (ret.slots_num == 0 ? nullptr : reinterpret_cast<const ShaderUsageSlot*>(ret.usage_masks) - ret.slots_num);
+		ret.valid       = true;
+	}
 
 	return ret;
 }
 
-static void ShaderDetectBuffers(ShaderVertexInputInfo* info)
+static void ShaderDetectBuffers(ShaderVertexInputInfo* info, bool ps5)
 {
 	KYTY_PROFILER_FUNCTION();
 
@@ -2514,7 +961,7 @@ static void ShaderDetectBuffers(ShaderVertexInputInfo* info)
 
 			if (stride == r.Stride())
 			{
-				uint64_t rbase   = r.Base();
+				uint64_t rbase   = (ps5 ? r.Base48() : r.Base44());
 				uint64_t base    = std::min(rbase, b.addr);
 				uint64_t offset1 = rbase - base;
 				uint64_t offset2 = b.addr - base;
@@ -2535,7 +982,7 @@ static void ShaderDetectBuffers(ShaderVertexInputInfo* info)
 		{
 			EXIT_NOT_IMPLEMENTED(info->buffers_num >= ShaderVertexInputInfo::RES_MAX);
 			int bi                            = info->buffers_num++;
-			info->buffers[bi].addr            = r.Base();
+			info->buffers[bi].addr            = (ps5 ? r.Base48() : r.Base44());
 			info->buffers[bi].stride          = r.Stride();
 			info->buffers[bi].num_records     = r.NumRecords();
 			info->buffers[bi].attr_num        = 1;
@@ -2548,7 +995,8 @@ static void ShaderDetectBuffers(ShaderVertexInputInfo* info)
 		auto& b = info->buffers[bi];
 		for (int ri = 0; ri < b.attr_num; ri++)
 		{
-			b.attr_offsets[ri] = info->resources[b.attr_indices[ri]].Base() - b.addr;
+			b.attr_offsets[ri] =
+			    (ps5 ? info->resources[b.attr_indices[ri]].Base48() : info->resources[b.attr_indices[ri]].Base44()) - b.addr;
 		}
 	}
 }
@@ -2563,11 +1011,12 @@ static void ShaderParseFetch(ShaderVertexInputInfo* info, const uint32_t* fetch,
 
 	ShaderCode code;
 	code.SetType(ShaderType::Fetch);
-	shader_parse(0, fetch, nullptr, &code);
+	// shader_parse(0, fetch, nullptr, &code);
+	ShaderParse(fetch, &code);
 
 	KYTY_PROFILER_END_BLOCK;
 
-	// printf("%s", code.DbgDump().C_Str());
+	// printf("%s", code.DbgDump().c_str());
 
 	KYTY_PROFILER_BLOCK("ShaderParseFetch::check_insts");
 
@@ -2640,6 +1089,52 @@ static void ShaderParseFetch(ShaderVertexInputInfo* info, const uint32_t* fetch,
 	KYTY_PROFILER_END_BLOCK;
 
 	EXIT_NOT_IMPLEMENTED(s_num != v_num);
+}
+
+static void ShaderParseAttrib(ShaderVertexInputInfo* info, const ShaderSemantic* input_semantics, uint32_t num_input_semantics,
+                              const uint32_t* attrib, const uint32_t* buffer)
+{
+	KYTY_PROFILER_FUNCTION();
+
+	EXIT_IF(info == nullptr || attrib == nullptr || buffer == nullptr);
+
+	for (uint32_t i = 0; i < num_input_semantics; i++)
+	{
+		const auto& in = input_semantics[i];
+
+		EXIT_NOT_IMPLEMENTED(in.static_vb_index == 1 || in.static_attribute == 1);
+
+		uint32_t reg  = in.hardware_mapping;
+		uint32_t size = in.size_in_elements;
+
+		printf("reg = %u, size = %u, va[%u] = 0x%08" PRIx32 "\n", reg, size, i, attrib[in.semantic]);
+
+		size_t   index       = attrib[in.semantic] & 0x1fu;
+		uint32_t format      = (attrib[in.semantic] >> 5u) & 0x1ffu;
+		uint32_t offset      = (attrib[in.semantic] >> 14u) & 0xfffu;
+		uint32_t fetch_index = (attrib[in.semantic] >> 26u) & 0x1u;
+
+		EXIT_NOT_IMPLEMENTED(format != 0);
+		EXIT_NOT_IMPLEMENTED(offset != 0);
+		EXIT_NOT_IMPLEMENTED(fetch_index != 0);
+
+		EXIT_NOT_IMPLEMENTED(index >= ShaderVertexInputInfo::RES_MAX);
+
+		const auto* sharp = &buffer[index * 4];
+
+		EXIT_NOT_IMPLEMENTED(info->resources_num >= ShaderVertexInputInfo::RES_MAX);
+
+		auto& r           = info->resources[info->resources_num];
+		auto& rd          = info->resources_dst[info->resources_num];
+		rd.register_start = static_cast<int>(reg);
+		rd.registers_num  = static_cast<int>(size);
+		r.fields[0]       = sharp[0];
+		r.fields[1]       = sharp[1];
+		r.fields[2]       = sharp[2];
+		r.fields[3]       = sharp[3];
+
+		info->resources_num++;
+	}
 }
 
 static void ShaderGetStorageBuffer(ShaderStorageResources* info, int start_index, int slot, ShaderStorageUsage usage,
@@ -2796,6 +1291,8 @@ static void ShaderGetGdsPointer(ShaderGdsResources* info, int start_index, int s
 
 void ShaderCalcBindingIndices(ShaderBindResources* bind)
 {
+	KYTY_PROFILER_FUNCTION();
+
 	int binding_index = 0;
 
 	bind->push_constant_size = 0;
@@ -2829,6 +1326,423 @@ void ShaderCalcBindingIndices(ShaderBindResources* bind)
 	EXIT_IF((bind->push_constant_size % 16) != 0);
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+void ShaderParseUsage(uint64_t addr, ShaderParsedUsage* info, ShaderBindResources* bind, const HW::UserSgprInfo& user_sgpr)
+{
+	KYTY_PROFILER_FUNCTION();
+
+	EXIT_IF(bind == nullptr);
+	EXIT_IF(info == nullptr);
+
+	const auto* src = reinterpret_cast<const uint32_t*>(addr);
+
+	auto usages = GetUsageSlots(src);
+
+	EXIT_NOT_IMPLEMENTED(!usages.valid);
+
+	info->fetch                     = false;
+	info->fetch_reg                 = 0;
+	info->vertex_buffer             = false;
+	info->vertex_buffer_reg         = 0;
+	info->storage_buffers_readonly  = 0;
+	info->storage_buffers_constant  = 0;
+	info->storage_buffers_readwrite = 0;
+	info->textures2D_readonly       = 0;
+	info->textures2D_readwrite      = 0;
+	info->extended_buffer           = false;
+	info->samplers                  = 0;
+	info->gds_pointers              = 0;
+
+	uint32_t* extended_buffer = nullptr;
+
+	for (int i = 0; i < usages.slots_num; i++)
+	{
+		const auto& usage = usages.slots[i];
+		switch (usage.type)
+		{
+			case 0x00:
+				EXIT_NOT_IMPLEMENTED(usage.flags != 0 && usage.flags != 3);
+				if (usage.flags == 0)
+				{
+					ShaderGetStorageBuffer(&bind->storage_buffers, usage.start_register, usage.slot, ShaderStorageUsage::ReadOnly,
+					                       user_sgpr, extended_buffer);
+					info->storage_buffers_readonly++;
+				} else if (usage.flags == 3)
+				{
+					ShaderGetTextureBuffer(&bind->textures2D, usage.start_register, usage.slot, ShaderTextureUsage::ReadOnly, user_sgpr,
+					                       extended_buffer);
+					info->textures2D_readonly++;
+					EXIT_NOT_IMPLEMENTED(bind->textures2D.desc[bind->textures2D.textures_num - 1].texture.Type() != 9);
+				}
+				break;
+
+			case 0x01:
+				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
+				ShaderGetSampler(&bind->samplers, usage.start_register, usage.slot, user_sgpr, extended_buffer);
+				info->samplers++;
+				break;
+
+			case 0x02:
+				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
+				ShaderGetStorageBuffer(&bind->storage_buffers, usage.start_register, usage.slot, ShaderStorageUsage::Constant, user_sgpr,
+				                       extended_buffer);
+				info->storage_buffers_constant++;
+				break;
+
+			case 0x04:
+				EXIT_NOT_IMPLEMENTED(usage.flags != 0 && usage.flags != 3);
+				if (usage.flags == 0)
+				{
+					ShaderGetStorageBuffer(&bind->storage_buffers, usage.start_register, usage.slot, ShaderStorageUsage::ReadWrite,
+					                       user_sgpr, extended_buffer);
+					info->storage_buffers_readwrite++;
+				} else if (usage.flags == 3)
+				{
+					ShaderGetTextureBuffer(&bind->textures2D, usage.start_register, usage.slot, ShaderTextureUsage::ReadWrite, user_sgpr,
+					                       extended_buffer);
+					info->textures2D_readwrite++;
+					EXIT_NOT_IMPLEMENTED(bind->textures2D.desc[bind->textures2D.textures_num - 1].texture.Type() != 9);
+				}
+				break;
+
+			case 0x07:
+				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
+				ShaderGetGdsPointer(&bind->gds_pointers, usage.start_register, usage.slot, user_sgpr, extended_buffer);
+				info->gds_pointers++;
+				break;
+
+			case 0x12:
+				EXIT_NOT_IMPLEMENTED(usage.slot != 0);
+				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
+				info->fetch     = true;
+				info->fetch_reg = usage.start_register;
+				break;
+
+			case 0x17:
+				EXIT_NOT_IMPLEMENTED(usage.slot != 0);
+				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
+				info->vertex_buffer     = true;
+				info->vertex_buffer_reg = usage.start_register;
+				break;
+
+			case 0x1b:
+				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
+				EXIT_NOT_IMPLEMENTED(usage.slot != 1);
+				EXIT_NOT_IMPLEMENTED(bind->extended.used);
+				bind->extended.used           = true;
+				bind->extended.slot           = usage.slot;
+				bind->extended.start_register = usage.start_register;
+				bind->extended.data.fields[0] = user_sgpr.value[usage.start_register];
+				bind->extended.data.fields[1] = user_sgpr.value[usage.start_register + 1];
+				extended_buffer               = reinterpret_cast<uint32_t*>(bind->extended.data.Base());
+				info->extended_buffer         = true;
+				break;
+
+			default: EXIT("unknown usage type: 0x%02" PRIx8 "\n", usage.type);
+		}
+	}
+}
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+void ShaderParseUsage2(const ShaderUserData* user_data, ShaderParsedUsage* info, ShaderBindResources* bind,
+                       const HW::UserSgprInfo& user_sgpr)
+{
+	KYTY_PROFILER_FUNCTION();
+
+	EXIT_IF(bind == nullptr);
+	EXIT_IF(info == nullptr);
+
+	info->fetch                     = false;
+	info->fetch_reg                 = 0;
+	info->vertex_buffer             = false;
+	info->vertex_buffer_reg         = 0;
+	info->storage_buffers_readonly  = 0;
+	info->storage_buffers_constant  = 0;
+	info->storage_buffers_readwrite = 0;
+	info->textures2D_readonly       = 0;
+	info->textures2D_readwrite      = 0;
+	info->extended_buffer           = false;
+	info->samplers                  = 0;
+	info->gds_pointers              = 0;
+
+	EXIT_NOT_IMPLEMENTED(user_data == nullptr);
+	EXIT_NOT_IMPLEMENTED(user_data->eud_size_dw != 0);
+	EXIT_NOT_IMPLEMENTED(user_data->srt_size_dw != 0);
+
+	uint32_t* extended_buffer = nullptr;
+
+	for (uint16_t type = 0; type < user_data->direct_resource_count; type++)
+	{
+		if (user_data->direct_resource_offset[type] == 0xffff)
+		{
+			continue;
+		}
+
+		int reg = user_data->direct_resource_offset[type];
+
+		switch (type)
+		{
+			case 8:
+				info->vertex_buffer     = true;
+				info->vertex_buffer_reg = reg;
+				break;
+
+			case 10:
+				info->vertex_attrib     = true;
+				info->vertex_attrib_reg = reg;
+				break;
+
+			default: EXIT("unknown usage type: 0x%04" PRIx16 "\n", type);
+		}
+	}
+
+	if (user_data->sharp_resource_count[0] != 0)
+	{
+		for (uint16_t slot = 0; slot < user_data->sharp_resource_count[0]; slot++)
+		{
+			if (user_data->sharp_resource_offset[0][slot].offset_dw == 0x7fff)
+			{
+				continue;
+			}
+
+			EXIT_NOT_IMPLEMENTED(user_data->sharp_resource_offset[0][slot].size != 0);
+			ShaderGetTextureBuffer(&bind->textures2D, user_data->sharp_resource_offset[0][slot].offset_dw, slot,
+			                       ShaderTextureUsage::ReadOnly, user_sgpr, extended_buffer);
+			info->textures2D_readonly++;
+			EXIT_NOT_IMPLEMENTED(bind->textures2D.desc[bind->textures2D.textures_num - 1].texture.Type() != 9);
+		}
+	}
+
+	EXIT_NOT_IMPLEMENTED(user_data->sharp_resource_count[1] != 0);
+
+	if (user_data->sharp_resource_count[2] != 0)
+	{
+		for (uint16_t slot = 0; slot < user_data->sharp_resource_count[2]; slot++)
+		{
+			if (user_data->sharp_resource_offset[2][slot].offset_dw == 0x7fff)
+			{
+				continue;
+			}
+
+			EXIT_NOT_IMPLEMENTED(user_data->sharp_resource_offset[2][slot].size != 1);
+			ShaderGetSampler(&bind->samplers, user_data->sharp_resource_offset[2][slot].offset_dw, slot, user_sgpr, extended_buffer);
+			info->samplers++;
+		}
+	}
+
+	if (user_data->sharp_resource_count[3] != 0)
+	{
+		for (uint16_t slot = 0; slot < user_data->sharp_resource_count[3]; slot++)
+		{
+			if (user_data->sharp_resource_offset[3][slot].offset_dw == 0x7fff)
+			{
+				continue;
+			}
+
+			EXIT_NOT_IMPLEMENTED(user_data->sharp_resource_offset[3][slot].size != 1);
+			ShaderGetStorageBuffer(&bind->storage_buffers, user_data->sharp_resource_offset[3][slot].offset_dw, slot,
+			                       ShaderStorageUsage::Constant, user_sgpr, extended_buffer);
+			info->storage_buffers_constant++;
+		}
+	}
+
+	// KYTY_NOT_IMPLEMENTED;
+}
+
+//// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+// void ShaderParseUsageCS(uint64_t addr, ShaderParsedUsage* info, ShaderBindResources* bind, const HW::UserSgprInfo& user_sgpr)
+//{
+//	KYTY_PROFILER_FUNCTION();
+//
+//	EXIT_IF(bind == nullptr);
+//	EXIT_IF(info == nullptr);
+//
+//	const auto* src = reinterpret_cast<const uint32_t*>(addr);
+//
+//	auto usages = GetUsageSlots(src);
+//
+//	info->fetch             = false;
+//	info->fetch_reg         = 0;
+//	info->vertex_buffer     = false;
+//	info->vertex_buffer_reg = 0;
+//
+//	uint32_t* extended_buffer = nullptr;
+//
+//	for (int i = 0; i < usages.slots_num; i++)
+//	{
+//		const auto& usage = usages.slots[i];
+//		switch (usage.type)
+//		{
+//				//			case 0x00:
+//				//				EXIT_NOT_IMPLEMENTED(usage.flags != 0 && usage.flags != 3);
+//				//				if (usage.flags == 0)
+//				//				{
+//				//					ShaderGetStorageBuffer(&bind->storage_buffers, usage.start_register, usage.slot,
+//				// ShaderStorageUsage::ReadOnly, 					                       user_sgpr, extended_buffer); 				}
+//				// else if (usage.flags
+//				// == 3)
+//				//				{
+//				//					ShaderGetTextureBuffer(&bind->textures2D, usage.start_register, usage.slot,
+//				// ShaderTextureUsage::ReadOnly, user_sgpr, 					                       extended_buffer);
+//				// EXIT_NOT_IMPLEMENTED(bind->textures2D.desc[bind->textures2D.textures_num - 1].texture.Type()
+//				//!= 9);
+//				//				}
+//				//				break;
+//				//			case 0x02:
+//				//				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
+//				//				ShaderGetStorageBuffer(&bind->storage_buffers, usage.start_register, usage.slot,
+//				// ShaderStorageUsage::Constant, user_sgpr, 				                       extended_buffer); 				break;
+//				//			case 0x04:
+//				//				EXIT_NOT_IMPLEMENTED(usage.flags != 0 && usage.flags != 3);
+//				//				if (usage.flags == 0)
+//				//				{
+//				//					ShaderGetStorageBuffer(&bind->storage_buffers, usage.start_register, usage.slot,
+//				// ShaderStorageUsage::ReadWrite, 					                       user_sgpr, extended_buffer); 				}
+//				// else if (usage.flags
+//				// == 3)
+//				//				{
+//				//					ShaderGetTextureBuffer(&bind->textures2D, usage.start_register, usage.slot,
+//				// ShaderTextureUsage::ReadWrite, user_sgpr, 					                       extended_buffer);
+//				// EXIT_NOT_IMPLEMENTED(bind->textures2D.desc[bind->textures2D.textures_num - 1].texture.Type()
+//				//!= 9);
+//				//				}
+//				//				break;
+//			case 0x07:
+//				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
+//				ShaderGetGdsPointer(&bind->gds_pointers, usage.start_register, usage.slot, user_sgpr, extended_buffer);
+//				break;
+//				//			case 0x1b:
+//				//				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
+//				//				EXIT_NOT_IMPLEMENTED(usage.slot != 1);
+//				//				EXIT_NOT_IMPLEMENTED(bind->extended.used);
+//				//				bind->extended.used           = true;
+//				//				bind->extended.slot           = usage.slot;
+//				//				bind->extended.start_register = usage.start_register;
+//				//				bind->extended.data.fields[0] = user_sgpr.value[usage.start_register];
+//				//				bind->extended.data.fields[1] = user_sgpr.value[usage.start_register + 1];
+//				//				extended_buffer               = reinterpret_cast<uint32_t*>(bind->extended.data.Base());
+//				//				break;
+//			default: EXIT("unknown usage type: 0x%02" PRIx8 "\n", usage.type);
+//		}
+//	}
+// }
+//
+//// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+// void ShaderParseUsagePS(uint64_t addr, ShaderParsedUsage* info, ShaderBindResources* bind, const HW::UserSgprInfo& user_sgpr)
+//{
+//	KYTY_PROFILER_FUNCTION();
+//
+//	EXIT_IF(bind == nullptr);
+//	EXIT_IF(info == nullptr);
+//
+//	const auto* src = reinterpret_cast<const uint32_t*>(addr);
+//
+//	auto usages = GetUsageSlots(src);
+//
+//	info->fetch             = false;
+//	info->fetch_reg         = 0;
+//	info->vertex_buffer     = false;
+//	info->vertex_buffer_reg = 0;
+//
+//	uint32_t* extended_buffer = nullptr;
+//
+//	for (int i = 0; i < usages.slots_num; i++)
+//	{
+//		const auto& usage = usages.slots[i];
+//		switch (usage.type)
+//		{
+//				//			case 0x00:
+//				//				EXIT_NOT_IMPLEMENTED(usage.flags != 0 && usage.flags != 3);
+//				//				if (usage.flags == 0)
+//				//				{
+//				//					ShaderGetStorageBuffer(&bind->storage_buffers, usage.start_register, usage.slot,
+//				// ShaderStorageUsage::ReadOnly, 					                       user_sgpr, extended_buffer); 				}
+//				// else if (usage.flags
+//				// == 3)
+//				//				{
+//				//					ShaderGetTextureBuffer(&bind->textures2D, usage.start_register, usage.slot,
+//				// ShaderTextureUsage::ReadOnly, user_sgpr, 					                       extended_buffer);
+//				// EXIT_NOT_IMPLEMENTED(bind->textures2D.desc[bind->textures2D.textures_num - 1].texture.Type()
+//				//!= 9);
+//				//				}
+//				//				break;
+//				//			case 0x01:
+//				//				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
+//				//				ShaderGetSampler(&bind->samplers, usage.start_register, usage.slot, user_sgpr, extended_buffer);
+//				//				break;
+//				//			case 0x02:
+//				//				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
+//				//				ShaderGetStorageBuffer(&bind->storage_buffers, usage.start_register, usage.slot,
+//				// ShaderStorageUsage::Constant, user_sgpr, 				                       extended_buffer); 				break;
+//				//			case 0x04:
+//				//				EXIT_NOT_IMPLEMENTED(usage.flags != 3);
+//				//				if (usage.flags == 3)
+//				//				{
+//				//					ShaderGetTextureBuffer(&bind->textures2D, usage.start_register, usage.slot,
+//				// ShaderTextureUsage::ReadWrite, user_sgpr, 					                       extended_buffer);
+//				// EXIT_NOT_IMPLEMENTED(bind->textures2D.desc[bind->textures2D.textures_num - 1].texture.Type()
+//				//!= 9);
+//				//				}
+//				//				break;
+//				//			case 0x1b:
+//				//				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
+//				//				EXIT_NOT_IMPLEMENTED(usage.slot != 1);
+//				//				EXIT_NOT_IMPLEMENTED(bind->extended.used);
+//				//				bind->extended.used           = true;
+//				//				bind->extended.slot           = usage.slot;
+//				//				bind->extended.start_register = usage.start_register;
+//				//				bind->extended.data.fields[0] = user_sgpr.value[usage.start_register];
+//				//				bind->extended.data.fields[1] = user_sgpr.value[usage.start_register + 1];
+//				//				extended_buffer               = reinterpret_cast<uint32_t*>(bind->extended.data.Base());
+//				//				break;
+//			default: EXIT("unknown usage type: 0x%02" PRIx8 "\n", usage.type);
+//		}
+//	}
+// }
+//
+// void ShaderParseUsageVS(uint64_t addr, ShaderParsedUsage* info, ShaderBindResources* bind, const HW::UserSgprInfo& user_sgpr)
+//{
+//	KYTY_PROFILER_FUNCTION();
+//
+//	EXIT_IF(bind == nullptr);
+//	EXIT_IF(info == nullptr);
+//
+//	const auto* src = reinterpret_cast<const uint32_t*>(addr);
+//
+//	auto usages = GetUsageSlots(src);
+//
+//	info->fetch             = false;
+//	info->fetch_reg         = 0;
+//	info->vertex_buffer     = false;
+//	info->vertex_buffer_reg = 0;
+//
+//	for (int i = 0; i < usages.slots_num; i++)
+//	{
+//		const auto& usage = usages.slots[i];
+//		switch (usage.type)
+//		{
+//				//			case 0x02:
+//				//				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
+//				//				ShaderGetStorageBuffer(&bind->storage_buffers, usage.start_register, usage.slot,
+//				// ShaderStorageUsage::Constant, user_sgpr, 				                       nullptr); 				break;
+//				//			case 0x12:
+//				//				EXIT_NOT_IMPLEMENTED(usage.slot != 0);
+//				//				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
+//				//				info->fetch     = true;
+//				//				info->fetch_reg = usage.start_register;
+//				//				break;
+//				//			case 0x17:
+//				//				EXIT_NOT_IMPLEMENTED(usage.slot != 0);
+//				//				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
+//				//				info->vertex_buffer     = true;
+//				//				info->vertex_buffer_reg = usage.start_register;
+//				//				break;
+//			default: EXIT("unknown usage type: 0x%02" PRIx8 "\n", usage.type);
+//		}
+//	}
+// }
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void ShaderGetInputInfoVS(const HW::VertexShaderInfo* regs, const HW::ShaderRegisters* sh, ShaderVertexInputInfo* info)
 {
 	KYTY_PROFILER_FUNCTION();
@@ -2845,77 +1759,100 @@ void ShaderGetInputInfoVS(const HW::VertexShaderInfo* regs, const HW::ShaderRegi
 		return;
 	}
 
-	const auto* src = reinterpret_cast<const uint32_t*>(regs->vs_regs.data_addr);
+	ShaderParsedUsage usage;
 
-	auto usages = GetUsageSlots(src);
+	bool gs_instead_of_vs =
+	    (regs->vs_regs.data_addr == 0 && regs->gs_regs.data_addr == 0 && regs->es_regs.data_addr != 0 && regs->gs_regs.chksum != 0);
 
-	bool fetch             = false;
-	int  fetch_reg         = 0;
-	bool vertex_buffer     = false;
-	int  vertex_buffer_reg = 0;
+	uint64_t                shader_addr = (gs_instead_of_vs ? regs->es_regs.data_addr : regs->vs_regs.data_addr);
+	const HW::UserSgprInfo& user_sgpr   = (gs_instead_of_vs ? regs->gs_user_sgpr : regs->vs_user_sgpr);
 
-	KYTY_PROFILER_BLOCK("ShaderGetInputInfoVS::usages_cycle");
+	bool ps5 = Config::IsNextGen();
 
-	for (int i = 0; i < usages.slots_num; i++)
+	ShaderMappedData data;
+
+	if (ps5)
 	{
-		const auto& usage = usages.slots[i];
-		switch (usage.type)
+		if (auto iter = g_shader_map->find(shader_addr); iter != g_shader_map->end())
 		{
-			case 0x02:
-				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
-				ShaderGetStorageBuffer(&info->bind.storage_buffers, usage.start_register, usage.slot, ShaderStorageUsage::Constant,
-				                       regs->vs_user_sgpr, nullptr);
-				break;
-			case 0x12:
-				EXIT_NOT_IMPLEMENTED(usage.slot != 0);
-				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
-				fetch     = true;
-				fetch_reg = usage.start_register;
-				break;
-			case 0x17:
-				EXIT_NOT_IMPLEMENTED(usage.slot != 0);
-				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
-				vertex_buffer     = true;
-				vertex_buffer_reg = usage.start_register;
-				break;
-			default: EXIT("unknown usage type: 0x%02" PRIx8 "\n", usage.type);
+			data = iter->second;
 		}
 	}
 
-	KYTY_PROFILER_END_BLOCK;
-
-	KYTY_PROFILER_BLOCK("ShaderGetInputInfoVS::parse_fetch");
-
-	EXIT_NOT_IMPLEMENTED((fetch && !vertex_buffer) || (!fetch && vertex_buffer));
-
-	if (fetch && vertex_buffer)
+	if (ps5)
 	{
-		info->fetch = true;
+		EXIT_NOT_IMPLEMENTED(data.user_data == nullptr);
+		EXIT_NOT_IMPLEMENTED(!gs_instead_of_vs);
 
-		EXIT_NOT_IMPLEMENTED(fetch_reg >= 16 || vertex_buffer_reg >= 16);
+		info->gs_prolog = true;
 
-		const auto* fetch = reinterpret_cast<const uint32_t*>(static_cast<uint64_t>(regs->vs_user_sgpr.value[fetch_reg]) |
-		                                                      (static_cast<uint64_t>(regs->vs_user_sgpr.value[fetch_reg + 1]) << 32u));
+		ShaderParseUsage2(data.user_data, &usage, &info->bind, user_sgpr);
+	} else
+	{
+		EXIT_NOT_IMPLEMENTED(gs_instead_of_vs);
+
+		info->gs_prolog = false;
+
+		ShaderParseUsage(shader_addr, &usage, &info->bind, user_sgpr);
+	}
+
+	EXIT_NOT_IMPLEMENTED(usage.extended_buffer);
+	EXIT_NOT_IMPLEMENTED(usage.samplers > 0);
+	EXIT_NOT_IMPLEMENTED(usage.gds_pointers > 0);
+	EXIT_NOT_IMPLEMENTED(usage.storage_buffers_readonly > 0 || usage.textures2D_readonly > 0);
+	EXIT_NOT_IMPLEMENTED(usage.storage_buffers_readwrite > 0 || usage.textures2D_readwrite > 0);
+	EXIT_NOT_IMPLEMENTED(!ps5 && ((usage.fetch && !usage.vertex_buffer) || (!usage.fetch && usage.vertex_buffer)));
+	EXIT_NOT_IMPLEMENTED(ps5 && ((usage.vertex_attrib && !usage.vertex_buffer) || (!usage.vertex_attrib && usage.vertex_buffer)));
+
+	if (usage.vertex_buffer && usage.vertex_attrib)
+	{
+		info->fetch_external   = false;
+		info->fetch_embedded   = true;
+		info->fetch_inline     = false;
+		info->fetch_attrib_reg = usage.vertex_attrib_reg;
+		info->fetch_buffer_reg = usage.vertex_buffer_reg;
+
+		const auto* attrib =
+		    reinterpret_cast<const uint32_t*>(static_cast<uint64_t>(user_sgpr.value[usage.vertex_attrib_reg]) |
+		                                      (static_cast<uint64_t>(user_sgpr.value[usage.vertex_attrib_reg + 1]) << 32u));
 		const auto* buffer =
-		    reinterpret_cast<const uint32_t*>(static_cast<uint64_t>(regs->vs_user_sgpr.value[vertex_buffer_reg]) |
-		                                      (static_cast<uint64_t>(regs->vs_user_sgpr.value[vertex_buffer_reg + 1]) << 32u));
+		    reinterpret_cast<const uint32_t*>(static_cast<uint64_t>(user_sgpr.value[usage.vertex_buffer_reg]) |
+		                                      (static_cast<uint64_t>(user_sgpr.value[usage.vertex_buffer_reg + 1]) << 32u));
+
+		EXIT_NOT_IMPLEMENTED(attrib == nullptr || buffer == nullptr);
+
+		EXIT_NOT_IMPLEMENTED(data.input_semantics == nullptr || data.num_input_semantics == 0);
+
+		ShaderParseAttrib(info, data.input_semantics, data.num_input_semantics, attrib, buffer);
+		ShaderDetectBuffers(info, ps5);
+	}
+
+	if (usage.fetch && usage.vertex_buffer)
+	{
+		info->fetch_external   = true;
+		info->fetch_embedded   = false;
+		info->fetch_inline     = false;
+		info->fetch_shader_reg = usage.fetch_reg;
+		info->fetch_buffer_reg = usage.vertex_buffer_reg;
+
+		EXIT_NOT_IMPLEMENTED(usage.fetch_reg >= 16 || usage.vertex_buffer_reg >= 16);
+
+		const auto* fetch =
+		    reinterpret_cast<const uint32_t*>(static_cast<uint64_t>(regs->vs_user_sgpr.value[usage.fetch_reg]) |
+		                                      (static_cast<uint64_t>(regs->vs_user_sgpr.value[usage.fetch_reg + 1]) << 32u));
+		const auto* buffer =
+		    reinterpret_cast<const uint32_t*>(static_cast<uint64_t>(regs->vs_user_sgpr.value[usage.vertex_buffer_reg]) |
+		                                      (static_cast<uint64_t>(regs->vs_user_sgpr.value[usage.vertex_buffer_reg + 1]) << 32u));
 
 		EXIT_NOT_IMPLEMENTED(fetch == nullptr || buffer == nullptr);
 
 		ShaderParseFetch(info, fetch, buffer);
-		ShaderDetectBuffers(info);
+		ShaderDetectBuffers(info, ps5);
 	}
 
-	KYTY_PROFILER_END_BLOCK;
-
-	KYTY_PROFILER_BLOCK("ShaderGetInputInfoVS::calc_binding");
-
 	ShaderCalcBindingIndices(&info->bind);
-
-	KYTY_PROFILER_END_BLOCK;
 }
 
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void ShaderGetInputInfoPS(const HW::PixelShaderInfo* regs, const HW::ShaderRegisters* sh, const ShaderVertexInputInfo* vs_info,
                           ShaderPixelInputInfo* ps_info)
 {
@@ -2951,67 +1888,37 @@ void ShaderGetInputInfoPS(const HW::PixelShaderInfo* regs, const HW::ShaderRegis
 		ps_info->target_output_mode[i] = sh->target_output_mode[i];
 	}
 
-	const auto* src = reinterpret_cast<const uint32_t*>(regs->ps_regs.data_addr);
+	bool ps5 = Config::IsNextGen();
 
-	auto usages = GetUsageSlots(src);
+	ShaderMappedData data;
 
-	uint32_t* extended_buffer = nullptr;
-
-	for (int i = 0; i < usages.slots_num; i++)
+	if (ps5)
 	{
-		const auto& usage = usages.slots[i];
-		switch (usage.type)
+		if (auto iter = g_shader_map->find(regs->ps_regs.data_addr); iter != g_shader_map->end())
 		{
-			case 0x00:
-				EXIT_NOT_IMPLEMENTED(usage.flags != 0 && usage.flags != 3);
-				if (usage.flags == 0)
-				{
-					ShaderGetStorageBuffer(&ps_info->bind.storage_buffers, usage.start_register, usage.slot, ShaderStorageUsage::ReadOnly,
-					                       regs->ps_user_sgpr, extended_buffer);
-				} else if (usage.flags == 3)
-				{
-					ShaderGetTextureBuffer(&ps_info->bind.textures2D, usage.start_register, usage.slot, ShaderTextureUsage::ReadOnly,
-					                       regs->ps_user_sgpr, extended_buffer);
-					EXIT_NOT_IMPLEMENTED(ps_info->bind.textures2D.desc[ps_info->bind.textures2D.textures_num - 1].texture.Type() != 9);
-				}
-				break;
-			case 0x01:
-				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
-				ShaderGetSampler(&ps_info->bind.samplers, usage.start_register, usage.slot, regs->ps_user_sgpr, extended_buffer);
-				break;
-			case 0x02:
-				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
-				ShaderGetStorageBuffer(&ps_info->bind.storage_buffers, usage.start_register, usage.slot, ShaderStorageUsage::Constant,
-				                       regs->ps_user_sgpr, extended_buffer);
-				break;
-			case 0x04:
-				EXIT_NOT_IMPLEMENTED(usage.flags != 3);
-				if (usage.flags == 3)
-				{
-					ShaderGetTextureBuffer(&ps_info->bind.textures2D, usage.start_register, usage.slot, ShaderTextureUsage::ReadWrite,
-					                       regs->ps_user_sgpr, extended_buffer);
-					EXIT_NOT_IMPLEMENTED(ps_info->bind.textures2D.desc[ps_info->bind.textures2D.textures_num - 1].texture.Type() != 9);
-				}
-				break;
-			case 0x1b:
-				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
-				EXIT_NOT_IMPLEMENTED(usage.slot != 1);
-				EXIT_NOT_IMPLEMENTED(ps_info->bind.extended.used);
-				ps_info->bind.extended.used           = true;
-				ps_info->bind.extended.slot           = usage.slot;
-				ps_info->bind.extended.start_register = usage.start_register;
-				ps_info->bind.extended.data.fields[0] = regs->ps_user_sgpr.value[usage.start_register];
-				ps_info->bind.extended.data.fields[1] = regs->ps_user_sgpr.value[usage.start_register + 1];
-				extended_buffer                       = reinterpret_cast<uint32_t*>(ps_info->bind.extended.data.Base());
-				break;
-			default: EXIT("unknown usage type: 0x%02" PRIx8 "\n", usage.type);
+			data = iter->second;
 		}
 	}
+
+	ShaderParsedUsage usage;
+
+	if (ps5)
+	{
+		EXIT_NOT_IMPLEMENTED(data.user_data == nullptr);
+
+		ShaderParseUsage2(data.user_data, &usage, &ps_info->bind, regs->ps_user_sgpr);
+	} else
+	{
+		ShaderParseUsage(regs->ps_regs.data_addr, &usage, &ps_info->bind, regs->ps_user_sgpr);
+	}
+
+	EXIT_NOT_IMPLEMENTED(usage.fetch || usage.vertex_buffer || usage.vertex_attrib);
+	EXIT_NOT_IMPLEMENTED(usage.storage_buffers_readwrite > 0);
+	EXIT_NOT_IMPLEMENTED(usage.gds_pointers > 0);
 
 	ShaderCalcBindingIndices(&ps_info->bind);
 }
 
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void ShaderGetInputInfoCS(const HW::ComputeShaderInfo* regs, const HW::ShaderRegisters* /*sh*/, ShaderComputeInputInfo* info)
 {
 	EXIT_IF(info == nullptr);
@@ -3031,70 +1938,17 @@ void ShaderGetInputInfoCS(const HW::ComputeShaderInfo* regs, const HW::ShaderReg
 	info->bind.push_constant_size   = 0;
 	info->bind.descriptor_set_slot  = 0;
 
-	const auto* src = reinterpret_cast<const uint32_t*>(regs->cs_regs.data_addr);
+	ShaderParsedUsage usage;
 
-	auto usages = GetUsageSlots(src);
+	ShaderParseUsage(regs->cs_regs.data_addr, &usage, &info->bind, regs->cs_user_sgpr);
 
-	uint32_t* extended_buffer = nullptr;
-
-	for (int i = 0; i < usages.slots_num; i++)
-	{
-		const auto& usage = usages.slots[i];
-		switch (usage.type)
-		{
-			case 0x00:
-				EXIT_NOT_IMPLEMENTED(usage.flags != 0 && usage.flags != 3);
-				if (usage.flags == 0)
-				{
-					ShaderGetStorageBuffer(&info->bind.storage_buffers, usage.start_register, usage.slot, ShaderStorageUsage::ReadOnly,
-					                       regs->cs_user_sgpr, extended_buffer);
-				} else if (usage.flags == 3)
-				{
-					ShaderGetTextureBuffer(&info->bind.textures2D, usage.start_register, usage.slot, ShaderTextureUsage::ReadOnly,
-					                       regs->cs_user_sgpr, extended_buffer);
-					EXIT_NOT_IMPLEMENTED(info->bind.textures2D.desc[info->bind.textures2D.textures_num - 1].texture.Type() != 9);
-				}
-				break;
-			case 0x02:
-				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
-				ShaderGetStorageBuffer(&info->bind.storage_buffers, usage.start_register, usage.slot, ShaderStorageUsage::Constant,
-				                       regs->cs_user_sgpr, extended_buffer);
-				break;
-			case 0x04:
-				EXIT_NOT_IMPLEMENTED(usage.flags != 0 && usage.flags != 3);
-				if (usage.flags == 0)
-				{
-					ShaderGetStorageBuffer(&info->bind.storage_buffers, usage.start_register, usage.slot, ShaderStorageUsage::ReadWrite,
-					                       regs->cs_user_sgpr, extended_buffer);
-				} else if (usage.flags == 3)
-				{
-					ShaderGetTextureBuffer(&info->bind.textures2D, usage.start_register, usage.slot, ShaderTextureUsage::ReadWrite,
-					                       regs->cs_user_sgpr, extended_buffer);
-					EXIT_NOT_IMPLEMENTED(info->bind.textures2D.desc[info->bind.textures2D.textures_num - 1].texture.Type() != 9);
-				}
-				break;
-			case 0x07:
-				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
-				ShaderGetGdsPointer(&info->bind.gds_pointers, usage.start_register, usage.slot, regs->cs_user_sgpr, extended_buffer);
-				break;
-			case 0x1b:
-				EXIT_NOT_IMPLEMENTED(usage.flags != 0);
-				EXIT_NOT_IMPLEMENTED(usage.slot != 1);
-				EXIT_NOT_IMPLEMENTED(info->bind.extended.used);
-				info->bind.extended.used           = true;
-				info->bind.extended.slot           = usage.slot;
-				info->bind.extended.start_register = usage.start_register;
-				info->bind.extended.data.fields[0] = regs->cs_user_sgpr.value[usage.start_register];
-				info->bind.extended.data.fields[1] = regs->cs_user_sgpr.value[usage.start_register + 1];
-				extended_buffer                    = reinterpret_cast<uint32_t*>(info->bind.extended.data.Base());
-				break;
-			default: EXIT("unknown usage type: 0x%02" PRIx8 "\n", usage.type);
-		}
-	}
+	EXIT_NOT_IMPLEMENTED(usage.samplers > 0);
+	EXIT_NOT_IMPLEMENTED(usage.fetch || usage.vertex_buffer || usage.vertex_attrib);
 
 	ShaderCalcBindingIndices(&info->bind);
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 static void ShaderDbgDumpResources(const ShaderBindResources& bind)
 {
 	printf("\t descriptor_set_slot            = %u\n", bind.descriptor_set_slot);
@@ -3114,6 +1968,8 @@ static void ShaderDbgDumpResources(const ShaderBindResources& bind)
 	printf("\t extended.start_register        = %d\n", bind.extended.start_register);
 	printf("\t extended.data.Base             = %" PRIx64 "\n", bind.extended.data.Base());
 
+	bool gen5 = Config::IsNextGen();
+
 	for (int i = 0; i < bind.storage_buffers.buffers_num; i++)
 	{
 		const auto& r = bind.storage_buffers.buffers[i];
@@ -3122,7 +1978,7 @@ static void ShaderDbgDumpResources(const ShaderBindResources& bind)
 
 		printf("\t\t fields           = %08" PRIx32 "%08" PRIx32 "%08" PRIx32 "%08" PRIx32 "\n", r.fields[3], r.fields[2], r.fields[1],
 		       r.fields[0]);
-		printf("\t\t Base()           = %" PRIx64 "\n", r.Base());
+		printf("\t\t Base()           = %" PRIx64 "\n", gen5 ? r.Base48() : r.Base44());
 		printf("\t\t Stride()         = %" PRIu16 "\n", r.Stride());
 		printf("\t\t SwizzleEnabled() = %s\n", r.SwizzleEnabled() ? "true" : "false");
 		printf("\t\t NumRecords()     = %" PRIu32 "\n", r.NumRecords());
@@ -3130,14 +1986,21 @@ static void ShaderDbgDumpResources(const ShaderBindResources& bind)
 		printf("\t\t DstSelY()        = %" PRIu8 "\n", r.DstSelY());
 		printf("\t\t DstSelZ()        = %" PRIu8 "\n", r.DstSelZ());
 		printf("\t\t DstSelW()        = %" PRIu8 "\n", r.DstSelW());
-		printf("\t\t Nfmt()           = %" PRIu8 "\n", r.Nfmt());
-		printf("\t\t Dfmt()           = %" PRIu8 "\n", r.Dfmt());
-		printf("\t\t MemoryType()     = 0x%02" PRIx8 "\n", r.MemoryType());
+		if (!gen5)
+		{
+			printf("\t\t Nfmt()           = %" PRIu8 "\n", r.Nfmt());
+			printf("\t\t Dfmt()           = %" PRIu8 "\n", r.Dfmt());
+			printf("\t\t MemoryType()     = 0x%02" PRIx8 "\n", r.MemoryType());
+		} else
+		{
+			printf("\t\t Format()         = %" PRIu8 "\n", r.Format());
+			printf("\t\t OutOfBounds()    = %" PRIu8 "\n", r.OutOfBounds());
+		}
 		printf("\t\t AddTid()         = %s\n", r.AddTid() ? "true" : "false");
 		printf("\t\t slot             = %d\n", bind.storage_buffers.slots[i]);
 		printf("\t\t start_register   = %d\n", bind.storage_buffers.start_register[i]);
 		printf("\t\t extended         = %s\n", (bind.storage_buffers.extended[i] ? "true" : "false"));
-		printf("\t\t usage            = %s\n", Core::EnumName(bind.storage_buffers.usages[i]).C_Str());
+		printf("\t\t usage            = %s\n", Core::EnumName8(bind.storage_buffers.usages[i]).c_str());
 	}
 
 	for (int i = 0; i < bind.textures2D.textures_num; i++)
@@ -3148,35 +2011,61 @@ static void ShaderDbgDumpResources(const ShaderBindResources& bind)
 
 		printf("\t\t fields = %08" PRIx32 "%08" PRIx32 "%08" PRIx32 "%08" PRIx32 "%08" PRIx32 "%08" PRIx32 "%08" PRIx32 "%08" PRIx32 "\n",
 		       r.fields[7], r.fields[6], r.fields[5], r.fields[4], r.fields[3], r.fields[2], r.fields[1], r.fields[0]);
-		printf("\t\t Base()          = %" PRIx64 "\n", r.Base());
-		printf("\t\t MemoryType()    = 0x%02" PRIx8 "\n", r.MemoryType());
+		printf("\t\t Base()          = %016" PRIx64 "\n", gen5 ? r.Base40() : r.Base38());
 		printf("\t\t MinLod()        = %" PRIu16 "\n", r.MinLod());
-		printf("\t\t Dfmt()          = %" PRIu8 "\n", r.Dfmt());
-		printf("\t\t Nfmt()          = %" PRIu8 "\n", r.Nfmt());
-		printf("\t\t Width()         = %" PRIu16 "\n", r.Width());
-		printf("\t\t Height()        = %" PRIu16 "\n", r.Height());
-		printf("\t\t PerfMod()       = %" PRIu8 "\n", r.PerfMod());
-		printf("\t\t Interlaced()    = %s\n", r.Interlaced() ? "true" : "false");
+		if (gen5)
+		{
+			printf("\t\t Format()        = %" PRIu16 "\n", r.Format());
+			printf("\t\t BCSwizzle()     = %" PRIu8 "\n", r.BCSwizzle());
+			printf("\t\t BaseArray5()    = %" PRIu16 "\n", r.BaseArray5());
+			printf("\t\t ArrayPitch()    = %" PRIu8 "\n", r.ArrayPitch());
+			printf("\t\t MaxMip()        = %" PRIu8 "\n", r.MaxMip());
+			printf("\t\t MinLodWarn5()   = %" PRIu16 "\n", r.MinLodWarn5());
+			printf("\t\t PerfMod5()      = %" PRIu8 "\n", r.PerfMod5());
+			printf("\t\t CornerSample()  = %s\n", r.CornerSample() ? "true" : "false");
+			printf("\t\t MipStatsCntEn() = %s\n", r.MipStatsCntEn() ? "true" : "false");
+			printf("\t\t PrtDefColor()   = %s\n", r.PrtDefColor() ? "true" : "false");
+			printf("\t\t MipStatsCntId() = %" PRIu8 "\n", r.MipStatsCntId());
+			printf("\t\t MsaaDepth()     = %s\n", r.MsaaDepth() ? "true" : "false");
+			printf("\t\t MaxUncBlkSize() = %" PRIu8 "\n", r.MaxUncompBlkSize());
+			printf("\t\t MaxCompBlkSize()= %" PRIu8 "\n", r.MaxCompBlkSize());
+			printf("\t\t MetaPipeAlign() = %s\n", r.MetaPipeAligned() ? "true" : "false");
+			printf("\t\t WriteCompress() = %s\n", r.WriteCompress() ? "true" : "false");
+			printf("\t\t MetaCompress()  = %s\n", r.MetaCompress() ? "true" : "false");
+			printf("\t\t DccAlphaPos()   = %s\n", r.DccAlphaPos() ? "true" : "false");
+			printf("\t\t DccColorTransf()= %s\n", r.DccColorTransf() ? "true" : "false");
+			printf("\t\t MetaAddr()      = %" PRIx64 "\n", r.MetaAddr());
+
+		} else
+		{
+			printf("\t\t Dfmt()          = %" PRIu8 "\n", r.Dfmt());
+			printf("\t\t Nfmt()          = %" PRIu8 "\n", r.Nfmt());
+			printf("\t\t PerfMod()       = %" PRIu8 "\n", r.PerfMod());
+			printf("\t\t Interlaced()    = %s\n", r.Interlaced() ? "true" : "false");
+			printf("\t\t MemoryType()    = 0x%02" PRIx8 "\n", r.MemoryType());
+			printf("\t\t Pow2Pad()       = %s\n", r.Pow2Pad() ? "true" : "false");
+			printf("\t\t Pitch()         = %" PRIu16 "\n", r.Pitch());
+			printf("\t\t BaseArray()     = %" PRIu16 "\n", r.BaseArray());
+			printf("\t\t LastArray()     = %" PRIu16 "\n", r.LastArray());
+			printf("\t\t MinLodWarn()    = %" PRIu16 "\n", r.MinLodWarn());
+			printf("\t\t LodHdwCntEn()   = %s\n", r.LodHdwCntEn() ? "true" : "false");
+			printf("\t\t CounterBankId() = %" PRIu8 "\n", r.CounterBankId());
+		}
+		printf("\t\t Width()         = %" PRIu16 "\n", gen5 ? r.Width5() : r.Width4());
+		printf("\t\t Height()        = %" PRIu16 "\n", gen5 ? r.Height5() : r.Height4());
 		printf("\t\t DstSelX()       = %" PRIu8 "\n", r.DstSelX());
 		printf("\t\t DstSelY()       = %" PRIu8 "\n", r.DstSelY());
 		printf("\t\t DstSelZ()       = %" PRIu8 "\n", r.DstSelZ());
 		printf("\t\t DstSelW()       = %" PRIu8 "\n", r.DstSelW());
 		printf("\t\t BaseLevel()     = %" PRIu8 "\n", r.BaseLevel());
 		printf("\t\t LastLevel()     = %" PRIu8 "\n", r.LastLevel());
-		printf("\t\t TilingIdx()     = %" PRIu8 "\n", r.TilingIdx());
-		printf("\t\t Pow2Pad()       = %s\n", r.Pow2Pad() ? "true" : "false");
+		printf("\t\t TileMode()      = %" PRIu8 "\n", r.TileMode());
 		printf("\t\t Type()          = %" PRIu8 "\n", r.Type());
 		printf("\t\t Depth()         = %" PRIu16 "\n", r.Depth());
-		printf("\t\t Pitch()         = %" PRIu16 "\n", r.Pitch());
-		printf("\t\t BaseArray()     = %" PRIu16 "\n", r.BaseArray());
-		printf("\t\t LastArray()     = %" PRIu16 "\n", r.LastArray());
-		printf("\t\t MinLodWarn()    = %" PRIu16 "\n", r.MinLodWarn());
-		printf("\t\t CounterBankId() = %" PRIu8 "\n", r.CounterBankId());
-		printf("\t\t LodHdwCntEn()   = %s\n", r.LodHdwCntEn() ? "true" : "false");
 		printf("\t\t slot            = %d\n", bind.textures2D.desc[i].slot);
 		printf("\t\t start_register  = %d\n", bind.textures2D.desc[i].start_register);
 		printf("\t\t extended        = %s\n", (bind.textures2D.desc[i].extended ? "true" : "false"));
-		printf("\t\t usage           = %s\n", Core::EnumName(bind.textures2D.desc[i].usage).C_Str());
+		printf("\t\t usage           = %s\n", Core::EnumName8(bind.textures2D.desc[i].usage).c_str());
 	}
 
 	for (int i = 0; i < bind.samplers.samplers_num; i++)
@@ -3194,7 +2083,16 @@ static void ShaderDbgDumpResources(const ShaderBindResources& bind)
 		printf("\t\t DepthCompareFunc() = %" PRIu8 "\n", r.DepthCompareFunc());
 		printf("\t\t ForceUnormCoords() = %s\n", r.ForceUnormCoords() ? "true" : "false");
 		printf("\t\t AnisoThreshold()   = %" PRIu8 "\n", r.AnisoThreshold());
-		printf("\t\t McCoordTrunc()     = %s\n", r.McCoordTrunc() ? "true" : "false");
+		if (!gen5)
+		{
+			printf("\t\t McCoordTrunc()     = %s\n", r.McCoordTrunc() ? "true" : "false");
+		} else
+		{
+			printf("\t\t SkipDegamma()      = %s\n", r.SkipDegamma() ? "true" : "false");
+			printf("\t\t PointPreclamp()    = %s\n", r.PointPreclamp() ? "true" : "false");
+			printf("\t\t AnisoOverride()    = %s\n", r.AnisoOverride() ? "true" : "false");
+			printf("\t\t BlendZeroPrt()     = %s\n", r.BlendZeroPrt() ? "true" : "false");
+		}
 		printf("\t\t ForceDegamma()     = %s\n", r.ForceDegamma() ? "true" : "false");
 		printf("\t\t AnisoBias()        = %" PRIu8 "\n", r.AnisoBias());
 		printf("\t\t TruncCoord()       = %s\n", r.TruncCoord() ? "true" : "false");
@@ -3239,8 +2137,12 @@ void ShaderDbgDumpInputInfo(const ShaderVertexInputInfo* info)
 
 	printf("ShaderDbgDumpInputInfo()\n");
 
-	printf("\t fetch        = %s\n", info->fetch ? "true" : "false");
-	printf("\t export_count = %d\n", info->export_count);
+	printf("\t fetch_external = %s\n", info->fetch_external ? "true" : "false");
+	printf("\t fetch_embedded = %s\n", info->fetch_embedded ? "true" : "false");
+	printf("\t fetch_inline   = %s\n", info->fetch_inline ? "true" : "false");
+	printf("\t export_count   = %d\n", info->export_count);
+
+	bool gen5 = Config::IsNextGen();
 
 	for (int i = 0; i < info->resources_num; i++)
 	{
@@ -3253,7 +2155,7 @@ void ShaderDbgDumpInputInfo(const ShaderVertexInputInfo* info)
 		printf("\t\t registers_num    = %d\n", rd.registers_num);
 		printf("\t\t fields           = %08" PRIx32 "%08" PRIx32 "%08" PRIx32 "%08" PRIx32 "\n", r.fields[3], r.fields[2], r.fields[1],
 		       r.fields[0]);
-		printf("\t\t Base()           = %" PRIx64 "\n", r.Base());
+		printf("\t\t Base()           = %" PRIx64 "\n", gen5 ? r.Base48() : r.Base44());
 		printf("\t\t Stride()         = %" PRIu16 "\n", r.Stride());
 		printf("\t\t SwizzleEnabled() = %s\n", r.SwizzleEnabled() ? "true" : "false");
 		printf("\t\t NumRecords()     = %" PRIu32 "\n", r.NumRecords());
@@ -3261,9 +2163,16 @@ void ShaderDbgDumpInputInfo(const ShaderVertexInputInfo* info)
 		printf("\t\t DstSelY()        = %" PRIu8 "\n", r.DstSelY());
 		printf("\t\t DstSelZ()        = %" PRIu8 "\n", r.DstSelZ());
 		printf("\t\t DstSelW()        = %" PRIu8 "\n", r.DstSelW());
-		printf("\t\t Nfmt()           = %" PRIu8 "\n", r.Nfmt());
-		printf("\t\t Dfmt()           = %" PRIu8 "\n", r.Dfmt());
-		printf("\t\t MemoryType()     = 0x%02" PRIx8 "\n", r.MemoryType());
+		if (!gen5)
+		{
+			printf("\t\t Nfmt()           = %" PRIu8 "\n", r.Nfmt());
+			printf("\t\t Dfmt()           = %" PRIu8 "\n", r.Dfmt());
+			printf("\t\t MemoryType()     = 0x%02" PRIx8 "\n", r.MemoryType());
+		} else
+		{
+			printf("\t\t Format()         = %" PRIu8 "\n", r.Format());
+			printf("\t\t OutOfBounds()    = %" PRIu8 "\n", r.OutOfBounds());
+		}
 		printf("\t\t AddTid()         = %s\n", r.AddTid() ? "true" : "false");
 	}
 
@@ -3370,7 +2279,7 @@ public:
 				printf("crc32 = %08" PRIx32 "\n", code.GetCrc32());
 				printf("hash0 = %08" PRIx32 "\n", code.GetHash0());
 				printf("---------\n");
-				printf("%s", code.DbgDump().C_Str());
+				printf("%s", code.DbgDump().c_str());
 				printf("---------\n");
 			} else if (!m_file.IsInvalid())
 			{
@@ -3378,25 +2287,25 @@ public:
 				m_file.Printf("crc32 = %08" PRIx32 "\n", code.GetCrc32());
 				m_file.Printf("hash0 = %08" PRIx32 "\n", code.GetHash0());
 				m_file.Printf("---------\n");
-				m_file.Printf("%s", code.DbgDump().C_Str());
+				m_file.Printf("%s", code.DbgDump().c_str());
 				m_file.Printf("---------\n");
 			}
 		}
 	}
 
-	void DumpRecompiledShader(const String& source)
+	void DumpRecompiledShader(const String8& source)
 	{
 		if (m_enabled)
 		{
 			if (m_console)
 			{
 				printf("--------- Recompiled Shader ---------\n");
-				printf("%s\n", source.C_Str());
+				printf("%s\n", source.c_str());
 				printf("---------\n");
 			} else if (!m_file.IsInvalid())
 			{
 				m_file.Printf("--------- Recompiled Shader ---------\n");
-				m_file.Printf("%s\n", source.C_Str());
+				m_file.Printf("%s\n", source.c_str());
 				m_file.Printf("---------\n");
 			}
 		}
@@ -3406,7 +2315,7 @@ public:
 	{
 		if (m_enabled)
 		{
-			String text;
+			String8 text;
 			if (!SpirvDisassemble(bin.GetDataConst(), bin.Size(), &text))
 			{
 				EXIT("SpirvDisassemble() failed\n");
@@ -3414,12 +2323,12 @@ public:
 			if (m_console)
 			{
 				printf("--------- Optimized Shader ---------\n");
-				printf("%s\n", text.C_Str());
+				printf("%s\n", text.c_str());
 				printf("---------\n");
 			} else if (!m_file.IsInvalid())
 			{
 				m_file.Printf("--------- Optimized Shader ---------\n");
-				m_file.Printf("%s\n", Log::RemoveColors(text).C_Str());
+				m_file.Printf("%s\n", Log::RemoveColors(String::FromUtf8(text.c_str())).C_Str());
 				m_file.Printf("---------\n");
 			}
 		}
@@ -3429,7 +2338,7 @@ public:
 	{
 		if (m_enabled)
 		{
-			String text;
+			String8 text;
 			if (!SpirvToGlsl(bin.GetDataConst(), bin.Size(), &text))
 			{
 				EXIT("SpirvToGlsl() failed\n");
@@ -3437,12 +2346,12 @@ public:
 			if (m_console)
 			{
 				printf("--------- Glsl Shader ---------\n");
-				printf("%s\n", text.C_Str());
+				printf("%s\n", text.c_str());
 				printf("---------\n");
 			} else if (!m_file.IsInvalid())
 			{
 				m_file.Printf("--------- Glsl Shader ---------\n");
-				m_file.Printf("%s\n", Log::RemoveColors(text).C_Str());
+				m_file.Printf("%s\n", Log::RemoveColors(String::FromUtf8(text.c_str())).C_Str());
 				m_file.Printf("---------\n");
 			}
 		}
@@ -3453,7 +2362,7 @@ public:
 		if (m_enabled && !m_console && !m_file.IsInvalid())
 		{
 			Core::File file;
-			String     file_name = m_file_name.FilenameWithoutExtension() + U".spv";
+			String     file_name = m_file_name.FilenameWithoutExtension() + ".spv";
 			file.Create(file_name);
 			if (file.IsInvalid())
 			{
@@ -3489,7 +2398,14 @@ ShaderCode ShaderParseVS(const HW::VertexShaderInfo* regs, const HW::ShaderRegis
 		code.SetVsEmbeddedId(regs->vs_embedded_id);
 	} else
 	{
-		const auto* src = reinterpret_cast<const uint32_t*>(regs->vs_regs.data_addr);
+		uint32_t hash0 = 0;
+		uint32_t crc32 = 0;
+
+		bool gs_instead_of_vs =
+		    (regs->vs_regs.data_addr == 0 && regs->gs_regs.data_addr == 0 && regs->es_regs.data_addr != 0 && regs->gs_regs.chksum != 0);
+		uint64_t shader_addr = (gs_instead_of_vs ? regs->es_regs.data_addr : regs->vs_regs.data_addr);
+
+		const auto* src = reinterpret_cast<const uint32_t*>(shader_addr);
 
 		EXIT_NOT_IMPLEMENTED(src == nullptr);
 
@@ -3498,19 +2414,32 @@ ShaderCode ShaderParseVS(const HW::VertexShaderInfo* regs, const HW::ShaderRegis
 
 		EXIT_NOT_IMPLEMENTED(regs->vs_regs.rsrc2.user_sgpr > regs->vs_user_sgpr.count);
 
-		const auto* header = GetBinaryInfo(src);
+		if (Config::IsNextGen())
+		{
+			EXIT_NOT_IMPLEMENTED(!gs_instead_of_vs);
 
-		EXIT_NOT_IMPLEMENTED(header == nullptr);
+			hash0 = (regs->gs_regs.chksum >> 32u) & 0xffffffffu;
+			crc32 = regs->gs_regs.chksum & 0xffffffffu;
+		} else
+		{
+			const auto* header = GetBinaryInfo(src);
 
-		bi_print("ShaderParseVS():ShaderBinaryInfo", *header);
+			EXIT_NOT_IMPLEMENTED(header == nullptr);
 
-		code.SetCrc32(header->crc32);
-		code.SetHash0(header->hash0);
-		shader_parse(0, src, nullptr, &code);
+			bi_print("ShaderParseVS():ShaderBinaryInfo", *header);
+
+			hash0 = header->hash0;
+			crc32 = header->crc32;
+		}
+
+		code.SetCrc32(crc32);
+		code.SetHash0(hash0);
+		// shader_parse(0, src, nullptr, &code);
+		ShaderParse(src, &code);
 
 		if (g_debug_printfs != nullptr)
 		{
-			auto id = (static_cast<uint64_t>(header->hash0) << 32u) | header->crc32;
+			auto id = (static_cast<uint64_t>(hash0) << 32u) | crc32;
 			if (auto index = g_debug_printfs->Find(id, [](auto cmd, auto id) { return cmd.id == id; }); g_debug_printfs->IndexValid(index))
 			{
 				code.GetDebugPrintfs() = g_debug_printfs->At(index).cmds;
@@ -3525,7 +2454,7 @@ Vector<uint32_t> ShaderRecompileVS(const ShaderCode& code, const ShaderVertexInp
 {
 	KYTY_PROFILER_FUNCTION(profiler::colors::Amber300);
 
-	String           source;
+	String8          source;
 	Vector<uint32_t> ret;
 	ShaderLogHelper  log("vs");
 
@@ -3547,9 +2476,9 @@ Vector<uint32_t> ShaderRecompileVS(const ShaderCode& code, const ShaderVertexInp
 
 	log.DumpRecompiledShader(source);
 
-	if (String err_msg; !SpirvRun(source, &ret, &err_msg))
+	if (String8 err_msg; !SpirvRun(source, &ret, &err_msg))
 	{
-		EXIT("SpirvRun() failed:\n%s\n", err_msg.C_Str());
+		EXIT("SpirvRun() failed:\n%s\n", err_msg.c_str());
 	}
 
 	log.DumpOptimizedShader(ret);
@@ -3573,28 +2502,42 @@ ShaderCode ShaderParsePS(const HW::PixelShaderInfo* regs, const HW::ShaderRegist
 		code.SetPsEmbeddedId(regs->ps_embedded_id);
 	} else
 	{
-		const auto* src = reinterpret_cast<const uint32_t*>(regs->ps_regs.data_addr);
-
-		EXIT_NOT_IMPLEMENTED(src == nullptr);
+		uint32_t hash0 = 0;
+		uint32_t crc32 = 0;
 
 		ps_print("ShaderParsePS()", regs->ps_regs, *sh);
 		ps_check(regs->ps_regs, *sh);
 
 		EXIT_NOT_IMPLEMENTED(regs->ps_regs.rsrc2.user_sgpr > regs->ps_user_sgpr.count);
 
-		const auto* header = GetBinaryInfo(src);
+		const auto* src = reinterpret_cast<const uint32_t*>(regs->ps_regs.data_addr);
 
-		EXIT_NOT_IMPLEMENTED(header == nullptr);
+		EXIT_NOT_IMPLEMENTED(src == nullptr);
 
-		bi_print("ShaderParsePS():ShaderBinaryInfo", *header);
+		if (Config::IsNextGen())
+		{
+			hash0 = (regs->ps_regs.chksum >> 32u) & 0xffffffffu;
+			crc32 = regs->ps_regs.chksum & 0xffffffffu;
+		} else
+		{
+			const auto* header = GetBinaryInfo(src);
 
-		code.SetCrc32(header->crc32);
-		code.SetHash0(header->hash0);
-		shader_parse(0, src, nullptr, &code);
+			EXIT_NOT_IMPLEMENTED(header == nullptr);
+
+			bi_print("ShaderParsePS():ShaderBinaryInfo", *header);
+
+			hash0 = header->hash0;
+			crc32 = header->crc32;
+		}
+
+		code.SetCrc32(crc32);
+		code.SetHash0(hash0);
+		// shader_parse(0, src, nullptr, &code);
+		ShaderParse(src, &code);
 
 		if (g_debug_printfs != nullptr)
 		{
-			auto id = (static_cast<uint64_t>(header->hash0) << 32u) | header->crc32;
+			auto id = (static_cast<uint64_t>(hash0) << 32u) | crc32;
 			if (auto index = g_debug_printfs->Find(id, [](auto cmd, auto id) { return cmd.id == id; }); g_debug_printfs->IndexValid(index))
 			{
 				code.GetDebugPrintfs() = g_debug_printfs->At(index).cmds;
@@ -3609,7 +2552,7 @@ Vector<uint32_t> ShaderRecompilePS(const ShaderCode& code, const ShaderPixelInpu
 {
 	KYTY_PROFILER_FUNCTION(profiler::colors::Blue300);
 
-	String           source;
+	String8          source;
 	Vector<uint32_t> ret;
 	ShaderLogHelper  log("ps");
 
@@ -3636,9 +2579,9 @@ Vector<uint32_t> ShaderRecompilePS(const ShaderCode& code, const ShaderPixelInpu
 
 	log.DumpRecompiledShader(source);
 
-	if (String err_msg; !SpirvRun(source, &ret, &err_msg))
+	if (String8 err_msg; !SpirvRun(source, &ret, &err_msg))
 	{
-		EXIT("SpirvRun() failed:\n%s\n", err_msg.C_Str());
+		EXIT("SpirvRun() failed:\n%s\n", err_msg.c_str());
 	}
 
 	log.DumpOptimizedShader(ret);
@@ -3673,7 +2616,8 @@ ShaderCode ShaderParseCS(const HW::ComputeShaderInfo* regs, const HW::ShaderRegi
 
 	code.SetCrc32(header->crc32);
 	code.SetHash0(header->hash0);
-	shader_parse(0, src, nullptr, &code);
+	// shader_parse(0, src, nullptr, &code);
+	ShaderParse(src, &code);
 
 	if (g_debug_printfs != nullptr)
 	{
@@ -3707,9 +2651,9 @@ Vector<uint32_t> ShaderRecompileCS(const ShaderCode& code, const ShaderComputeIn
 
 	log.DumpRecompiledShader(source);
 
-	if (String err_msg; !SpirvRun(source, &ret, &err_msg))
+	if (String8 err_msg; !SpirvRun(source, &ret, &err_msg))
 	{
-		EXIT("SpirvRun() failed:\n%s\n", err_msg.C_Str());
+		EXIT("SpirvRun() failed:\n%s\n", err_msg.c_str());
 	}
 
 	log.DumpOptimizedShader(ret);
@@ -3944,21 +2888,38 @@ ShaderId ShaderGetIdVS(const HW::VertexShaderInfo* regs, const ShaderVertexInput
 		return ret;
 	}
 
-	const auto* src = reinterpret_cast<const uint32_t*>(regs->vs_regs.data_addr);
-
-	EXIT_NOT_IMPLEMENTED(src == nullptr);
-
-	const auto* header = GetBinaryInfo(src);
-
-	EXIT_NOT_IMPLEMENTED(header == nullptr);
-
 	ret.ids.Expand(64);
 
-	ret.hash0 = header->hash0;
-	ret.crc32 = header->crc32;
+	bool gs_instead_of_vs =
+	    (regs->vs_regs.data_addr == 0 && regs->gs_regs.data_addr == 0 && regs->es_regs.data_addr != 0 && regs->gs_regs.chksum != 0);
+	uint64_t shader_addr = (gs_instead_of_vs ? regs->es_regs.data_addr : regs->vs_regs.data_addr);
 
-	ret.ids.Add(header->length);
-	ret.ids.Add(static_cast<uint32_t>(input_info->fetch));
+	bool gen5 = Config::IsNextGen();
+
+	if (gen5)
+	{
+		EXIT_NOT_IMPLEMENTED(!gs_instead_of_vs);
+
+		ret.hash0 = (regs->gs_regs.chksum >> 32u) & 0xffffffffu;
+		ret.crc32 = regs->gs_regs.chksum & 0xffffffffu;
+	} else
+	{
+		const auto* src = reinterpret_cast<const uint32_t*>(shader_addr);
+
+		EXIT_NOT_IMPLEMENTED(src == nullptr);
+
+		const auto* header = GetBinaryInfo(src);
+
+		EXIT_NOT_IMPLEMENTED(header == nullptr);
+
+		ret.hash0 = header->hash0;
+		ret.crc32 = header->crc32;
+		ret.ids.Add(header->length);
+	}
+
+	ret.ids.Add(static_cast<uint32_t>(input_info->fetch_external));
+	ret.ids.Add(static_cast<uint32_t>(input_info->fetch_embedded));
+	ret.ids.Add(static_cast<uint32_t>(input_info->fetch_inline));
 	ret.ids.Add(input_info->resources_num);
 	ret.ids.Add(input_info->export_count);
 
@@ -3975,8 +2936,15 @@ ShaderId ShaderGetIdVS(const HW::VertexShaderInfo* regs, const ShaderVertexInput
 		ret.ids.Add(r.DstSelY());
 		ret.ids.Add(r.DstSelZ());
 		ret.ids.Add(r.DstSelW());
-		ret.ids.Add(r.Nfmt());
-		ret.ids.Add(r.Dfmt());
+		if (gen5)
+		{
+			ret.ids.Add(r.Format());
+			ret.ids.Add(r.OutOfBounds());
+		} else
+		{
+			ret.ids.Add(r.Nfmt());
+			ret.ids.Add(r.Dfmt());
+		}
 		ret.ids.Add(static_cast<uint32_t>(r.AddTid()));
 	}
 
@@ -4011,20 +2979,28 @@ ShaderId ShaderGetIdPS(const HW::PixelShaderInfo* regs, const ShaderPixelInputIn
 		return ret;
 	}
 
-	const auto* src = reinterpret_cast<const uint32_t*>(regs->ps_regs.data_addr);
-
-	EXIT_NOT_IMPLEMENTED(src == nullptr);
-
-	const auto* header = GetBinaryInfo(src);
-
-	EXIT_NOT_IMPLEMENTED(header == nullptr);
-
 	ret.ids.Expand(64);
 
-	ret.hash0 = header->hash0;
-	ret.crc32 = header->crc32;
+	if (Config::IsNextGen())
+	{
+		ret.hash0 = (regs->ps_regs.chksum >> 32u) & 0xffffffffu;
+		ret.crc32 = regs->ps_regs.chksum & 0xffffffffu;
+	} else
+	{
+		const auto* src = reinterpret_cast<const uint32_t*>(regs->ps_regs.data_addr);
 
-	ret.ids.Add(header->length);
+		EXIT_NOT_IMPLEMENTED(src == nullptr);
+
+		const auto* header = GetBinaryInfo(src);
+
+		EXIT_NOT_IMPLEMENTED(header == nullptr);
+
+		ret.hash0 = header->hash0;
+		ret.crc32 = header->crc32;
+
+		ret.ids.Add(header->length);
+	}
+
 	ret.ids.Add(input_info->input_num);
 	ret.ids.Add(static_cast<uint32_t>(input_info->ps_pos_xy));
 	ret.ids.Add(static_cast<uint32_t>(input_info->ps_pixel_kill_enable));

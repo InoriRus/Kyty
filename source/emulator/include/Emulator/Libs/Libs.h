@@ -35,10 +35,12 @@
 	using n::g_module_version_major;                                                                                                       \
 	using n::g_module_version_minor;
 // NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
+#define LIB_LOAD(name) name(s)
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define LIB_CHECK(ids, name)                                                                                                               \
 	if (id == (ids))                                                                                                                       \
 	{                                                                                                                                      \
-		name(s);                                                                                                                           \
+		LIB_LOAD(name);                                                                                                                    \
 		return true;                                                                                                                       \
 	}
 // NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
@@ -81,6 +83,7 @@ class SymbolDatabase;
 namespace Libs {
 
 bool Init(const String& id, Loader::SymbolDatabase* s);
+void InitAll(Loader::SymbolDatabase* s);
 
 } // namespace Libs
 } // namespace Kyty

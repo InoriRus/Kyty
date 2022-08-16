@@ -13,6 +13,7 @@ struct Config
 	uint32_t               screen_width                = 1280;
 	uint32_t               screen_height               = 720;
 	bool                   neo                         = true;
+	bool                   next_gen                    = false;
 	bool                   vulkan_validation_enabled   = false;
 	bool                   shader_validation_enabled   = false;
 	ShaderOptimizationType shader_optimization_type    = ShaderOptimizationType::None;
@@ -115,7 +116,7 @@ uint32_t GetScreenHeight()
 
 bool IsNeo()
 {
-	return g_config->neo;
+	return g_config->neo || g_config->next_gen;
 }
 
 bool VulkanValidationEnabled()
@@ -191,6 +192,16 @@ bool PipelineDumpEnabled()
 String GetPipelineDumpFolder()
 {
 	return g_config->pipeline_dump_folder;
+}
+
+void SetNextGen(bool mode)
+{
+	g_config->next_gen = mode;
+}
+
+bool IsNextGen()
+{
+	return g_config->next_gen;
 }
 
 } // namespace Kyty::Config

@@ -501,7 +501,7 @@ void TileConvertTiledToLinear(void* dst, const void* src, TileMode mode, uint32_
 }
 
 bool TileGetDepthSize(uint32_t width, uint32_t height, uint32_t pitch, uint32_t z_format, uint32_t stencil_format, bool htile, bool neo,
-                      TileSizeAlign* stencil_size, TileSizeAlign* htile_size, TileSizeAlign* depth_size)
+                      bool next_gen, TileSizeAlign* stencil_size, TileSizeAlign* htile_size, TileSizeAlign* depth_size)
 {
 	struct DepthInfo
 	{
@@ -585,11 +585,53 @@ bool TileGetDepthSize(uint32_t width, uint32_t height, uint32_t pitch, uint32_t 
 	    {1280, 720, 1, 1, false, true, 1280, {983040, 32768}, {0, 0}, {1966080, 65536}},
 	};
 
+	static const DepthInfo infos_next_gen[] = {
+	    {3840, 2160, 3, 0, true, true, 3840, {0, 0}, {655360, 32768}, {33423360, 65536}},
+	    {3840, 2160, 3, 0, false, true, 3840, {0, 0}, {0, 0}, {33423360, 65536}},
+	    {1920, 1080, 3, 0, true, true, 1920, {0, 0}, {196608, 32768}, {8847360, 65536}},
+	    {1920, 1080, 3, 0, false, true, 1920, {0, 0}, {0, 0}, {8847360, 65536}},
+	    {1280, 720, 3, 0, true, true, 1280, {0, 0}, {131072, 32768}, {3932160, 65536}},
+	    {1280, 720, 3, 0, false, true, 1280, {0, 0}, {0, 0}, {3932160, 65536}},
+	    {3840, 2160, 1, 0, true, true, 3840, {0, 0}, {655360, 32768}, {16711680, 65536}},
+	    {3840, 2160, 1, 0, false, true, 3840, {0, 0}, {0, 0}, {16711680, 65536}},
+	    {1920, 1080, 1, 0, true, true, 2048, {0, 0}, {196608, 32768}, {4718592, 65536}},
+	    {1920, 1080, 1, 0, false, true, 2048, {0, 0}, {0, 0}, {4718592, 65536}},
+	    {1280, 720, 1, 0, true, true, 1280, {0, 0}, {131072, 32768}, {1966080, 65536}},
+	    {1280, 720, 1, 0, false, true, 1280, {0, 0}, {0, 0}, {1966080, 65536}},
+	    {3840, 2160, 3, 1, true, true, 3840, {8847360, 65536}, {655360, 32768}, {33423360, 65536}},
+	    {3840, 2160, 3, 1, false, true, 3840, {8847360, 65536}, {0, 0}, {33423360, 65536}},
+	    {1920, 1080, 3, 1, true, true, 1920, {2621440, 65536}, {196608, 32768}, {8847360, 65536}},
+	    {1920, 1080, 3, 1, false, true, 1920, {2621440, 65536}, {0, 0}, {8847360, 65536}},
+	    {1280, 720, 3, 1, true, true, 1280, {983040, 65536}, {131072, 32768}, {3932160, 65536}},
+	    {1280, 720, 3, 1, false, true, 1280, {983040, 65536}, {0, 0}, {3932160, 65536}},
+	    {3840, 2160, 1, 1, true, true, 3840, {8847360, 65536}, {655360, 32768}, {16711680, 65536}},
+	    {3840, 2160, 1, 1, false, true, 3840, {8847360, 65536}, {0, 0}, {16711680, 65536}},
+	    {1920, 1080, 1, 1, true, true, 2048, {2621440, 65536}, {196608, 32768}, {4718592, 65536}},
+	    {1920, 1080, 1, 1, false, true, 2048, {2621440, 65536}, {0, 0}, {4718592, 65536}},
+	    {1280, 720, 1, 1, true, true, 1280, {983040, 65536}, {131072, 32768}, {1966080, 65536}},
+	    {1280, 720, 1, 1, false, true, 1280, {983040, 65536}, {0, 0}, {1966080, 65536}},
+	};
+
 	EXIT_IF(depth_size == nullptr);
 	EXIT_IF(htile_size == nullptr);
 	EXIT_IF(stencil_size == nullptr);
 
-	if (neo)
+	if (next_gen)
+	{
+		EXIT_IF(pitch != 0);
+		EXIT_IF(!neo);
+		for (const auto& i: infos_next_gen)
+		{
+			if (i.width == width && i.height == height /*&& i.pitch == pitch*/ && i.tile == htile && i.z_format == z_format &&
+			    i.stencil_format == stencil_format)
+			{
+				*depth_size   = i.depth;
+				*htile_size   = i.htile;
+				*stencil_size = i.stencil;
+				return true;
+			}
+		}
+	} else if (neo)
 	{
 		for (const auto& i: infos_neo)
 		{
@@ -719,6 +761,12 @@ struct TextureInfoSize
 	uint32_t mipmap_size   = 0;
 };
 
+struct TextureInfoSize2
+{
+	uint32_t mipmap_offset = 0;
+	uint32_t mipmap_size   = 0;
+};
+
 struct TextureInfo
 {
 	uint32_t          dfmt   = 0;
@@ -733,6 +781,21 @@ struct TextureInfo
 	TextureInfoPadded padded[16];
 };
 
+struct TextureInfo2
+{
+	uint32_t          fmt         = 0;
+	uint32_t          width       = 0;
+	uint32_t          height      = 0;
+	uint32_t          pitch       = 0;
+	uint32_t          levels      = 0;
+	uint32_t          tile        = 0;
+	uint32_t          total_size  = 0;
+	uint32_t          total_align = 0;
+	TextureInfoSize2  size[16];
+	TextureInfoPadded padded[16];
+};
+
+#include "Tables/TileTextureInfo_0_56.inc"
 #include "Tables/TileTextureInfo_10_10_0.inc"
 #include "Tables/TileTextureInfo_13_10_0.inc"
 #include "Tables/TileTextureInfo_13_10_9.inc"
@@ -758,6 +821,8 @@ static const TextureInfo* g_info_map_2_4_7[16][16][16][2]   = {};
 static const TextureInfo* g_info_map_8_1_0[16][16][16][2]   = {};
 static const TextureInfo* g_info_map_8_10_0[16][16][16][2]  = {};
 static const TextureInfo* g_info_map_8_10_9[16][16][16][2]  = {};
+
+static const TextureInfo2* g_info_map_0_56[16][16][16][16] = {};
 
 template <class Map>
 static void init_map(Map& map, const TextureInfo* info, int num)
@@ -786,7 +851,41 @@ static void init_map(Map& map, const TextureInfo* info, int num)
 			auto h = IntLog2(i.height);
 			auto p = IntLog2(i.pitch);
 			auto n = i.neo ? 1 : 0;
-			EXIT_IF(w > 16 || h > 16 || p > 16 || n > 2);
+			EXIT_IF(w >= 16 || h >= 16 || p >= 16 || n >= 2);
+			EXIT_IF(map[w][h][p][n] != nullptr);
+			map[w][h][p][n] = &i;
+		}
+	}
+}
+
+template <class Map>
+static void init_map2(Map& map, const TextureInfo2* info, int num)
+{
+	for (int w = 0; w < 16; w++)
+	{
+		for (int h = 0; h < 16; h++)
+		{
+			for (int p = 0; p < 16; p++)
+			{
+				for (int n = 0; n < 16; n++)
+				{
+					map[w][h][p][n] = nullptr;
+				}
+			}
+		}
+	}
+
+	for (int index = 0; index < num; index++)
+	{
+		const auto& i = info[index];
+		if (!(i.width == 0 && i.height == 0 && i.pitch == 0))
+		{
+			EXIT_IF(!(IsPowerOfTwo(i.width) && IsPowerOfTwo(i.height) && IsPowerOfTwo(i.pitch)));
+			auto w = IntLog2(i.width);
+			auto h = IntLog2(i.height);
+			auto p = IntLog2(i.pitch);
+			auto n = i.levels;
+			EXIT_IF(w >= 16 || h >= 16 || p >= 16 || n >= 16);
 			EXIT_IF(map[w][h][p][n] != nullptr);
 			map[w][h][p][n] = &i;
 		}
@@ -796,15 +895,20 @@ static void init_map(Map& map, const TextureInfo* info, int num)
 template <class Map>
 static const TextureInfo* check_map(Map& map, uint32_t width, uint32_t height, uint32_t pitch, bool neo)
 {
-	// if (IsPowerOfTwo(width) && IsPowerOfTwo(height) && IsPowerOfTwo(pitch))
-	{
-		auto w = IntLog2(width);
-		auto h = IntLog2(height);
-		auto p = IntLog2(pitch);
-		auto n = neo ? 1 : 0;
-		return map[w][h][p][n];
-	}
-	// return nullptr;
+	auto w = IntLog2(width);
+	auto h = IntLog2(height);
+	auto p = IntLog2(pitch);
+	auto n = neo ? 1 : 0;
+	return map[w][h][p][n];
+}
+
+template <class Map>
+static const TextureInfo2* check_map2(Map& map, uint32_t width, uint32_t height, uint32_t pitch, uint32_t levels)
+{
+	auto w = IntLog2(width);
+	auto h = IntLog2(height);
+	auto p = IntLog2(pitch);
+	return map[w][h][p][levels];
 }
 
 static void init_maps()
@@ -821,12 +925,32 @@ static void init_maps()
 	init_map(g_info_map_8_1_0, infos_8_1_0_pow2, std::size(infos_8_1_0_pow2));
 	init_map(g_info_map_8_10_0, infos_8_10_0_pow2, std::size(infos_8_10_0_pow2));
 	init_map(g_info_map_8_10_9, infos_8_10_9_pow2, std::size(infos_8_10_9_pow2));
+
+	init_map2(g_info_map_0_56, infos_0_56_pow2, std::size(infos_0_56_pow2));
 }
 
 #define KYTY_TEXTURE_CHECK(n)                                                                                                              \
 	if (pow2)                                                                                                                              \
 	{                                                                                                                                      \
 		if (const auto* i = check_map(g_info_map_##n, width, height, pitch, neo); i != nullptr)                                            \
+		{                                                                                                                                  \
+			*info = i;                                                                                                                     \
+			*num  = 1;                                                                                                                     \
+		} else                                                                                                                             \
+		{                                                                                                                                  \
+			*info = nullptr;                                                                                                               \
+			*num  = 0;                                                                                                                     \
+		}                                                                                                                                  \
+	} else                                                                                                                                 \
+	{                                                                                                                                      \
+		*info = infos_##n;                                                                                                                 \
+		*num  = std::size(infos_##n);                                                                                                      \
+	}
+
+#define KYTY_TEXTURE_CHECK2(n)                                                                                                             \
+	if (pow2)                                                                                                                              \
+	{                                                                                                                                      \
+		if (const auto* i = check_map2(g_info_map_##n, width, height, pitch, levels); i != nullptr)                                        \
 		{                                                                                                                                  \
 			*info = i;                                                                                                                     \
 			*num  = 1;                                                                                                                     \
@@ -902,6 +1026,23 @@ static void FindTextureInfo(uint32_t dfmt, uint32_t nfmt, uint32_t width, uint32
 			}
 			break;
 		default: *info = nullptr; *num = 0;
+	}
+}
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+static void FindTextureInfo2(uint32_t fmt, uint32_t width, uint32_t height, uint32_t pitch, uint32_t tile, uint32_t levels,
+                             const TextureInfo2** info, int* num, bool pow2)
+{
+	EXIT_IF(info == nullptr);
+	EXIT_IF(num == nullptr);
+
+	if (tile == 0 && fmt == 56)
+	{
+		KYTY_TEXTURE_CHECK2(0_56);
+	} else
+	{
+		*info = nullptr;
+		*num  = 0;
 	}
 }
 
@@ -1000,6 +1141,72 @@ void TileGetTextureSize(uint32_t dfmt, uint32_t nfmt, uint32_t width, uint32_t h
 		list.Add(String::FromPrintf("levels = %u", levels));
 		list.Add(String::FromPrintf("tile   = %u", tile));
 		list.Add(String::FromPrintf("neo    = %s", neo ? "true" : "false"));
+		EXIT("unknown format:\n%s\n", list.Concat(U'\n').C_Str());
+	}
+}
+
+void TileGetTextureSize2(uint32_t format, uint32_t width, uint32_t height, uint32_t pitch, uint32_t levels, uint32_t tile,
+                         TileSizeAlign* total_size, TileSizeOffset* level_sizes, TilePaddedSize* padded_size)
+{
+	KYTY_PROFILER_FUNCTION();
+
+	const TextureInfo2* infos = nullptr;
+	int                 num   = 0;
+
+	bool pow2 = (IsPowerOfTwo(width) && IsPowerOfTwo(height) && IsPowerOfTwo(pitch));
+
+	EXIT_IF(levels == 0 || levels > 16);
+
+	FindTextureInfo2(format, width, height, pitch, tile, levels, &infos, &num, pow2);
+
+	for (int index = 0; index < num; index++)
+	{
+		const auto& i = infos[index];
+		if (i.fmt == format && i.width == width && i.pitch == pitch && i.height == height && i.levels == levels && i.tile == tile)
+		{
+			if (total_size != nullptr)
+			{
+				total_size->size  = i.total_size;
+				total_size->align = i.total_align;
+			}
+
+			if (level_sizes != nullptr)
+			{
+				if (levels == 1)
+				{
+					level_sizes[0].size   = i.total_size;
+					level_sizes[0].offset = 0;
+				} else
+				{
+					for (uint32_t l = 0; l < levels; l++)
+					{
+						level_sizes[l].size   = i.size[l].mipmap_size;
+						level_sizes[l].offset = i.size[l].mipmap_offset;
+					}
+				}
+			}
+
+			if (padded_size != nullptr)
+			{
+				for (uint32_t l = 0; l < levels; l++)
+				{
+					padded_size[l].width  = i.padded[l].width;
+					padded_size[l].height = i.padded[l].height;
+				}
+			}
+			return;
+		}
+	}
+
+	if (total_size != nullptr && total_size->size == 0)
+	{
+		Core::StringList list;
+		list.Add(String::FromPrintf("format = %u", format));
+		list.Add(String::FromPrintf("width  = %u", width));
+		list.Add(String::FromPrintf("height = %u", height));
+		list.Add(String::FromPrintf("pitch  = %u", pitch));
+		list.Add(String::FromPrintf("levels = %u", levels));
+		list.Add(String::FromPrintf("tile   = %u", tile));
 		EXIT("unknown format:\n%s\n", list.Concat(U'\n').C_Str());
 	}
 }

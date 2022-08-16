@@ -35,13 +35,14 @@
 
 class QWidget;
 
-constexpr char  SCRIPT_EXE[]                  = "fc_script.exe";
-constexpr char  CMD_EXE[]                     = "cmd.exe";
-constexpr char  CONEMU_EXE[]                  = "C:/Program Files/ConEmu/ConEmu64.exe";
-constexpr char  KYTY_MOUNT[]                  = "kyty_mount";
-constexpr char  KYTY_EXECUTE[]                = "kyty_execute";
-constexpr char  KYTY_LOAD_ELF[]               = "kyty_load_elf";
-constexpr char  KYTY_LOAD_SYMBOLS[]           = "kyty_load_symbols";
+constexpr char SCRIPT_EXE[]    = "fc_script.exe";
+constexpr char CMD_EXE[]       = "cmd.exe";
+constexpr char CONEMU_EXE[]    = "C:/Program Files/ConEmu/ConEmu64.exe";
+constexpr char KYTY_MOUNT[]    = "kyty_mount";
+constexpr char KYTY_EXECUTE[]  = "kyty_execute";
+constexpr char KYTY_LOAD_ELF[] = "kyty_load_elf";
+// constexpr char  KYTY_LOAD_SYMBOLS[]           = "kyty_load_symbols";
+constexpr char  KYTY_LOAD_SYMBOLS_ALL[]       = "kyty_load_symbols_all";
 constexpr char  KYTY_LOAD_PARAM_SFO[]         = "kyty_load_param_sfo";
 constexpr char  KYTY_INIT[]                   = "kyty_init";
 constexpr char  KYTY_LUA_FILE[]               = "kyty_run.lua";
@@ -183,7 +184,7 @@ void MainDialogPrivate::FindInterpreter()
 		found = found && lines.contains(QString("Lua function: ") + KYTY_MOUNT);
 		found = found && lines.contains(QString("Lua function: ") + KYTY_EXECUTE);
 		found = found && lines.contains(QString("Lua function: ") + KYTY_LOAD_ELF);
-		found = found && lines.contains(QString("Lua function: ") + KYTY_LOAD_SYMBOLS);
+		found = found && lines.contains(QString("Lua function: ") + KYTY_LOAD_SYMBOLS_ALL);
 		found = found && lines.contains(QString("Lua function: ") + KYTY_LOAD_PARAM_SFO);
 		found = found && lines.contains(QString("Lua function: ") + KYTY_INIT);
 	}
@@ -249,10 +250,12 @@ static bool CreateLuaScript(Kyty::Configuration* info, const QString& file_name)
 			s << KYTY_LOAD_ELF << "('/app0/" << elf << "');\n";
 		}
 
-		for (const auto& lib: info->libs_selected)
-		{
-			s << KYTY_LOAD_SYMBOLS << "('" << lib << "');\n";
-		}
+		//		for (const auto& lib: info->libs_selected)
+		//		{
+		//			s << KYTY_LOAD_SYMBOLS << "('" << lib << "');\n";
+		//		}
+
+		s << KYTY_LOAD_SYMBOLS_ALL << "();\n";
 
 		s << KYTY_EXECUTE << "();\n";
 

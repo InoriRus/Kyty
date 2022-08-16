@@ -12,6 +12,10 @@ namespace Kyty::Libs::LibKernel::Memory {
 
 KYTY_SUBSYSTEM_DEFINE(Memory);
 
+using callback_func_t = void (*)(uintptr_t addr, size_t size);
+
+void RegisterCallbacks(callback_func_t alloc_func, callback_func_t free_func);
+
 int KYTY_SYSV_ABI    KernelMapNamedFlexibleMemory(void** addr_in_out, size_t len, int prot, int flags, const char* name);
 int KYTY_SYSV_ABI    KernelMapFlexibleMemory(void** addr_in_out, size_t len, int prot, int flags);
 int KYTY_SYSV_ABI    KernelMunmap(uint64_t vaddr, size_t len);

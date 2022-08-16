@@ -52,6 +52,9 @@ public:
 	bool Find(uint64_t vaddr, uint64_t* base_addr, size_t* len, int* prot, VirtualMemory::Mode* mode, Graphics::GpuMemoryMode* gpu_mode);
 	bool Find(uint64_t phys_addr, bool next, PhysicalMemory::AllocatedBlock* out);
 
+	[[nodiscard]] Core::Mutex&                  GetMutex() { return m_mutex; }
+	[[nodiscard]] const Vector<AllocatedBlock>& GetBlocks() const { return m_allocated; }
+
 private:
 	Vector<AllocatedBlock> m_allocated;
 	Core::Mutex            m_mutex;
@@ -81,6 +84,9 @@ public:
 	bool Unmap(uint64_t vaddr, uint64_t size, Graphics::GpuMemoryMode* gpu_mode);
 	bool Find(uint64_t vaddr, uint64_t* base_addr, size_t* len, int* prot, VirtualMemory::Mode* mode, Graphics::GpuMemoryMode* gpu_mode);
 
+	[[nodiscard]] Core::Mutex&                  GetMutex() { return m_mutex; }
+	[[nodiscard]] const Vector<AllocatedBlock>& GetBlocks() const { return m_allocated; }
+
 private:
 	Vector<AllocatedBlock> m_allocated;
 	uint64_t               m_allocated_total = 0;
@@ -89,6 +95,8 @@ private:
 
 static PhysicalMemory* g_physical_memory = nullptr;
 static FlexibleMemory* g_flexible_memory = nullptr;
+static callback_func_t g_alloc_callback  = nullptr;
+static callback_func_t g_free_callback   = nullptr;
 
 KYTY_SUBSYSTEM_INIT(Memory)
 {
@@ -105,6 +113,29 @@ KYTY_SUBSYSTEM_DESTROY(Memory) {}
 static uint64_t get_aligned_pos(uint64_t pos, size_t align)
 {
 	return (align != 0 ? (pos + (align - 1)) & ~(align - 1) : pos);
+}
+
+void RegisterCallbacks(callback_func_t alloc_func, callback_func_t free_func)
+{
+	EXIT_IF(g_alloc_callback != nullptr || g_free_callback != nullptr);
+	EXIT_IF(alloc_func == nullptr || free_func == nullptr);
+
+	g_alloc_callback = alloc_func;
+	g_free_callback  = free_func;
+
+	g_physical_memory->GetMutex().Lock();
+	for (const auto& b: g_physical_memory->GetBlocks())
+	{
+		g_alloc_callback(b.map_vaddr, b.map_size);
+	}
+	g_physical_memory->GetMutex().Unlock();
+
+	g_flexible_memory->GetMutex().Lock();
+	for (const auto& b: g_flexible_memory->GetBlocks())
+	{
+		g_alloc_callback(b.map_vaddr, b.map_size);
+	}
+	g_flexible_memory->GetMutex().Unlock();
 }
 
 bool PhysicalMemory::Alloc(uint64_t search_start, uint64_t search_end, size_t len, size_t alignment, uint64_t* phys_addr_out,
@@ -445,6 +476,11 @@ int32_t KYTY_SYSV_ABI KernelMapNamedFlexibleMemory(void** addr_in_out, size_t le
 		Graphics::GpuMemorySetAllocatedRange(out_addr, len);
 	}
 
+	if (g_alloc_callback != nullptr)
+	{
+		g_alloc_callback(out_addr, len);
+	}
+
 	return OK;
 }
 
@@ -488,6 +524,11 @@ int KYTY_SYSV_ABI KernelMunmap(uint64_t vaddr, size_t len)
 	{
 		Graphics::GraphicsRunWait();
 		Graphics::GpuMemoryFree(Graphics::WindowGetGraphicContext(), vaddr, len, true);
+	}
+
+	if (g_free_callback != nullptr)
+	{
+		g_free_callback(vaddr, len);
 	}
 
 	return OK;
@@ -639,6 +680,11 @@ int KYTY_SYSV_ABI KernelReleaseDirectMemory(int64_t start, size_t len)
 		Graphics::GpuMemoryFree(Graphics::WindowGetGraphicContext(), vaddr, size, true);
 	}
 
+	if (g_free_callback != nullptr)
+	{
+		g_free_callback(vaddr, len);
+	}
+
 	return OK;
 }
 
@@ -720,6 +766,11 @@ int KYTY_SYSV_ABI KernelMapDirectMemory(void** addr, size_t len, int prot, int f
 	if (gpu_mode != Graphics::GpuMemoryMode::NoAccess)
 	{
 		Graphics::GpuMemorySetAllocatedRange(out_addr, len);
+	}
+
+	if (g_alloc_callback != nullptr)
+	{
+		g_alloc_callback(out_addr, len);
 	}
 
 	printf(FG_GREEN "\t [Ok]\n" FG_DEFAULT);

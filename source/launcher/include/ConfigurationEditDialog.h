@@ -55,7 +55,7 @@ protected:
 	void browse_base_path();
 	void browse_param_file();
 	void scan_elfs();
-	void scan_libs();
+	// void scan_libs();
 	void load_param_sfo();
 	void clear();
 	void test();

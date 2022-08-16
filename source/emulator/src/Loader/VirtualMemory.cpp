@@ -115,7 +115,8 @@ public:
 			info.access_violation_vaddr = exception_record->ExceptionInformation[1];
 		}
 
-		info.rbp = dispatcher_context->ContextRecord->Rbp;
+		info.rbp                = dispatcher_context->ContextRecord->Rbp;
+		info.exception_win_code = exception_record->ExceptionCode;
 
 		auto* p = *static_cast<ExceptionHandlerPrivate**>(dispatcher_context->HandlerData);
 		p->func(&info);
@@ -205,6 +206,19 @@ static LONG WINAPI ExceptionFilter(PEXCEPTION_POINTERS exception)
 
 	info.exception_address = reinterpret_cast<uint64_t>(exception_record->ExceptionAddress);
 
+	// printf("exception_record->ExceptionCode = %u\n", static_cast<uint32_t>(exception_record->ExceptionCode));
+
+	if (exception_record->ExceptionCode == DBG_PRINTEXCEPTION_C || exception_record->ExceptionCode == DBG_PRINTEXCEPTION_WIDE_C)
+	{
+		return EXCEPTION_CONTINUE_EXECUTION;
+	}
+
+	if (exception_record->ExceptionCode == 0x406D1388)
+	{
+		// Set a thread name
+		return EXCEPTION_CONTINUE_EXECUTION;
+	}
+
 	if (exception_record->ExceptionCode == EXCEPTION_ACCESS_VIOLATION)
 	{
 		info.type = ExceptionHandler::ExceptionType::AccessViolation;
@@ -217,6 +231,9 @@ static LONG WINAPI ExceptionFilter(PEXCEPTION_POINTERS exception)
 		}
 		info.access_violation_vaddr = exception_record->ExceptionInformation[1];
 	}
+
+	info.rbp                = exception->ContextRecord->Rbp;
+	info.exception_win_code = exception_record->ExceptionCode;
 
 	ExceptionHandlerPrivate::g_vec_func(&info);
 

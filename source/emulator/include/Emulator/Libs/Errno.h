@@ -21,6 +21,19 @@ constexpr int OK = 0;
 	}()
 
 // NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
+#define POSIX_N_CALL(func)                                                                                                                 \
+	[&]()                                                                                                                                  \
+	{                                                                                                                                      \
+		auto result = func;                                                                                                                \
+		if (result < 0)                                                                                                                    \
+		{                                                                                                                                  \
+			*Posix::GetErrorAddr() = LibKernel::KernelToPosix(static_cast<int>(result));                                                   \
+			return static_cast<decltype(result)>(-1);                                                                                      \
+		}                                                                                                                                  \
+		return result;                                                                                                                     \
+	}()
+
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define POSIX_PTHREAD_CALL(func)                                                                                                           \
 	[&]()                                                                                                                                  \
 	{                                                                                                                                      \

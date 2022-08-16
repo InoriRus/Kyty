@@ -46,6 +46,15 @@ static void load_symbols(const String& id, Loader::RuntimeLinker* rt)
 	}
 }
 
+static void load_symbols_all(Loader::RuntimeLinker* rt)
+{
+	KYTY_PROFILER_FUNCTION();
+
+	EXIT_IF(rt == nullptr);
+
+	Libs::InitAll(rt->Symbols());
+}
+
 static void print_system_info()
 {
 	Loader::SystemInfo info = Loader::GetSystemInfo();
@@ -208,6 +217,22 @@ KYTY_SCRIPT_FUNC(kyty_load_symbols_func)
 		Scripts::ScriptVar id = Scripts::ArgGetVar(i);
 		load_symbols(id.ToString(), rt);
 	}
+
+	return 0;
+}
+
+KYTY_SCRIPT_FUNC(kyty_load_symbols_all_func)
+{
+	auto count = Scripts::ArgGetVarCount();
+
+	if (count != 0)
+	{
+		EXIT("invalid args\n");
+	}
+
+	auto* rt = Core::Singleton<Loader::RuntimeLinker>::Instance();
+
+	load_symbols_all(rt);
 
 	return 0;
 }
@@ -405,6 +430,7 @@ void kyty_reg()
 	Scripts::RegisterFunc("kyty_load_elf", LuaFunc::kyty_load_elf_func, LuaFunc::kyty_help);
 	Scripts::RegisterFunc("kyty_save_main_elf", LuaFunc::kyty_save_main_elf_func, LuaFunc::kyty_help);
 	Scripts::RegisterFunc("kyty_load_symbols", LuaFunc::kyty_load_symbols_func, LuaFunc::kyty_help);
+	Scripts::RegisterFunc("kyty_load_symbols_all", LuaFunc::kyty_load_symbols_all_func, LuaFunc::kyty_help);
 	Scripts::RegisterFunc("kyty_load_param_sfo", LuaFunc::kyty_load_param_sfo_func, LuaFunc::kyty_help);
 	Scripts::RegisterFunc("kyty_dbg_dump", LuaFunc::kyty_dbg_dump_func, LuaFunc::kyty_help);
 	Scripts::RegisterFunc("kyty_execute", LuaFunc::kyty_execute_func, LuaFunc::kyty_help);

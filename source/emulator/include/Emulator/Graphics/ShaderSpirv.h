@@ -2,7 +2,7 @@
 #define EMULATOR_INCLUDE_EMULATOR_GRAPHICS_SHADERSPIRV_H_
 
 #include "Kyty/Core/Common.h"
-#include "Kyty/Core/String.h"
+#include "Kyty/Core/String8.h"
 
 #include "Emulator/Common.h"
 
@@ -15,10 +15,10 @@ struct ShaderVertexInputInfo;
 struct ShaderPixelInputInfo;
 struct ShaderComputeInputInfo;
 
-String SpirvGenerateSource(const ShaderCode& code, const ShaderVertexInputInfo* vs_input_info, const ShaderPixelInputInfo* ps_input_info,
-                           const ShaderComputeInputInfo* cs_input_info);
-String SpirvGetEmbeddedVs(uint32_t id);
-String SpirvGetEmbeddedPs(uint32_t id);
+String8 SpirvGenerateSource(const ShaderCode& code, const ShaderVertexInputInfo* vs_input_info, const ShaderPixelInputInfo* ps_input_info,
+                            const ShaderComputeInputInfo* cs_input_info);
+String8 SpirvGetEmbeddedVs(uint32_t id);
+String8 SpirvGetEmbeddedPs(uint32_t id);
 
 } // namespace Kyty::Libs::Graphics
 

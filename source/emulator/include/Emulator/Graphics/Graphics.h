@@ -11,6 +11,9 @@
 
 namespace Kyty::Libs::Graphics {
 
+struct Shader;
+struct ShaderRegister;
+
 KYTY_SUBSYSTEM_DEFINE(Graphics);
 
 void GraphicsDbgDumpDcb(const char* type, uint32_t num_dw, uint32_t* cmd_buffer);
@@ -69,9 +72,7 @@ int KYTY_SYSV_ABI GraphicsUnregisterResource(uint32_t resource_handle);
 
 namespace Gen5 {
 
-struct Shader;
 struct CommandBuffer;
-struct ShaderRegister;
 struct Label;
 
 int KYTY_SYSV_ABI   GraphicsInit(uint32_t* state, uint32_t ver);
@@ -97,6 +98,7 @@ uint32_t* KYTY_SYSV_ABI GraphicsCbReleaseMem(CommandBuffer* buf, uint8_t action,
                                              uint16_t gds_size, uint8_t interrupt, uint32_t interrupt_ctx_id);
 uint32_t* KYTY_SYSV_ABI GraphicsDcbResetQueue(CommandBuffer* buf, uint32_t op, uint32_t state);
 uint32_t* KYTY_SYSV_ABI GraphicsDcbWaitUntilSafeForRendering(CommandBuffer* buf, uint32_t video_out_handle, uint32_t display_buffer_index);
+uint32_t* KYTY_SYSV_ABI GraphicsDcbSetShRegisterDirect(CommandBuffer* buf, ShaderRegister reg);
 uint32_t* KYTY_SYSV_ABI GraphicsDcbSetCxRegistersIndirect(CommandBuffer* buf, const volatile ShaderRegister* regs, uint32_t num_regs);
 uint32_t* KYTY_SYSV_ABI GraphicsDcbSetShRegistersIndirect(CommandBuffer* buf, const volatile ShaderRegister* regs, uint32_t num_regs);
 uint32_t* KYTY_SYSV_ABI GraphicsDcbSetUcRegistersIndirect(CommandBuffer* buf, const volatile ShaderRegister* regs, uint32_t num_regs);

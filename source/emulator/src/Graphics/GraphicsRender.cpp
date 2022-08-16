@@ -471,6 +471,7 @@ static void uc_print(const char* func, const HW::UserConfig& uc)
 
 	printf("\t GetPrimType()         = 0x%08" PRIx32 "\n", uc.GetPrimType());
 	printf("\t primitive_group_size  = 0x%04" PRIx16 "\n", ge_cntl.primitive_group_size);
+	printf("\t vertex_group_size     = 0x%04" PRIx16 "\n", ge_cntl.vertex_group_size);
 	printf("\t en_user_vgpr1         = %s\n", user_en.vgpr1 ? "true" : "false");
 	printf("\t en_user_vgpr2         = %s\n", user_en.vgpr2 ? "true" : "false");
 	printf("\t en_user_vgpr3         = %s\n", user_en.vgpr3 ? "true" : "false");
@@ -481,8 +482,8 @@ static void uc_check(const HW::UserConfig& uc)
 	const auto& ge_cntl = uc.GetGeControl();
 	const auto& user_en = uc.GetGeUserVgprEn();
 
-	EXIT_NOT_IMPLEMENTED(ge_cntl.primitive_group_size != 0x0000);
-	EXIT_NOT_IMPLEMENTED(ge_cntl.vertex_group_size != 0x0000);
+	EXIT_NOT_IMPLEMENTED(ge_cntl.primitive_group_size != 0x0000 && ge_cntl.primitive_group_size != 0x0040);
+	EXIT_NOT_IMPLEMENTED(ge_cntl.vertex_group_size != 0x0000 && ge_cntl.vertex_group_size != 0x0040);
 	EXIT_NOT_IMPLEMENTED(user_en.vgpr1 != false);
 	EXIT_NOT_IMPLEMENTED(user_en.vgpr2 != false);
 	EXIT_NOT_IMPLEMENTED(user_en.vgpr3 != false);
@@ -565,11 +566,15 @@ static void rt_check(const HW::RenderTarget& rt)
 {
 	if (rt.base.addr != 0)
 	{
-		bool render_to_texture = (rt.attrib.tile_mode == 0x0d);
-		// EXIT_NOT_IMPLEMENTED(rt.base_addr == 0);
-		// EXIT_NOT_IMPLEMENTED(rt.pitch_div8_minus1 != 0x000000ef);
-		// EXIT_NOT_IMPLEMENTED(rt.fmask_pitch_div8_minus1 != 0x000000ef);
-		// EXIT_NOT_IMPLEMENTED(rt.slice_div64_minus1 != 0x000086ff);
+		bool ps5 = Config::IsNextGen();
+		// bool render_to_texture = (rt.attrib.tile_mode == 0x0d);
+		//  EXIT_NOT_IMPLEMENTED(rt.base_addr == 0);
+		if (ps5)
+		{
+			EXIT_NOT_IMPLEMENTED(rt.pitch.pitch_div8_minus1 != 0);
+			EXIT_NOT_IMPLEMENTED(rt.pitch.fmask_pitch_div8_minus1 != 0);
+			EXIT_NOT_IMPLEMENTED(rt.slice.slice_div64_minus1 != 0);
+		}
 		EXIT_NOT_IMPLEMENTED(rt.view.base_array_slice_index != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(rt.view.last_array_slice_index != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(rt.view.current_mip_level != 0x00000000);
@@ -581,7 +586,7 @@ static void rt_check(const HW::RenderTarget& rt)
 
 		EXIT_NOT_IMPLEMENTED(rt.info.cmask_fast_clear_enable != false);
 		EXIT_NOT_IMPLEMENTED(rt.info.dcc_compression_enable != false);
-		EXIT_NOT_IMPLEMENTED(!render_to_texture && rt.info.neo_mode != Config::IsNeo());
+		EXIT_NOT_IMPLEMENTED(!(rt.attrib.tile_mode == 0x0d) && rt.info.neo_mode != Config::IsNeo());
 		EXIT_NOT_IMPLEMENTED(rt.info.cmask_tile_mode != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(rt.info.cmask_tile_mode_neo != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(rt.info.blend_bypass != false);
@@ -595,14 +600,27 @@ static void rt_check(const HW::RenderTarget& rt)
 		// EXIT_NOT_IMPLEMENTED(rt.fmask_tile_mode != 0x0000000a);
 		EXIT_NOT_IMPLEMENTED(rt.attrib.num_samples != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(rt.attrib.num_fragments != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(rt.attrib2.width != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(rt.attrib2.height != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(rt.attrib2.num_mip_levels != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(rt.attrib3.depth != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(rt.attrib3.tile_mode != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(rt.attrib3.dimension != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(rt.attrib3.cmask_pipe_aligned != false);
-		EXIT_NOT_IMPLEMENTED(rt.attrib3.dcc_pipe_aligned != false);
+		if (ps5)
+		{
+			EXIT_NOT_IMPLEMENTED(rt.attrib2.width == 0x00000000);
+			EXIT_NOT_IMPLEMENTED(rt.attrib2.height == 0x00000000);
+			EXIT_NOT_IMPLEMENTED(rt.attrib2.num_mip_levels != 0x00000000);
+			EXIT_NOT_IMPLEMENTED(rt.attrib3.depth != 0x00000000);
+			EXIT_NOT_IMPLEMENTED(rt.attrib3.tile_mode != 0x0000001b);
+			EXIT_NOT_IMPLEMENTED(rt.attrib3.dimension != 0x00000001);
+			EXIT_NOT_IMPLEMENTED(rt.attrib3.cmask_pipe_aligned != true);
+			EXIT_NOT_IMPLEMENTED(rt.attrib3.dcc_pipe_aligned != true);
+		} else
+		{
+			EXIT_NOT_IMPLEMENTED(rt.attrib2.width != 0x00000000);
+			EXIT_NOT_IMPLEMENTED(rt.attrib2.height != 0x00000000);
+			EXIT_NOT_IMPLEMENTED(rt.attrib2.num_mip_levels != 0x00000000);
+			EXIT_NOT_IMPLEMENTED(rt.attrib3.depth != 0x00000000);
+			EXIT_NOT_IMPLEMENTED(rt.attrib3.tile_mode != 0x00000000);
+			EXIT_NOT_IMPLEMENTED(rt.attrib3.dimension != 0x00000000);
+			EXIT_NOT_IMPLEMENTED(rt.attrib3.cmask_pipe_aligned != false);
+			EXIT_NOT_IMPLEMENTED(rt.attrib3.dcc_pipe_aligned != false);
+		}
 		// EXIT_NOT_IMPLEMENTED(rt.dcc_max_uncompressed_block_size != 0x00000002);
 		// EXIT_NOT_IMPLEMENTED(rt.dcc.max_compressed_block_size != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(rt.dcc.min_compressed_block_size != 0x00000000);
@@ -619,8 +637,11 @@ static void rt_check(const HW::RenderTarget& rt)
 		EXIT_NOT_IMPLEMENTED(rt.clear_word0.word0 != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(rt.clear_word1.word1 != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(rt.dcc_addr.addr != 0x0000000000000000);
-		// EXIT_NOT_IMPLEMENTED(rt.width != 0x00000780);
-		// EXIT_NOT_IMPLEMENTED(rt.height != 0x00000438);
+		if (ps5)
+		{
+			EXIT_NOT_IMPLEMENTED(rt.size.width != 0);
+			EXIT_NOT_IMPLEMENTED(rt.size.height != 0);
+		}
 	}
 }
 
@@ -729,25 +750,46 @@ static void z_check(const HW::DepthRenderTarget& z)
 
 	if (z.z_info.format != 0 || z.stencil_info.format != 0)
 	{
-		EXIT_NOT_IMPLEMENTED(z.depth_info.addr5_swizzle_mask != 0x00000001);
-		EXIT_NOT_IMPLEMENTED(z.depth_info.array_mode != 0x00000004);
-		EXIT_NOT_IMPLEMENTED(z.depth_info.pipe_config != (Config::IsNeo() ? 0x00000012 : 0x0c));
-		EXIT_NOT_IMPLEMENTED(z.depth_info.bank_width != 0x00000000);
-		// EXIT_NOT_IMPLEMENTED(z.depth_info.bank_height != (Config::IsNeo() ? 0x00000001 : 2));
-		// EXIT_NOT_IMPLEMENTED(z.depth_info.macro_tile_aspect != (Config::IsNeo() ? 0x00000000 : 2));
-		// EXIT_NOT_IMPLEMENTED(z.depth_info.num_banks != (Config::IsNeo() ? 0x00000002 : 3));
+		bool ps5 = Config::IsNextGen();
+
+		if (ps5)
+		{
+			EXIT_NOT_IMPLEMENTED(z.depth_info.addr5_swizzle_mask != 0x00000000);
+			EXIT_NOT_IMPLEMENTED(z.depth_info.array_mode != 0x00000000);
+			EXIT_NOT_IMPLEMENTED(z.depth_info.pipe_config != 0x00000000);
+			EXIT_NOT_IMPLEMENTED(z.depth_info.bank_width != 0x00000000);
+			EXIT_NOT_IMPLEMENTED(z.depth_info.bank_height != 0x00000000);
+			EXIT_NOT_IMPLEMENTED(z.depth_info.macro_tile_aspect != 0x00000000);
+			EXIT_NOT_IMPLEMENTED(z.depth_info.num_banks != 0x00000000);
+			EXIT_NOT_IMPLEMENTED(z.htile_surface.linear != 0x00000000);
+			EXIT_NOT_IMPLEMENTED(z.htile_surface.full_cache != 0x00000000);
+			EXIT_NOT_IMPLEMENTED(z.htile_surface.htile_uses_preload_win != 0x00000000);
+			EXIT_NOT_IMPLEMENTED(z.htile_surface.preload != 0x00000000);
+			EXIT_NOT_IMPLEMENTED(z.htile_surface.prefetch_width != 0x00000000);
+			EXIT_NOT_IMPLEMENTED(z.htile_surface.prefetch_height != 0x00000000);
+			EXIT_NOT_IMPLEMENTED(z.htile_surface.dst_outside_zero_to_one != 0x00000000);
+		} else
+		{
+			EXIT_NOT_IMPLEMENTED(z.depth_info.addr5_swizzle_mask != 0x00000001);
+			EXIT_NOT_IMPLEMENTED(z.depth_info.array_mode != 0x00000004);
+			EXIT_NOT_IMPLEMENTED(z.depth_info.pipe_config != (Config::IsNeo() ? 0x00000012 : 0x0c));
+			EXIT_NOT_IMPLEMENTED(z.depth_info.bank_width != 0x00000000);
+			// EXIT_NOT_IMPLEMENTED(z.depth_info.bank_height != (Config::IsNeo() ? 0x00000001 : 2));
+			// EXIT_NOT_IMPLEMENTED(z.depth_info.macro_tile_aspect != (Config::IsNeo() ? 0x00000000 : 2));
+			// EXIT_NOT_IMPLEMENTED(z.depth_info.num_banks != (Config::IsNeo() ? 0x00000002 : 3));
+			EXIT_NOT_IMPLEMENTED(z.htile_surface.linear != 0x00000000);
+			EXIT_NOT_IMPLEMENTED(z.htile_surface.full_cache != 0x00000000);
+			EXIT_NOT_IMPLEMENTED(z.htile_surface.htile_uses_preload_win != 0x00000000);
+			EXIT_NOT_IMPLEMENTED(z.htile_surface.preload != 0x00000001);
+			EXIT_NOT_IMPLEMENTED(z.htile_surface.prefetch_width != 0x00000000);
+			EXIT_NOT_IMPLEMENTED(z.htile_surface.prefetch_height != 0x00000000);
+			EXIT_NOT_IMPLEMENTED(z.htile_surface.dst_outside_zero_to_one != 0x00000000);
+		}
 		EXIT_NOT_IMPLEMENTED(z.depth_view.slice_start != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(z.depth_view.slice_max != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(z.depth_view.current_mip_level != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(z.depth_view.depth_write_disable != false);
 		EXIT_NOT_IMPLEMENTED(z.depth_view.stencil_write_disable != false);
-		EXIT_NOT_IMPLEMENTED(z.htile_surface.linear != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(z.htile_surface.full_cache != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(z.htile_surface.htile_uses_preload_win != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(z.htile_surface.preload != 0x00000001);
-		EXIT_NOT_IMPLEMENTED(z.htile_surface.prefetch_width != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(z.htile_surface.prefetch_height != 0x00000000);
-		EXIT_NOT_IMPLEMENTED(z.htile_surface.dst_outside_zero_to_one != 0x00000000);
 		EXIT_NOT_IMPLEMENTED(z.z_read_base_addr != z.z_write_base_addr);
 		EXIT_NOT_IMPLEMENTED(z.stencil_read_base_addr != z.stencil_write_base_addr);
 		EXIT_NOT_IMPLEMENTED(z.z_write_base_addr == 0);
@@ -758,8 +800,13 @@ static void z_check(const HW::DepthRenderTarget& z)
 		// EXIT_NOT_IMPLEMENTED(z.htile_data_base_addr == 0);
 		// EXIT_NOT_IMPLEMENTED(z.width != 0x00000780);
 		// EXIT_NOT_IMPLEMENTED(z.height != 0x00000438);
-		EXIT_NOT_IMPLEMENTED(z.size.x_max != 0);
-		EXIT_NOT_IMPLEMENTED(z.size.y_max != 0);
+		if (ps5)
+		{
+			EXIT_NOT_IMPLEMENTED(z.width != 0);
+			EXIT_NOT_IMPLEMENTED(z.height != 0);
+			EXIT_NOT_IMPLEMENTED(z.size.x_max == 0);
+			EXIT_NOT_IMPLEMENTED(z.size.y_max == 0);
+		}
 	}
 }
 
@@ -1044,14 +1091,23 @@ static void vp_print(const char* func, const HW::ScreenViewport& vp, const HW::S
 
 static void vp_check(const HW::ScreenViewport& vp, const HW::ScanModeControl& smc)
 {
+	bool ps5 = Config::IsNextGen();
+
 	EXIT_NOT_IMPLEMENTED(smc.msaa_enable);
 	// EXIT_NOT_IMPLEMENTED(smc.vport_scissor_enable);
 	EXIT_NOT_IMPLEMENTED(smc.line_stipple_enable);
 
 	bool generic_scissor =
 	    (vp.generic_scissor_left != 0 || vp.generic_scissor_top != 0 || vp.generic_scissor_right != 0 || vp.generic_scissor_bottom != 0);
+	bool screen_scissor =
+	    (vp.screen_scissor_left != 0 || vp.screen_scissor_top != 0 || vp.screen_scissor_right != 0 || vp.screen_scissor_bottom != 0);
+	bool viewport_scissor = (vp.viewports[0].viewport_scissor_left != 0 || vp.viewports[0].viewport_scissor_top != 0 ||
+	                         vp.viewports[0].viewport_scissor_right != 0 || vp.viewports[0].viewport_scissor_bottom != 0);
 
-	EXIT_NOT_IMPLEMENTED(vp.viewports[0].zmin != 0.000000);
+	EXIT_NOT_IMPLEMENTED(viewport_scissor && (generic_scissor || screen_scissor));
+	EXIT_NOT_IMPLEMENTED(viewport_scissor && (!smc.vport_scissor_enable));
+
+	EXIT_NOT_IMPLEMENTED(vp.viewports[0].zmin > 0.000000);
 	EXIT_NOT_IMPLEMENTED(vp.viewports[0].zmax != 1.000000);
 	// EXIT_NOT_IMPLEMENTED(vp.viewports[0].xscale != 960.000000);
 	// EXIT_NOT_IMPLEMENTED(vp.viewports[0].xoffset != 960.000000);
@@ -1068,14 +1124,21 @@ static void vp_check(const HW::ScreenViewport& vp, const HW::ScanModeControl& sm
 	// EXIT_NOT_IMPLEMENTED(vp.hw_offset_y != 32);
 	// EXIT_NOT_IMPLEMENTED(fabsf(vp.guard_band_horz_clip - 33.133327f) > 0.001f);
 	// EXIT_NOT_IMPLEMENTED(fabsf(vp.guard_band_vert_clip - 59.629623f) > 0.001f);
-	EXIT_NOT_IMPLEMENTED(vp.guard_band_horz_discard != 1.000000);
-	EXIT_NOT_IMPLEMENTED(vp.guard_band_vert_discard != 1.000000);
+	if (ps5)
+	{
+		EXIT_NOT_IMPLEMENTED(vp.guard_band_horz_discard != 0.0f);
+		EXIT_NOT_IMPLEMENTED(vp.guard_band_vert_discard != 0.0f);
+	} else
+	{
+		EXIT_NOT_IMPLEMENTED(vp.guard_band_horz_discard != 1.000000);
+		EXIT_NOT_IMPLEMENTED(vp.guard_band_vert_discard != 1.000000);
+	}
 	EXIT_NOT_IMPLEMENTED(vp.generic_scissor_window_offset_enable != false);
-	EXIT_NOT_IMPLEMENTED(vp.viewports[0].viewport_scissor_left != 0);
-	EXIT_NOT_IMPLEMENTED(vp.viewports[0].viewport_scissor_top != 0);
-	EXIT_NOT_IMPLEMENTED(vp.viewports[0].viewport_scissor_right != 0);
-	EXIT_NOT_IMPLEMENTED(vp.viewports[0].viewport_scissor_bottom != 0);
-	EXIT_NOT_IMPLEMENTED(vp.viewports[0].viewport_scissor_window_offset_enable != false);
+	// EXIT_NOT_IMPLEMENTED(vp.viewports[0].viewport_scissor_left != 0);
+	// EXIT_NOT_IMPLEMENTED(vp.viewports[0].viewport_scissor_top != 0);
+	// EXIT_NOT_IMPLEMENTED(vp.viewports[0].viewport_scissor_right != 0);
+	// EXIT_NOT_IMPLEMENTED(vp.viewports[0].viewport_scissor_bottom != 0);
+	EXIT_NOT_IMPLEMENTED(viewport_scissor && vp.viewports[0].viewport_scissor_window_offset_enable != true);
 }
 
 static void hw_check(const HW::Context& hw)
@@ -1785,33 +1848,53 @@ uint64_t SamplerCache::GetSamplerId(const ShaderSamplerResource& r)
 	return m_samplers_size;
 }
 
-static void get_input_format(const ShaderBufferResource& res, VkFormat* format, uint32_t* size)
+static void get_input_format(const ShaderBufferResource& res, VkFormat* format, uint32_t* size, bool ps5)
 {
 	EXIT_IF(format == nullptr);
 	EXIT_IF(size == nullptr);
-	auto nfmt = res.Nfmt();
-	auto dfmt = res.Dfmt();
-	if (nfmt == 7 && dfmt == 14)
+	if (ps5)
 	{
-		*format = VK_FORMAT_R32G32B32A32_SFLOAT;
-		*size   = 4;
-	} else if (nfmt == 7 && dfmt == 13)
-	{
-		*format = VK_FORMAT_R32G32B32_SFLOAT;
-		*size   = 3;
-	} else if (nfmt == 7 && dfmt == 11)
-	{
-		*format = VK_FORMAT_R32G32_SFLOAT;
-		*size   = 2;
-	} else if (nfmt == 0 && dfmt == 10)
-	{
-		*format = VK_FORMAT_R8G8B8A8_UNORM;
-		*size   = 4;
+		auto fmt = res.Format();
+		if (fmt == 74)
+		{
+			*format = VK_FORMAT_R32G32B32_SFLOAT;
+			*size   = 3;
+		} else if (fmt == 64)
+		{
+			*format = VK_FORMAT_R32G32_SFLOAT;
+			*size   = 2;
+		} else
+		{
+			EXIT("unknown format: fmt = %u\n", fmt);
+			*format = VK_FORMAT_UNDEFINED;
+			*size   = 4;
+		}
 	} else
 	{
-		EXIT("unknown format: nfmt = %u, dfmt = %u\n", nfmt, dfmt);
-		*format = VK_FORMAT_UNDEFINED;
-		*size   = 4;
+		auto nfmt = res.Nfmt();
+		auto dfmt = res.Dfmt();
+		if (nfmt == 7 && dfmt == 14)
+		{
+			*format = VK_FORMAT_R32G32B32A32_SFLOAT;
+			*size   = 4;
+		} else if (nfmt == 7 && dfmt == 13)
+		{
+			*format = VK_FORMAT_R32G32B32_SFLOAT;
+			*size   = 3;
+		} else if (nfmt == 7 && dfmt == 11)
+		{
+			*format = VK_FORMAT_R32G32_SFLOAT;
+			*size   = 2;
+		} else if (nfmt == 0 && dfmt == 10)
+		{
+			*format = VK_FORMAT_R8G8B8A8_UNORM;
+			*size   = 4;
+		} else
+		{
+			EXIT("unknown format: nfmt = %u, dfmt = %u\n", nfmt, dfmt);
+			*format = VK_FORMAT_UNDEFINED;
+			*size   = 4;
+		}
 	}
 }
 
@@ -1952,6 +2035,8 @@ static VulkanPipeline* CreatePipelineInternal(VkRenderPass render_pass, const Sh
 	VkVertexInputAttributeDescription input_attr[ShaderVertexInputInfo::RES_MAX];
 	VkVertexInputBindingDescription   input_desc[ShaderVertexInputInfo::RES_MAX];
 
+	bool gen5 = Config::IsNextGen();
+
 	for (int bi = 0; bi < vs_input_info->buffers_num; bi++)
 	{
 		const auto& b            = vs_input_info->buffers[bi];
@@ -1967,10 +2052,14 @@ static VulkanPipeline* CreatePipelineInternal(VkRenderPass render_pass, const Sh
 			input_attr[index].offset   = b.attr_offsets[ai];
 
 			uint32_t attr_size = 4;
-			get_input_format(vs_input_info->resources[index], &input_attr[index].format, &attr_size);
+			get_input_format(vs_input_info->resources[index], &input_attr[index].format, &attr_size, gen5);
 
 			auto registers_num = vs_input_info->resources_dst[index].registers_num;
 
+			if (gen5)
+			{
+				EXIT_NOT_IMPLEMENTED(vs_input_info->resources[index].OutOfBounds() != 0);
+			}
 			EXIT_NOT_IMPLEMENTED(vs_input_info->resources[index].AddTid());
 			EXIT_NOT_IMPLEMENTED(vs_input_info->resources[index].SwizzleEnabled());
 
@@ -2484,17 +2573,23 @@ VulkanPipeline* PipelineCache::CreatePipeline(VulkanFramebuffer* framebuffer, Re
 
 	bool generic_scissor =
 	    (vp.generic_scissor_left != 0 || vp.generic_scissor_top != 0 || vp.generic_scissor_right != 0 || vp.generic_scissor_bottom != 0);
+	bool viewport_scissor = (vp.viewports[0].viewport_scissor_left != 0 || vp.viewports[0].viewport_scissor_top != 0 ||
+	                         vp.viewports[0].viewport_scissor_right != 0 || vp.viewports[0].viewport_scissor_bottom != 0);
 
-	p.static_params->viewport_scale[0]        = vp.viewports[0].xscale;
-	p.static_params->viewport_scale[1]        = vp.viewports[0].yscale;
-	p.static_params->viewport_scale[2]        = vp.viewports[0].zscale;
-	p.static_params->viewport_offset[0]       = vp.viewports[0].xoffset;
-	p.static_params->viewport_offset[1]       = vp.viewports[0].yoffset;
-	p.static_params->viewport_offset[2]       = vp.viewports[0].zoffset;
-	p.static_params->scissor_ltrb[0]          = (generic_scissor ? vp.generic_scissor_left : vp.screen_scissor_left);
-	p.static_params->scissor_ltrb[1]          = (generic_scissor ? vp.generic_scissor_top : vp.screen_scissor_top);
-	p.static_params->scissor_ltrb[2]          = (generic_scissor ? vp.generic_scissor_right : vp.screen_scissor_right);
-	p.static_params->scissor_ltrb[3]          = (generic_scissor ? vp.generic_scissor_bottom : vp.screen_scissor_bottom);
+	p.static_params->viewport_scale[0]  = vp.viewports[0].xscale;
+	p.static_params->viewport_scale[1]  = vp.viewports[0].yscale;
+	p.static_params->viewport_scale[2]  = vp.viewports[0].zscale;
+	p.static_params->viewport_offset[0] = vp.viewports[0].xoffset;
+	p.static_params->viewport_offset[1] = vp.viewports[0].yoffset;
+	p.static_params->viewport_offset[2] = vp.viewports[0].zoffset;
+	p.static_params->scissor_ltrb[0] =
+	    (viewport_scissor ? vp.viewports[0].viewport_scissor_left : (generic_scissor ? vp.generic_scissor_left : vp.screen_scissor_left));
+	p.static_params->scissor_ltrb[1] =
+	    (viewport_scissor ? vp.viewports[0].viewport_scissor_top : (generic_scissor ? vp.generic_scissor_top : vp.screen_scissor_top));
+	p.static_params->scissor_ltrb[2]          = (viewport_scissor ? vp.viewports[0].viewport_scissor_right
+	                                                              : (generic_scissor ? vp.generic_scissor_right : vp.screen_scissor_right));
+	p.static_params->scissor_ltrb[3]          = (viewport_scissor ? vp.viewports[0].viewport_scissor_bottom
+	                                                              : (generic_scissor ? vp.generic_scissor_bottom : vp.screen_scissor_bottom));
 	p.static_params->topology                 = topology;
 	p.static_params->with_depth               = (depth->format != VK_FORMAT_UNDEFINED && depth->vulkan_buffer != nullptr);
 	p.static_params->depth_test_enable        = depth->depth_test_enable;
@@ -3713,41 +3808,21 @@ static void FindRenderDepthInfo(uint64_t submit_id, CommandBuffer* /*buffer*/, c
 
 	EXIT_IF(r == nullptr);
 
-	bool        neo = Config::IsNeo();
-	const auto& z   = hw.GetDepthRenderTarget();
-	const auto& rc  = hw.GetRenderControl();
-	const auto& dc  = hw.GetDepthControl();
-	const auto& sc  = hw.GetStencilControl();
-	const auto& sm  = hw.GetStencilMask();
-	const auto& cc  = hw.GetColorControl();
+	const auto& z  = hw.GetDepthRenderTarget();
+	const auto& rc = hw.GetRenderControl();
+	const auto& dc = hw.GetDepthControl();
+	const auto& sc = hw.GetStencilControl();
+	const auto& sm = hw.GetStencilMask();
+	const auto& cc = hw.GetColorControl();
 
-	uint32_t      size  = 0;
-	uint32_t      pitch = (z.pitch_div8_minus1 + 1) * 8;
 	TileSizeAlign stencil_size {};
 	TileSizeAlign htile_size {};
 	TileSizeAlign depth_size {};
 
-	if (z.z_info.format == 3)
-	{
-		size = (z.slice_div64_minus1 + 1) * 64 * 4;
-	} else if (z.z_info.format == 1)
-	{
-		size = (z.slice_div64_minus1 + 1) * 64 * 2;
-	}
-
-	bool htile = z.z_info.tile_surface_enable;
-
+	bool neo        = Config::IsNeo();
+	bool ps5        = Config::IsNextGen();
+	bool htile      = z.z_info.tile_surface_enable;
 	bool decompress = htile && (rc.depth_compress_disable || rc.stencil_compress_disable);
-
-	if (!TileGetDepthSize(z.width, z.height, pitch, z.z_info.format, z.stencil_info.format, htile, neo, &stencil_size, &htile_size,
-	                      &depth_size))
-	{
-		depth_size.size  = size;
-		depth_size.align = neo ? 65536 : 32768;
-	} else
-	{
-		EXIT_NOT_IMPLEMENTED(depth_size.size != size);
-	}
 
 	if (dc.z_enable || dc.z_write_enable || dc.stencil_enable || decompress)
 	{
@@ -3760,6 +3835,38 @@ static void FindRenderDepthInfo(uint64_t submit_id, CommandBuffer* /*buffer*/, c
 			case 6: r->format = VK_FORMAT_D32_SFLOAT; break;
 			case 7: r->format = VK_FORMAT_D32_SFLOAT_S8_UINT; break;
 			default: EXIT("unknown z and stencil format: %u, %u\n", z.z_info.format, z.stencil_info.format);
+		}
+	}
+
+	if (r->format != VK_FORMAT_UNDEFINED)
+	{
+		if (ps5)
+		{
+			bool size_found = TileGetDepthSize(z.size.x_max + 1, z.size.y_max + 1, 0, z.z_info.format, z.stencil_info.format, htile, true,
+			                                   true, &stencil_size, &htile_size, &depth_size);
+			EXIT_NOT_IMPLEMENTED(!size_found);
+		} else
+		{
+			uint32_t size  = 0;
+			uint32_t pitch = (z.pitch_div8_minus1 + 1) * 8;
+
+			if (z.z_info.format == 3)
+			{
+				size = (z.slice_div64_minus1 + 1) * 64 * 4;
+			} else if (z.z_info.format == 1)
+			{
+				size = (z.slice_div64_minus1 + 1) * 64 * 2;
+			}
+
+			if (!TileGetDepthSize(z.width, z.height, pitch, z.z_info.format, z.stencil_info.format, htile, neo, false, &stencil_size,
+			                      &htile_size, &depth_size))
+			{
+				depth_size.size  = size;
+				depth_size.align = neo ? 65536 : 32768;
+			} else
+			{
+				EXIT_NOT_IMPLEMENTED(depth_size.size != size);
+			}
 		}
 	}
 
@@ -3778,8 +3885,8 @@ static void FindRenderDepthInfo(uint64_t submit_id, CommandBuffer* /*buffer*/, c
 	r->htile_buffer_size    = htile_size.size;
 	r->htile_buffer_vaddr   = z.htile_data_base_addr & ~htile_addr_mask;
 	r->htile_tile_swizzle   = z.htile_data_base_addr & htile_addr_mask;
-	r->width                = z.width;
-	r->height               = z.height;
+	r->width                = (ps5 ? z.size.x_max + 1 : z.width);
+	r->height               = (ps5 ? z.size.y_max + 1 : z.height);
 	r->depth_clear_enable   = rc.depth_clear_enable;
 	r->depth_clear_value    = hw.GetDepthClearValue();
 	r->depth_test_enable    = dc.z_enable;
@@ -3888,37 +3995,68 @@ static void FindRenderColorInfo(uint64_t submit_id, CommandBuffer* buffer, const
 		return;
 	}
 
-	auto width      = rt.size.width;
-	auto height     = rt.size.height;
-	auto pitch      = (rt.pitch.pitch_div8_minus1 + 1) * 8;
-	auto size       = (rt.slice.slice_div64_minus1 + 1) * 64 * 4;
-	bool tile       = false;
-	bool write_back = false;
+	bool ps5 = Config::IsNextGen();
+
+	uint32_t width      = 0;
+	uint32_t height     = 0;
+	uint32_t pitch      = 0;
+	uint32_t size       = 0;
+	bool     tile       = false;
+	bool     write_back = false;
+
+	if (ps5)
+	{
+		switch (rt.attrib3.tile_mode)
+		{
+			case 0x1b:
+				tile       = true;
+				write_back = false;
+				break;
+			default: EXIT("unknown tile mode: %u\n", rt.attrib3.tile_mode);
+		}
+
+		width  = rt.attrib2.width + 1;
+		height = rt.attrib2.height + 1;
+		pitch  = width;
+
+		Graphics::TileSizeAlign size32 {};
+		Graphics::TileGetVideoOutSize(width, height, pitch, tile, true, &size32);
+
+		size = size32.size;
+
+		EXIT_NOT_IMPLEMENTED(size == 0);
+	} else
+	{
+		switch (rt.attrib.tile_mode)
+		{
+			case 0x8:
+				tile       = false;
+				write_back = false;
+				break;
+
+			case 0x1f:
+				tile       = false;
+				write_back = true;
+				break;
+
+			case 0xa:
+			case 0xd:
+			case 0xe:
+				tile       = true;
+				write_back = false;
+				break;
+
+			default: EXIT("unknown tile mode: %u\n", rt.attrib.tile_mode);
+		}
+
+		width  = rt.size.width;
+		height = rt.size.height;
+		pitch  = (rt.pitch.pitch_div8_minus1 + 1) * 8;
+		size   = (rt.slice.slice_div64_minus1 + 1) * 64 * 4;
+	}
 
 	auto video_image       = VideoOut::VideoOutGetImage(rt.base.addr);
 	bool render_to_texture = (video_image.image == nullptr);
-
-	switch (rt.attrib.tile_mode)
-	{
-		case 0x8:
-			tile       = false;
-			write_back = false;
-			break;
-
-		case 0x1f:
-			tile       = false;
-			write_back = true;
-			break;
-
-		case 0xa:
-		case 0xd:
-		case 0xe:
-			tile       = true;
-			write_back = false;
-			break;
-
-		default: EXIT("unknown tile mode: %u\n", rt.attrib.tile_mode);
-	}
 
 	if (render_to_texture)
 	{
@@ -3955,8 +4093,8 @@ static void FindRenderColorInfo(uint64_t submit_id, CommandBuffer* buffer, const
 		r->buffer_size   = size;
 	} else
 	{
-		EXIT_NOT_IMPLEMENTED(
-		    !(rt.info.format == 0xa && (rt.info.channel_type == 0x6 || rt.info.channel_type == 0x0) && rt.info.channel_order == 0x1));
+		EXIT_NOT_IMPLEMENTED(!(rt.info.format == 0xa && (rt.info.channel_type == 0x6 || rt.info.channel_type == 0x0) &&
+		                       (rt.info.channel_order == 0x0 || rt.info.channel_order == 0x1)));
 
 		// Display buffer
 		EXIT_NOT_IMPLEMENTED(video_image.buffer_size != size);
@@ -3994,6 +4132,7 @@ static void InvalidateMemoryObject(const RenderDepthInfo& r)
 	}
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 static void PrepareStorageBuffers(uint64_t submit_id, CommandBuffer* buffer, const ShaderStorageResources& storage_buffers,
                                   VulkanBuffer** buffers, uint32_t** sgprs)
 {
@@ -4003,26 +4142,36 @@ static void PrepareStorageBuffers(uint64_t submit_id, CommandBuffer* buffer, con
 	EXIT_IF(sgprs == nullptr);
 	EXIT_IF(*sgprs == nullptr);
 
+	bool gen5 = Config::IsNextGen();
+
 	for (int i = 0; i < storage_buffers.buffers_num; i++)
 	{
 		auto r = storage_buffers.buffers[i];
 
 		EXIT_NOT_IMPLEMENTED(r.AddTid());
 		EXIT_NOT_IMPLEMENTED(r.SwizzleEnabled());
-		EXIT_NOT_IMPLEMENTED(!((r.Stride() == 4 && r.DstSelXYZW() == DstSel(4, 0, 0, 0) && r.Dfmt() == 4 && r.Nfmt() == 4) ||
-		                       (r.Stride() == 4 && r.DstSelXYZW() == DstSel(4, 0, 0, 1) && r.Dfmt() == 4 && r.Nfmt() == 7) ||
-		                       (r.Stride() == 8 && r.DstSelXYZW() == DstSel(4, 5, 0, 0) && r.Dfmt() == 11 && r.Nfmt() == 4) ||
-		                       (r.Stride() == 16 && r.DstSelXYZW() == DstSel(4, 5, 6, 7) && r.Dfmt() == 14 && r.Nfmt() == 7)));
-		EXIT_NOT_IMPLEMENTED(!(r.MemoryType() == 0x00 || r.MemoryType() == 0x10 || r.MemoryType() == 0x6d));
 
-		auto addr        = r.Base();
+		if (gen5)
+		{
+			EXIT_NOT_IMPLEMENTED(r.OutOfBounds() != 0);
+			EXIT_NOT_IMPLEMENTED(!((r.Stride() == 16 && r.DstSelXYZW() == DstSel(4, 5, 6, 7) && r.Format() == 77)));
+		} else
+		{
+			EXIT_NOT_IMPLEMENTED(!((r.Stride() == 4 && r.DstSelXYZW() == DstSel(4, 0, 0, 0) && r.Dfmt() == 4 && r.Nfmt() == 4) ||
+			                       (r.Stride() == 4 && r.DstSelXYZW() == DstSel(4, 0, 0, 1) && r.Dfmt() == 4 && r.Nfmt() == 7) ||
+			                       (r.Stride() == 8 && r.DstSelXYZW() == DstSel(4, 5, 0, 0) && r.Dfmt() == 11 && r.Nfmt() == 4) ||
+			                       (r.Stride() == 16 && r.DstSelXYZW() == DstSel(4, 5, 6, 7) && r.Dfmt() == 14 && r.Nfmt() == 7)));
+			EXIT_NOT_IMPLEMENTED(!(r.MemoryType() == 0x00 || r.MemoryType() == 0x10 || r.MemoryType() == 0x6d));
+		}
+
+		auto addr        = (gen5 ? r.Base48() : r.Base44());
 		auto stride      = r.Stride();
 		auto num_records = r.NumRecords();
 		auto size        = stride * num_records;
 		EXIT_NOT_IMPLEMENTED(size == 0);
 		EXIT_NOT_IMPLEMENTED((size & 0x3u) != 0);
 
-		bool read_only = (r.MemoryType() == 0x10);
+		bool read_only = (gen5 ? false : (r.MemoryType() == 0x10));
 
 		EXIT_NOT_IMPLEMENTED(read_only && !(storage_buffers.usages[i] == ShaderStorageUsage::ReadOnly ||
 		                                    storage_buffers.usages[i] == ShaderStorageUsage::Constant));
@@ -4038,9 +4187,15 @@ static void PrepareStorageBuffers(uint64_t submit_id, CommandBuffer* buffer, con
 
 		buffers[i] = buf;
 
-		r.UpdateAddress(i);
+		if (gen5)
+		{
+			r.UpdateAddress48(i);
+		} else
+		{
+			r.UpdateAddress44(i);
+		}
 
-		EXIT_NOT_IMPLEMENTED((r.Base() >> 32u) != 0);
+		EXIT_NOT_IMPLEMENTED(((gen5 ? r.Base48() : r.Base44()) >> 32u) != 0);
 
 		(*sgprs)[0] = r.fields[0];
 		(*sgprs)[1] = r.fields[1];
@@ -4065,48 +4220,83 @@ static void PrepareTextures(uint64_t submit_id, CommandBuffer* buffer, const Sha
 	int index_sampled = 0;
 	int index_storage = 0;
 
+	bool gen5 = Config::IsNextGen();
+
 	for (int i = 0; i < textures.textures_num; i++)
 	{
 		auto r = textures.desc[i].texture;
 
-		EXIT_NOT_IMPLEMENTED(r.Base() == 0);
+		if (gen5)
+		{
+			EXIT_NOT_IMPLEMENTED(!(r.TileMode() == 0));
+			EXIT_NOT_IMPLEMENTED(r.Format() != 56);
+			EXIT_NOT_IMPLEMENTED(r.PerfMod5() != 7 && r.PerfMod5() != 0);
+			EXIT_NOT_IMPLEMENTED(r.BCSwizzle() != 0);
+			EXIT_NOT_IMPLEMENTED(r.BaseArray5() != 0);
+			EXIT_NOT_IMPLEMENTED(r.ArrayPitch() != 0);
+			EXIT_NOT_IMPLEMENTED(r.MaxMip() != 0);
+			EXIT_NOT_IMPLEMENTED(r.MinLodWarn5() != 0);
+			EXIT_NOT_IMPLEMENTED(r.MipStatsCntId() != 0);
+			EXIT_NOT_IMPLEMENTED(r.MipStatsCntEn() != false);
+			EXIT_NOT_IMPLEMENTED(r.CornerSample() != false);
+			EXIT_NOT_IMPLEMENTED(r.PrtDefColor() != false);
+			EXIT_NOT_IMPLEMENTED(r.MsaaDepth() != false);
+			EXIT_NOT_IMPLEMENTED(r.MaxUncompBlkSize() != 0);
+			EXIT_NOT_IMPLEMENTED(r.MaxCompBlkSize() != 0);
+			EXIT_NOT_IMPLEMENTED(r.MetaPipeAligned() != false);
+			EXIT_NOT_IMPLEMENTED(r.WriteCompress() != false);
+			EXIT_NOT_IMPLEMENTED(r.MetaCompress() != false);
+			EXIT_NOT_IMPLEMENTED(r.DccAlphaPos() != false);
+			EXIT_NOT_IMPLEMENTED(r.DccColorTransf() != false);
+			EXIT_NOT_IMPLEMENTED(r.MetaAddr() != 0);
+		} else
+		{
+			EXIT_NOT_IMPLEMENTED(r.Dfmt() != 1 && r.Dfmt() != 10 && r.Dfmt() != 37 && r.Dfmt() != 4 && r.Dfmt() != 35 && r.Dfmt() != 3 &&
+			                     r.Dfmt() != 36);
+			EXIT_NOT_IMPLEMENTED(r.Nfmt() != 9 && r.Nfmt() != 0 && r.Nfmt() != 7);
+			EXIT_NOT_IMPLEMENTED(r.PerfMod() != 7 && r.PerfMod() != 0);
+			EXIT_NOT_IMPLEMENTED(r.Interlaced() != false);
+			EXIT_NOT_IMPLEMENTED(!(r.TileMode() == 8 || r.TileMode() == 13 || r.TileMode() == 14 || r.TileMode() == 2 ||
+			                       r.TileMode() == 10 || r.TileMode() == 31));
+			EXIT_NOT_IMPLEMENTED(r.BaseArray() != 0);
+			EXIT_NOT_IMPLEMENTED(r.LastArray() != 0);
+			EXIT_NOT_IMPLEMENTED(r.MinLodWarn() != 0);
+			EXIT_NOT_IMPLEMENTED(r.CounterBankId() != 0);
+			EXIT_NOT_IMPLEMENTED(r.LodHdwCntEn() != false);
+			EXIT_NOT_IMPLEMENTED(r.MemoryType() != 0x10 && r.MemoryType() != 0x6d);
+		}
+		EXIT_NOT_IMPLEMENTED((gen5 ? r.Base40() : r.Base38()) == 0);
 		EXIT_NOT_IMPLEMENTED(r.MinLod() != 0);
-		EXIT_NOT_IMPLEMENTED(r.Dfmt() != 1 && r.Dfmt() != 10 && r.Dfmt() != 37 && r.Dfmt() != 4 && r.Dfmt() != 35 && r.Dfmt() != 3 &&
-		                     r.Dfmt() != 36);
-		EXIT_NOT_IMPLEMENTED(r.Nfmt() != 9 && r.Nfmt() != 0 && r.Nfmt() != 7);
-		EXIT_NOT_IMPLEMENTED(r.PerfMod() != 7 && r.PerfMod() != 0);
-		EXIT_NOT_IMPLEMENTED(r.Interlaced() != false);
-		EXIT_NOT_IMPLEMENTED(!(r.TilingIdx() == 8 || r.TilingIdx() == 13 || r.TilingIdx() == 14 || r.TilingIdx() == 2 ||
-		                       r.TilingIdx() == 10 || r.TilingIdx() == 31));
 		EXIT_NOT_IMPLEMENTED(r.Type() != 9);
 		EXIT_NOT_IMPLEMENTED(r.Depth() != 0);
-		EXIT_NOT_IMPLEMENTED(r.BaseArray() != 0);
-		EXIT_NOT_IMPLEMENTED(r.LastArray() != 0);
-		EXIT_NOT_IMPLEMENTED(r.MinLodWarn() != 0);
-		EXIT_NOT_IMPLEMENTED(r.CounterBankId() != 0);
-		EXIT_NOT_IMPLEMENTED(r.LodHdwCntEn() != false);
-		EXIT_NOT_IMPLEMENTED(r.MemoryType() != 0x10 && r.MemoryType() != 0x6d);
 
-		bool read_only = (r.MemoryType() == 0x10);
+		bool read_only = (gen5 ? false : (r.MemoryType() == 0x10));
 
 		EXIT_NOT_IMPLEMENTED(read_only && !(textures.desc[i].usage == ShaderTextureUsage::ReadOnly));
 
 		TileSizeAlign size {};
-		auto          addr       = r.Base();
+		auto          addr       = (gen5 ? r.Base40() : r.Base38());
 		bool          neo        = Config::IsNeo();
-		auto          width      = r.Width() + 1;
-		auto          height     = r.Height() + 1;
-		auto          pitch      = r.Pitch() + 1;
+		auto          width      = (gen5 ? r.Width5() : r.Width4()) + 1;
+		auto          height     = (gen5 ? r.Height5() : r.Height4()) + 1;
+		auto          pitch      = (gen5 ? width : r.Pitch() + 1);
 		auto          base_level = r.BaseLevel();
 		auto          levels     = r.LastLevel() + 1;
-		auto          tile       = r.TilingIdx();
-		auto          dfmt       = r.Dfmt();
-		auto          nfmt       = r.Nfmt();
+		auto          tile       = r.TileMode();
+		auto          dfmt       = (gen5 ? 0 : r.Dfmt());
+		auto          nfmt       = (gen5 ? 0 : r.Nfmt());
+		auto          fmt        = (gen5 ? r.Format() : 0);
 		uint32_t      swizzle    = r.DstSelXYZW();
 
-		bool check_depth_texture = (tile == 2);
+		bool check_depth_texture = (!gen5 && tile == 2);
 
-		TileGetTextureSize(dfmt, nfmt, width, height, pitch, levels, tile, neo, &size, nullptr, nullptr);
+		if (gen5)
+		{
+			TileGetTextureSize2(fmt, width, height, pitch, levels, tile, &size, nullptr, nullptr);
+		} else
+		{
+			TileGetTextureSize(dfmt, nfmt, width, height, pitch, levels, tile, neo, &size, nullptr, nullptr);
+		}
 
 		EXIT_NOT_IMPLEMENTED(size.size == 0);
 		EXIT_NOT_IMPLEMENTED((addr & (static_cast<uint64_t>(size.align) - 1u)) != 0);
@@ -4149,14 +4339,14 @@ static void PrepareTextures(uint64_t submit_id, CommandBuffer* buffer, const Sha
 			{
 				EXIT_NOT_IMPLEMENTED(textures.desc[i].usage != ShaderTextureUsage::ReadWrite);
 
-				StorageTextureObject vulkan_texture_info(dfmt, nfmt, width, height, pitch, base_level, levels, tile, neo, swizzle);
+				StorageTextureObject vulkan_texture_info(dfmt, nfmt, fmt, width, height, pitch, base_level, levels, tile, neo, swizzle);
 				tex = static_cast<StorageTextureVulkanImage*>(
 				    GpuMemoryCreateObject(submit_id, g_render_ctx->GetGraphicCtx(), buffer, addr, size.size, vulkan_texture_info));
 			} else
 			{
 				EXIT_NOT_IMPLEMENTED(textures.desc[i].usage != ShaderTextureUsage::ReadOnly);
 
-				if (tile == 10)
+				if (!gen5 && tile == 10)
 				{
 					RenderTextureFormat rt_format = RenderTextureFormat::Unknown;
 					if (dfmt == 10 && nfmt == 0)
@@ -4169,7 +4359,7 @@ static void PrepareTextures(uint64_t submit_id, CommandBuffer* buffer, const Sha
 					    submit_id, g_render_ctx->GetGraphicCtx(), buffer, addr, size.size, vulkan_buffer_info));
 				} else
 				{
-					TextureObject vulkan_texture_info(dfmt, nfmt, width, height, pitch, base_level, levels, tile, neo, swizzle);
+					TextureObject vulkan_texture_info(dfmt, nfmt, fmt, width, height, pitch, base_level, levels, tile, neo, swizzle);
 					tex = static_cast<TextureVulkanImage*>(
 					    GpuMemoryCreateObject(submit_id, g_render_ctx->GetGraphicCtx(), buffer, addr, size.size, vulkan_texture_info));
 				}
@@ -4181,17 +4371,29 @@ static void PrepareTextures(uint64_t submit_id, CommandBuffer* buffer, const Sha
 		if (textures.desc[i].textures2d_without_sampler)
 		{
 			images_storage[index_storage] = tex;
-			r.UpdateAddress(index_storage);
+			if (gen5)
+			{
+				r.UpdateAddress40(index_storage);
+			} else
+			{
+				r.UpdateAddress38(index_storage);
+			}
 			index_storage++;
 		} else
 		{
 			images_sampled[index_sampled]      = tex;
 			images_sampled_view[index_sampled] = (depth_texture ? VulkanImage::VIEW_DEPTH_TEXTURE : view_type);
-			r.UpdateAddress(index_sampled);
+			if (gen5)
+			{
+				r.UpdateAddress40(index_sampled);
+			} else
+			{
+				r.UpdateAddress38(index_sampled);
+			}
 			index_sampled++;
 		}
 
-		EXIT_NOT_IMPLEMENTED((r.Base() >> 32u) != 0);
+		EXIT_NOT_IMPLEMENTED(((gen5 ? r.Base40() : r.Base38()) >> 32u) != 0);
 
 		(*sgprs)[0] = r.fields[0];
 		(*sgprs)[1] = r.fields[1];
@@ -4215,6 +4417,8 @@ static void PrepareSamplers(const ShaderSamplerResources& samplers, uint64_t* sa
 	EXIT_IF(sgprs == nullptr);
 	EXIT_IF(*sgprs == nullptr);
 
+	bool gen5 = Config::IsNextGen();
+
 	for (int i = 0; i < samplers.samplers_num; i++)
 	{
 		auto r = samplers.samplers[i];
@@ -4226,8 +4430,12 @@ static void PrepareSamplers(const ShaderSamplerResources& samplers, uint64_t* sa
 		EXIT_NOT_IMPLEMENTED(r.DepthCompareFunc() != 0);
 		EXIT_NOT_IMPLEMENTED(r.ForceUnormCoords() != false);
 		EXIT_NOT_IMPLEMENTED(r.AnisoThreshold() != 0);
-		EXIT_NOT_IMPLEMENTED(r.McCoordTrunc() != false);
+		EXIT_NOT_IMPLEMENTED(!gen5 && r.McCoordTrunc() != false);
 		EXIT_NOT_IMPLEMENTED(r.ForceDegamma() != false);
+		EXIT_NOT_IMPLEMENTED(gen5 && r.SkipDegamma() != false);
+		EXIT_NOT_IMPLEMENTED(gen5 && r.PointPreclamp() != false);
+		EXIT_NOT_IMPLEMENTED(gen5 && r.AnisoOverride() != false);
+		EXIT_NOT_IMPLEMENTED(gen5 && r.BlendZeroPrt() != false);
 		EXIT_NOT_IMPLEMENTED(r.AnisoBias() != 0);
 		EXIT_NOT_IMPLEMENTED(r.TruncCoord() != false);
 		EXIT_NOT_IMPLEMENTED(r.DisableCubeWrap() != false);
@@ -4457,7 +4665,7 @@ void GraphicsRenderDrawIndex(uint64_t submit_id, CommandBuffer* buffer, HW::Cont
 	hw_print(*ctx);
 	hw_check(*ctx);
 
-	EXIT_NOT_IMPLEMENTED(ctx->GetShaderStages() != 0);
+	EXIT_NOT_IMPLEMENTED(ctx->GetShaderStages() != 0 && ctx->GetShaderStages() != 0x02002000);
 
 	VkPrimitiveTopology topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
 
@@ -4605,7 +4813,7 @@ void GraphicsRenderDrawIndexAuto(uint64_t submit_id, CommandBuffer* buffer, HW::
 	printf("\t flags               = 0x%08" PRIx32 "\n", flags);
 
 	EXIT_NOT_IMPLEMENTED(flags != 0);
-	EXIT_NOT_IMPLEMENTED(ctx->GetShaderStages() != 0);
+	EXIT_NOT_IMPLEMENTED(ctx->GetShaderStages() != 0 && ctx->GetShaderStages() != 0x02002000);
 
 	RenderDepthInfo depth_info;
 	FindRenderDepthInfo(submit_id, buffer, *ctx, &depth_info);

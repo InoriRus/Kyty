@@ -43,10 +43,12 @@ void TileConvertTiledToLinear(void* dst, const void* src, TileMode mode, uint32_
                               uint32_t pitch, uint32_t levels, bool neo);
 
 bool TileGetDepthSize(uint32_t width, uint32_t height, uint32_t pitch, uint32_t z_format, uint32_t stencil_format, bool htile, bool neo,
-                      TileSizeAlign* stencil_size, TileSizeAlign* htile_size, TileSizeAlign* depth_size);
+                      bool next_gen, TileSizeAlign* stencil_size, TileSizeAlign* htile_size, TileSizeAlign* depth_size);
 void TileGetVideoOutSize(uint32_t width, uint32_t height, uint32_t pitch, bool tile, bool neo, TileSizeAlign* size);
 void TileGetTextureSize(uint32_t dfmt, uint32_t nfmt, uint32_t width, uint32_t height, uint32_t pitch, uint32_t levels, uint32_t tile,
                         bool neo, TileSizeAlign* total_size, TileSizeOffset* level_sizes, TilePaddedSize* padded_size);
+void TileGetTextureSize2(uint32_t format, uint32_t width, uint32_t height, uint32_t pitch, uint32_t levels, uint32_t tile,
+                         TileSizeAlign* total_size, TileSizeOffset* level_sizes, TilePaddedSize* padded_size);
 
 } // namespace Kyty::Libs::Graphics
 

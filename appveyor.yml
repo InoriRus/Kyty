@@ -1,4 +1,4 @@
-version: 0.1.11.build-{build}
+version: 0.1.12.build-{build}
 image: Visual Studio 2019
 environment:
   matrix:

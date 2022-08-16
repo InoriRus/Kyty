@@ -9,6 +9,7 @@
 #include "Kyty/Core/Threads.h"
 #include "Kyty/Sys/SysDbg.h"
 
+#include "Emulator/Config.h"
 #include "Emulator/Graphics/Objects/GpuMemory.h"
 #include "Emulator/Kernel/Pthread.h"
 #include "Emulator/Loader/Elf.h"
@@ -211,13 +212,16 @@ static void kyty_exception_handler(const VirtualMemory::ExceptionHandler::Except
 			return;
 		}
 
-		Core::Singleton<Loader::RuntimeLinker>::Instance()->StackTrace(info->rbp);
+		if (info->rbp != 0)
+		{
+			Core::Singleton<Loader::RuntimeLinker>::Instance()->StackTrace(info->rbp);
+		}
 
 		EXIT("Access violation: %s [%016" PRIx64 "] %s\n", Core::EnumName(info->access_violation_type).C_Str(),
 		     info->access_violation_vaddr, (info->access_violation_vaddr == g_invalid_memory ? "(Unpatched object)" : ""));
 	}
 
-	EXIT("Unknown exception!!!");
+	EXIT("Unknown exception!!! (%08" PRIx32 ")", info->exception_win_code);
 }
 
 static void encode_id_64(uint16_t in_id, String* out_id)
@@ -1105,6 +1109,7 @@ static uint64_t calc_base_size(const Elf64_Ehdr* ehdr, const Elf64_Phdr* phdr)
 	return base_size;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void RuntimeLinker::LoadProgramToMemory(Program* program)
 {
 	KYTY_PROFILER_FUNCTION();
@@ -1121,6 +1126,11 @@ void RuntimeLinker::LoadProgramToMemory(Program* program)
 	const auto* phdr = program->elf->GetPhdr();
 
 	EXIT_IF(phdr == nullptr || ehdr == nullptr);
+
+	if (is_next_gen && !is_shared)
+	{
+		Config::SetNextGen(true);
+	}
 
 	program->base_size         = calc_base_size(ehdr, phdr);
 	program->base_size_aligned = (program->base_size & ~(static_cast<uint64_t>(0x1000) - 1)) + 0x1000;
@@ -1163,7 +1173,7 @@ void RuntimeLinker::LoadProgramToMemory(Program* program)
 		                                        SYSTEM_RESERVED,
 		                                    kyty_exception_handler);
 
-		if (Libs::Graphics::GpuMemoryWatcherEnabled())
+		// if (Libs::Graphics::GpuMemoryWatcherEnabled())
 		{
 			VirtualMemory::ExceptionHandler::InstallVectored(kyty_exception_handler);
 		}

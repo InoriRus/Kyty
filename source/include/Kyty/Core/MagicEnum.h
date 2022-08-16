@@ -3,6 +3,7 @@
 
 #include "Kyty/Core/Common.h"
 #include "Kyty/Core/String.h"
+#include "Kyty/Core/String8.h"
 
 #include "magic_enum.hpp" // IWYU pragma: export
 
@@ -16,9 +17,27 @@ inline String EnumName(E v)
 }
 
 template <typename E>
+inline String8 EnumName8(E v)
+{
+	auto str = magic_enum::enum_name(v);
+	return String8(str.data(), static_cast<uint32_t>(str.length()));
+}
+
+template <typename E>
 inline E EnumValue(const String& str, E default_value)
 {
 	auto v = magic_enum::enum_cast<E>(str.C_Str());
+	if (v.has_value())
+	{
+		return v.value();
+	}
+	return default_value;
+}
+
+template <typename E>
+inline E EnumValue(const String8& str, E default_value)
+{
+	auto v = magic_enum::enum_cast<E>(str.c_str());
 	if (v.has_value())
 	{
 		return v.value();

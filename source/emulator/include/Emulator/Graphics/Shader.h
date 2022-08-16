@@ -3,6 +3,7 @@
 
 #include "Kyty/Core/Common.h"
 #include "Kyty/Core/String.h"
+#include "Kyty/Core/String8.h"
 #include "Kyty/Core/Vector.h"
 
 #include "Emulator/Common.h"
@@ -29,7 +30,7 @@ enum class ShaderType
 	Compute
 };
 
-enum class ShaderInstructionType
+enum class ShaderInstructionType : uint32_t
 {
 	Unknown,
 
@@ -57,6 +58,8 @@ enum class ShaderInstructionType
 	SAndB64,
 	SAndn2B64,
 	SAndSaveexecB64,
+	SBfeU32,
+	SBfeU64,
 	SBfmB32,
 	SBranch,
 	SBufferLoadDword,
@@ -84,20 +87,30 @@ enum class ShaderInstructionType
 	SCselectB32,
 	SCselectB64,
 	SEndpgm,
+	SInstPrefetch,
+	SLoadDword,
+	SLoadDwordx2,
 	SLoadDwordx4,
 	SLoadDwordx8,
+	SLoadDwordx16,
+	SLshl4AddU32,
 	SLshlB32,
 	SLshrB32,
+	SLshlB64,
+	SLshrB64,
 	SMovB32,
 	SMovB64,
 	SMovkI32,
 	SMulI32,
 	SNandB64,
 	SNorB64,
+	SOrB32,
 	SOrB64,
 	SOrn2B64,
+	SSendmsg,
 	SSetpcB64,
 	SSwappcB64,
+	SSubI32,
 	SWaitcnt,
 	SWqmB64,
 	SXnorB64,
@@ -207,6 +220,12 @@ enum class ShaderInstructionType
 	VSubrevI32,
 	VTruncF32,
 	VXorB32,
+
+	FetchX,
+	FetchXy,
+	FetchXyz,
+	FetchXyzw,
+
 	ZMax
 };
 
@@ -253,6 +272,7 @@ enum FormatByte : uint64_t
 	Param3, // param3
 	Param4, // param4
 	Mrt0,   // mrt_color0
+	Prim,   // prim
 	Off,    // off
 	Compr,  // compr
 	Vm,     // vm
@@ -292,9 +312,12 @@ enum Format : uint64_t
 	Param3Vsrc0Vsrc1Vsrc2Vsrc3          = FormatDefine({Param3, S0, S1, S2, S3}),
 	Param4Vsrc0Vsrc1Vsrc2Vsrc3          = FormatDefine({Param4, S0, S1, S2, S3}),
 	Pos0Vsrc0Vsrc1Vsrc2Vsrc3Done        = FormatDefine({Pos0, S0, S1, S2, S3, Done}),
+	PrimVsrc0OffOffOffDone              = FormatDefine({Prim, S0, Off, Off, Off, Done}),
 	Saddr                               = FormatDefine({S0A2}),
+	SdstSbaseSoffset                    = FormatDefine({D, S0A2, S1}),
 	Sdst16SvSoffset                     = FormatDefine({DA16, S0A4, S1}),
 	Sdst2Ssrc02                         = FormatDefine({DA2, S0A2}),
+	Sdst2Ssrc02Ssrc1                    = FormatDefine({DA2, S0A2, S1}),
 	Sdst2Ssrc02Ssrc12                   = FormatDefine({DA2, S0A2, S1A2}),
 	Sdst2SvSoffset                      = FormatDefine({DA2, S0A4, S1}),
 	Sdst4SbaseSoffset                   = FormatDefine({DA4, S0A2, S1}),
@@ -332,6 +355,12 @@ enum Format : uint64_t
 
 } // namespace ShaderInstructionFormat
 
+struct ShaderInstructionTypeFormat
+{
+	ShaderInstructionType           type   = ShaderInstructionType::Unknown;
+	ShaderInstructionFormat::Format format = ShaderInstructionFormat::Unknown;
+};
+
 enum class ShaderOperandType
 {
 	Unknown,
@@ -346,7 +375,8 @@ enum class ShaderOperandType
 	Scc,
 	Vgpr,
 	Sgpr,
-	M0
+	M0,
+	Null
 };
 
 union ShaderConstant
@@ -387,6 +417,7 @@ struct ShaderInstruction
 class ShaderLabel
 {
 public:
+	ShaderLabel(uint32_t dst, uint32_t src): m_dst(dst), m_src(src) {}
 	explicit ShaderLabel(const ShaderInstruction& inst): m_dst(inst.pc + 4 + inst.src[0].constant.i), m_src(inst.pc) {}
 	~ShaderLabel() = default;
 	KYTY_CLASS_DEFAULT_COPY(ShaderLabel);
@@ -394,7 +425,7 @@ public:
 	[[nodiscard]] uint32_t GetDst() const { return m_dst; }
 	[[nodiscard]] uint32_t GetSrc() const { return m_src; }
 
-	[[nodiscard]] String ToString() const { return String::FromPrintf("label_%04" PRIx32 "_%04" PRIx32, m_dst, m_src); }
+	[[nodiscard]] String8 ToString() const { return String8::FromPrintf("label_%04" PRIx32 "_%04" PRIx32, m_dst, m_src); }
 
 	void Disable()
 	{
@@ -442,12 +473,14 @@ public:
 	Vector<ShaderInstruction>&                     GetInstructions() { return m_instructions; }
 	[[nodiscard]] const Vector<ShaderLabel>&       GetLabels() const { return m_labels; }
 	Vector<ShaderLabel>&                           GetLabels() { return m_labels; }
+	[[nodiscard]] const Vector<ShaderLabel>&       GetIndirectLabels() const { return m_indirect_labels; }
+	Vector<ShaderLabel>&                           GetIndirectLabels() { return m_indirect_labels; }
 	[[nodiscard]] const Vector<ShaderDebugPrintf>& GetDebugPrintfs() const { return m_debug_printfs; }
 	Vector<ShaderDebugPrintf>&                     GetDebugPrintfs() { return m_debug_printfs; }
 
-	[[nodiscard]] String DbgDump() const;
+	[[nodiscard]] String8 DbgDump() const;
 
-	static String DbgInstructionToStr(const ShaderInstruction& inst);
+	static String8 DbgInstructionToStr(const ShaderInstruction& inst);
 
 	[[nodiscard]] ShaderType GetType() const { return m_type; }
 	void                     SetType(ShaderType type) { this->m_type = type; }
@@ -484,6 +517,7 @@ private:
 	uint32_t                  m_crc32 = 0;
 	Vector<ShaderInstruction> m_instructions;
 	Vector<ShaderLabel>       m_labels;
+	Vector<ShaderLabel>       m_indirect_labels;
 	ShaderType                m_type = ShaderType::Unknown;
 	Vector<ShaderDebugPrintf> m_debug_printfs;
 	uint32_t                  m_vs_embedded_id = 0;
@@ -516,15 +550,22 @@ struct ShaderBufferResource
 {
 	uint32_t fields[4] = {0};
 
-	void UpdateAddress(uint64_t gpu_addr)
+	void UpdateAddress44(uint64_t gpu_addr)
 	{
 		auto lo   = static_cast<uint32_t>(gpu_addr & 0xffffffffu);
 		auto hi   = static_cast<uint32_t>(gpu_addr >> 32u);
 		fields[0] = lo;
-		fields[1] = (fields[1] & 0xfffff000u) | (hi & 0xfffu);
+		fields[1] = (fields[1] & 0xfffff000u) | (hi & 0x00000fffu);
 	}
 
-	[[nodiscard]] uint64_t Base() const { return (fields[0] | (static_cast<uint64_t>(fields[1]) << 32u)) & 0xFFFFFFFFFFFu; }
+	void UpdateAddress48(uint64_t gpu_addr)
+	{
+		auto lo   = static_cast<uint32_t>(gpu_addr & 0xffffffffu);
+		auto hi   = static_cast<uint32_t>(gpu_addr >> 32u);
+		fields[0] = lo;
+		fields[1] = (fields[1] & 0xffff0000u) | (hi & 0x0000ffffu);
+	}
+
 	[[nodiscard]] uint16_t Stride() const { return (fields[1] >> 16u) & 0x3FFFu; }
 	[[nodiscard]] bool     SwizzleEnabled() const { return ((fields[1] >> 31u) & 0x1u) == 1; }
 	[[nodiscard]] uint32_t NumRecords() const { return fields[2]; }
@@ -535,11 +576,16 @@ struct ShaderBufferResource
 	[[nodiscard]] uint32_t DstSelXY() const { return (fields[3] >> 0u) & 0x3Fu; }
 	[[nodiscard]] uint32_t DstSelXYZ() const { return (fields[3] >> 0u) & 0x1FFu; }
 	[[nodiscard]] uint32_t DstSelXYZW() const { return (fields[3] >> 0u) & 0xFFFu; }
-	[[nodiscard]] uint8_t  Nfmt() const { return (fields[3] >> 12u) & 0x7u; }
-	[[nodiscard]] uint8_t  Dfmt() const { return (fields[3] >> 15u) & 0xFu; }
 	[[nodiscard]] bool     AddTid() const { return ((fields[3] >> 23u) & 0x1u) == 1; }
 
-	[[nodiscard]] uint8_t MemoryType() const
+	[[nodiscard]] uint64_t Base48() const { return (fields[0] | (static_cast<uint64_t>(fields[1]) << 32u)) & 0xFFFFFFFFFFFFu; }
+	[[nodiscard]] uint8_t  Format() const { return (fields[3] >> 12u) & 0x7Fu; }
+	[[nodiscard]] uint8_t  OutOfBounds() const { return (fields[3] >> 28u) & 0x3u; }
+
+	[[nodiscard]] uint64_t Base44() const { return (fields[0] | (static_cast<uint64_t>(fields[1]) << 32u)) & 0x0FFFFFFFFFFFu; }
+	[[nodiscard]] uint8_t  Nfmt() const { return (fields[3] >> 12u) & 0x7u; }
+	[[nodiscard]] uint8_t  Dfmt() const { return (fields[3] >> 15u) & 0xFu; }
+	[[nodiscard]] uint8_t  MemoryType() const
 	{
 		return ((fields[1] >> 7u) & 0x60u) | ((fields[3] >> 25u) & 0x1cu) | ((fields[1] >> 14u) & 0x3u);
 	}
@@ -549,22 +595,23 @@ struct ShaderTextureResource
 {
 	uint32_t fields[8] = {0};
 
-	void UpdateAddress(uint64_t gpu_addr)
+	void UpdateAddress38(uint64_t gpu_addr)
 	{
 		auto lo   = static_cast<uint32_t>(gpu_addr & 0xffffffffu);
 		auto hi   = static_cast<uint32_t>(gpu_addr >> 32u);
 		fields[0] = lo;
-		fields[1] = (fields[1] & 0xffffffc0u) | (hi & 0x3fu);
+		fields[1] = (fields[1] & 0xffffffc0u) | (hi & 0x0000003fu);
 	}
 
-	[[nodiscard]] uint64_t Base() const { return ((fields[0] | (static_cast<uint64_t>(fields[1]) << 32u)) & 0x3FFFFFFFFFu) << 8u; }
+	void UpdateAddress40(uint64_t gpu_addr)
+	{
+		auto lo   = static_cast<uint32_t>(gpu_addr & 0xffffffffu);
+		auto hi   = static_cast<uint32_t>(gpu_addr >> 32u);
+		fields[0] = lo;
+		fields[1] = (fields[1] & 0xffffff00u) | (hi & 0x000000ffu);
+	}
+
 	[[nodiscard]] uint16_t MinLod() const { return (fields[1] >> 8u) & 0xFFFu; }
-	[[nodiscard]] uint8_t  Dfmt() const { return (fields[1] >> 20u) & 0x3Fu; }
-	[[nodiscard]] uint8_t  Nfmt() const { return (fields[1] >> 26u) & 0xFu; }
-	[[nodiscard]] uint16_t Width() const { return (fields[2] >> 0u) & 0x3FFFu; }
-	[[nodiscard]] uint16_t Height() const { return (fields[2] >> 14u) & 0x3FFFu; }
-	[[nodiscard]] uint8_t  PerfMod() const { return (fields[2] >> 28u) & 0x7u; }
-	[[nodiscard]] bool     Interlaced() const { return ((fields[2] >> 31u) & 0x1u) == 1; }
 	[[nodiscard]] uint8_t  DstSelX() const { return (fields[3] >> 0u) & 0x7u; }
 	[[nodiscard]] uint8_t  DstSelY() const { return (fields[3] >> 3u) & 0x7u; }
 	[[nodiscard]] uint8_t  DstSelZ() const { return (fields[3] >> 6u) & 0x7u; }
@@ -574,19 +621,49 @@ struct ShaderTextureResource
 	[[nodiscard]] uint32_t DstSelXYZW() const { return (fields[3] >> 0u) & 0xFFFu; }
 	[[nodiscard]] uint8_t  BaseLevel() const { return (fields[3] >> 12u) & 0xFu; }
 	[[nodiscard]] uint8_t  LastLevel() const { return (fields[3] >> 16u) & 0xFu; }
-	[[nodiscard]] uint8_t  TilingIdx() const { return (fields[3] >> 20u) & 0x1Fu; }
-	[[nodiscard]] bool     Pow2Pad() const { return ((fields[3] >> 25u) & 0x1u) == 1; }
+	[[nodiscard]] uint8_t  TileMode() const { return (fields[3] >> 20u) & 0x1Fu; }
 	[[nodiscard]] uint8_t  Type() const { return (fields[3] >> 28u) & 0xFu; }
-
 	[[nodiscard]] uint16_t Depth() const { return (fields[4] >> 0u) & 0x1FFFu; }
+
+	[[nodiscard]] uint64_t Base40() const { return ((fields[0] | (static_cast<uint64_t>(fields[1]) << 32u)) & 0xFFFFFFFFFFu) << 8u; }
+	[[nodiscard]] uint16_t Format() const { return (fields[1] >> 20u) & 0x1FFu; }
+	[[nodiscard]] uint16_t Width5() const { return ((fields[1] >> 30u) & 0x3u) | (((fields[2] >> 0u) & 0xFFFu) << 2u); }
+	[[nodiscard]] uint16_t Height5() const { return (fields[2] >> 14u) & 0x3FFFu; }
+	[[nodiscard]] uint8_t  BCSwizzle() const { return (fields[3] >> 25u) & 0x7u; }
+	[[nodiscard]] uint16_t BaseArray5() const { return (fields[4] >> 16u) & 0x1FFFu; }
+	[[nodiscard]] uint8_t  ArrayPitch() const { return (fields[5] >> 0u) & 0xFu; }
+	[[nodiscard]] uint8_t  MaxMip() const { return (fields[5] >> 4u) & 0xFu; }
+	[[nodiscard]] uint16_t MinLodWarn5() const { return (fields[5] >> 8u) & 0xFFFu; }
+	[[nodiscard]] uint8_t  PerfMod5() const { return (fields[5] >> 20u) & 0x7u; }
+	[[nodiscard]] bool     CornerSample() const { return ((fields[5] >> 23u) & 0x1u) == 1; }
+	[[nodiscard]] bool     MipStatsCntEn() const { return ((fields[5] >> 25u) & 0x1u) == 1; }
+	[[nodiscard]] bool     PrtDefColor() const { return ((fields[5] >> 26u) & 0x1u) == 1; }
+	[[nodiscard]] uint8_t  MipStatsCntId() const { return (fields[6] >> 0u) & 0xFFu; }
+	[[nodiscard]] bool     MsaaDepth() const { return ((fields[6] >> 10u) & 0x1u) == 1; }
+	[[nodiscard]] uint8_t  MaxUncompBlkSize() const { return (fields[6] >> 15u) & 0x3u; }
+	[[nodiscard]] uint8_t  MaxCompBlkSize() const { return (fields[6] >> 17u) & 0x3u; }
+	[[nodiscard]] bool     MetaPipeAligned() const { return ((fields[6] >> 19u) & 0x1u) == 1; }
+	[[nodiscard]] bool     WriteCompress() const { return ((fields[6] >> 20u) & 0x1u) == 1; }
+	[[nodiscard]] bool     MetaCompress() const { return ((fields[6] >> 21u) & 0x1u) == 1; }
+	[[nodiscard]] bool     DccAlphaPos() const { return ((fields[6] >> 22u) & 0x1u) == 1; }
+	[[nodiscard]] bool     DccColorTransf() const { return ((fields[6] >> 23u) & 0x1u) == 1; }
+	[[nodiscard]] uint64_t MetaAddr() const { return ((fields[6] >> 24u) & 0xFFu) | (static_cast<uint64_t>(fields[7]) << 8u); }
+
+	[[nodiscard]] uint64_t Base38() const { return ((fields[0] | (static_cast<uint64_t>(fields[1]) << 32u)) & 0x3FFFFFFFFFu) << 8u; }
+	[[nodiscard]] uint8_t  Dfmt() const { return (fields[1] >> 20u) & 0x3Fu; }
+	[[nodiscard]] uint8_t  Nfmt() const { return (fields[1] >> 26u) & 0xFu; }
+	[[nodiscard]] uint16_t Width4() const { return (fields[2] >> 0u) & 0x3FFFu; }
+	[[nodiscard]] uint16_t Height4() const { return (fields[2] >> 14u) & 0x3FFFu; }
+	[[nodiscard]] uint8_t  PerfMod() const { return (fields[2] >> 28u) & 0x7u; }
+	[[nodiscard]] bool     Interlaced() const { return ((fields[2] >> 31u) & 0x1u) == 1; }
+	[[nodiscard]] bool     Pow2Pad() const { return ((fields[3] >> 25u) & 0x1u) == 1; }
 	[[nodiscard]] uint16_t Pitch() const { return (fields[4] >> 13u) & 0x3FFFu; }
 	[[nodiscard]] uint16_t BaseArray() const { return (fields[5] >> 0u) & 0x1FFFu; }
 	[[nodiscard]] uint16_t LastArray() const { return (fields[5] >> 13u) & 0x1FFFu; }
 	[[nodiscard]] uint16_t MinLodWarn() const { return (fields[6] >> 0u) & 0xFFFu; }
-	[[nodiscard]] uint8_t  CounterBankId() const { return (fields[6] >> 12u) & 0xFFu; }
 	[[nodiscard]] bool     LodHdwCntEn() const { return ((fields[6] >> 20u) & 0x1u) == 1; }
-
-	[[nodiscard]] uint8_t MemoryType() const
+	[[nodiscard]] uint8_t  CounterBankId() const { return (fields[6] >> 12u) & 0xFFu; }
+	[[nodiscard]] uint8_t  MemoryType() const
 	{
 		return ((fields[1] >> 6u) & 0x3u) | ((fields[1] >> 30u) << 2u) | ((fields[3] & 0x04000000u) == 0 ? 0x60u : 0x10u);
 	}
@@ -605,7 +682,6 @@ struct ShaderSamplerResource
 	[[nodiscard]] uint8_t  DepthCompareFunc() const { return (fields[0] >> 12u) & 0x7u; }
 	[[nodiscard]] bool     ForceUnormCoords() const { return ((fields[0] >> 15u) & 0x1u) == 1; }
 	[[nodiscard]] uint8_t  AnisoThreshold() const { return (fields[0] >> 16u) & 0x7u; }
-	[[nodiscard]] bool     McCoordTrunc() const { return ((fields[0] >> 19u) & 0x1u) == 1; }
 	[[nodiscard]] bool     ForceDegamma() const { return ((fields[0] >> 20u) & 0x1u) == 1; }
 	[[nodiscard]] uint8_t  AnisoBias() const { return (fields[0] >> 21u) & 0x3Fu; }
 	[[nodiscard]] bool     TruncCoord() const { return ((fields[0] >> 27u) & 0x1u) == 1; }
@@ -623,6 +699,13 @@ struct ShaderSamplerResource
 	[[nodiscard]] uint8_t  MipFilter() const { return (fields[2] >> 26u) & 0x3u; }
 	[[nodiscard]] uint16_t BorderColorPtr() const { return (fields[3] >> 0u) & 0xFFFu; }
 	[[nodiscard]] uint8_t  BorderColorType() const { return (fields[3] >> 30u) & 0x3u; }
+
+	[[nodiscard]] bool SkipDegamma() const { return ((fields[0] >> 31u) & 0x1u) == 1; }
+	[[nodiscard]] bool PointPreclamp() const { return ((fields[3] >> 28u) & 0x1u) == 1; }
+	[[nodiscard]] bool AnisoOverride() const { return ((fields[3] >> 28u) & 0x1u) == 1; }
+	[[nodiscard]] bool BlendZeroPrt() const { return ((fields[3] >> 28u) & 0x1u) == 1; }
+
+	[[nodiscard]] bool McCoordTrunc() const { return ((fields[0] >> 19u) & 0x1u) == 1; }
 };
 
 struct ShaderGdsResource
@@ -760,25 +843,24 @@ struct ShaderBindResources
 	ShaderExtendedResources extended;
 };
 
-// struct ShaderBindParameters
-//{
-//	bool textures2d_without_sampler[ShaderTextureResources::RES_MAX] = {};
-//	int  textures2d_sampled_num                                      = 0;
-//	int  textures2d_storage_num                                      = 0;
-//};
-
 struct ShaderVertexInputInfo
 {
 	static constexpr int RES_MAX = 16;
 
 	ShaderBufferResource    resources[RES_MAX];
 	ShaderVertexDestination resources_dst[RES_MAX];
-	int                     resources_num = 0;
-	bool                    fetch         = false;
 	ShaderVertexInputBuffer buffers[RES_MAX];
-	int                     buffers_num  = 0;
-	int                     export_count = 0;
 	ShaderBindResources     bind;
+	int                     resources_num    = 0;
+	int                     fetch_shader_reg = 0;
+	int                     fetch_attrib_reg = 0;
+	int                     fetch_buffer_reg = 0;
+	int                     buffers_num      = 0;
+	int                     export_count     = 0;
+	bool                    fetch_external   = false;
+	bool                    fetch_embedded   = false;
+	bool                    fetch_inline     = false;
+	bool                    gs_prolog        = false;
 };
 
 struct ShaderComputeInputInfo
@@ -802,23 +884,123 @@ struct ShaderPixelInputInfo
 	ShaderBindResources bind;
 };
 
-void       ShaderCalcBindingIndices(ShaderBindResources* bind);
-void       ShaderGetInputInfoVS(const HW::VertexShaderInfo* regs, const HW::ShaderRegisters* sh, ShaderVertexInputInfo* info);
-void       ShaderGetInputInfoPS(const HW::PixelShaderInfo* regs, const HW::ShaderRegisters* sh, const ShaderVertexInputInfo* vs_info,
-                                ShaderPixelInputInfo* ps_info);
-void       ShaderGetInputInfoCS(const HW::ComputeShaderInfo* regs, const HW::ShaderRegisters* sh, ShaderComputeInputInfo* info);
-void       ShaderDbgDumpInputInfo(const ShaderVertexInputInfo* info);
-void       ShaderDbgDumpInputInfo(const ShaderPixelInputInfo* info);
-void       ShaderDbgDumpInputInfo(const ShaderComputeInputInfo* info);
-ShaderId   ShaderGetIdVS(const HW::VertexShaderInfo* regs, const ShaderVertexInputInfo* input_info);
-ShaderId   ShaderGetIdPS(const HW::PixelShaderInfo* regs, const ShaderPixelInputInfo* input_info);
-ShaderId   ShaderGetIdCS(const HW::ComputeShaderInfo* regs, const ShaderComputeInputInfo* input_info);
-ShaderCode ShaderParseVS(const HW::VertexShaderInfo* regs, const HW::ShaderRegisters* sh);
-ShaderCode ShaderParsePS(const HW::PixelShaderInfo* regs, const HW::ShaderRegisters* sh);
-ShaderCode ShaderParseCS(const HW::ComputeShaderInfo* regs, const HW::ShaderRegisters* sh);
-// ShaderBindParameters ShaderGetBindParametersVS(const ShaderCode& code, const ShaderVertexInputInfo* input_info);
-// ShaderBindParameters ShaderGetBindParametersPS(const ShaderCode& code, const ShaderPixelInputInfo* input_info);
-// ShaderBindParameters ShaderGetBindParametersCS(const ShaderCode& code, const ShaderComputeInputInfo* input_info);
+struct ShaderSharp
+{
+	uint16_t offset_dw : 15;
+	uint16_t size      : 1;
+};
+
+struct ShaderUserData
+{
+	uint16_t*    direct_resource_offset;
+	ShaderSharp* sharp_resource_offset[4];
+	uint16_t     eud_size_dw;
+	uint16_t     srt_size_dw;
+	uint16_t     direct_resource_count;
+	uint16_t     sharp_resource_count[4];
+};
+
+struct ShaderRegisterRange
+{
+	uint16_t start;
+	uint16_t end;
+};
+
+struct ShaderDrawModifier
+{
+	uint32_t enbl_start_vertex_offset   : 1;
+	uint32_t enbl_start_index_offset    : 1;
+	uint32_t enbl_start_instance_offset : 1;
+	uint32_t enbl_draw_index            : 1;
+	uint32_t enbl_user_vgprs            : 1;
+	uint32_t render_target_slice_offset : 3;
+	uint32_t fuse_draws                 : 1;
+	uint32_t compiler_flags             : 23;
+	uint32_t is_default                 : 1;
+	uint32_t reserved                   : 31;
+};
+
+struct ShaderRegister
+{
+	uint32_t offset;
+	uint32_t value;
+};
+
+struct ShaderSpecialRegs
+{
+	ShaderRegister      ge_cntl;
+	ShaderRegister      vgt_shader_stages_en;
+	uint32_t            dispatch_modifier;
+	ShaderRegisterRange user_data_range;
+	ShaderDrawModifier  draw_modifier;
+	ShaderRegister      vgt_gs_out_prim_type;
+	ShaderRegister      ge_user_vgpr_en;
+};
+
+struct ShaderSemantic
+{
+	uint32_t semantic         : 8;
+	uint32_t hardware_mapping : 8;
+	uint32_t size_in_elements : 4;
+	uint32_t is_f16           : 2;
+	uint32_t is_flat_shaded   : 1;
+	uint32_t is_linear        : 1;
+	uint32_t is_custom        : 1;
+	uint32_t static_vb_index  : 1;
+	uint32_t static_attribute : 1;
+	uint32_t reserved         : 1;
+	uint32_t default_value    : 2;
+	uint32_t default_value_hi : 2;
+};
+
+struct Shader
+{
+	uint32_t             file_header;
+	uint32_t             version;
+	ShaderUserData*      user_data;
+	const volatile void* code;
+	ShaderRegister*      cx_registers;
+	ShaderRegister*      sh_registers;
+	ShaderSpecialRegs*   specials;
+	ShaderSemantic*      input_semantics;
+	ShaderSemantic*      output_semantics;
+	uint32_t             header_size;
+	uint32_t             shader_size;
+	uint32_t             embedded_constant_buffer_size_dqw;
+	uint32_t             target;
+	uint32_t             num_input_semantics;
+	uint16_t             scratch_size_dw_per_thread;
+	uint16_t             num_output_semantics;
+	uint16_t             special_sizes_bytes;
+	uint8_t              type;
+	uint8_t              num_cx_registers;
+	uint8_t              num_sh_registers;
+};
+
+struct ShaderMappedData
+{
+	ShaderUserData* user_data           = nullptr;
+	ShaderSemantic* input_semantics     = nullptr;
+	uint32_t        num_input_semantics = 0;
+};
+
+void ShaderInit();
+void ShaderMapUserData(uint64_t addr, const ShaderMappedData& data);
+
+void             ShaderCalcBindingIndices(ShaderBindResources* bind);
+void             ShaderGetInputInfoVS(const HW::VertexShaderInfo* regs, const HW::ShaderRegisters* sh, ShaderVertexInputInfo* info);
+void             ShaderGetInputInfoPS(const HW::PixelShaderInfo* regs, const HW::ShaderRegisters* sh, const ShaderVertexInputInfo* vs_info,
+                                      ShaderPixelInputInfo* ps_info);
+void             ShaderGetInputInfoCS(const HW::ComputeShaderInfo* regs, const HW::ShaderRegisters* sh, ShaderComputeInputInfo* info);
+void             ShaderDbgDumpInputInfo(const ShaderVertexInputInfo* info);
+void             ShaderDbgDumpInputInfo(const ShaderPixelInputInfo* info);
+void             ShaderDbgDumpInputInfo(const ShaderComputeInputInfo* info);
+ShaderId         ShaderGetIdVS(const HW::VertexShaderInfo* regs, const ShaderVertexInputInfo* input_info);
+ShaderId         ShaderGetIdPS(const HW::PixelShaderInfo* regs, const ShaderPixelInputInfo* input_info);
+ShaderId         ShaderGetIdCS(const HW::ComputeShaderInfo* regs, const ShaderComputeInputInfo* input_info);
+ShaderCode       ShaderParseVS(const HW::VertexShaderInfo* regs, const HW::ShaderRegisters* sh);
+ShaderCode       ShaderParsePS(const HW::PixelShaderInfo* regs, const HW::ShaderRegisters* sh);
+ShaderCode       ShaderParseCS(const HW::ComputeShaderInfo* regs, const HW::ShaderRegisters* sh);
 Vector<uint32_t> ShaderRecompileVS(const ShaderCode& code, const ShaderVertexInputInfo* input_info);
 Vector<uint32_t> ShaderRecompilePS(const ShaderCode& code, const ShaderPixelInputInfo* input_info);
 Vector<uint32_t> ShaderRecompileCS(const ShaderCode& code, const ShaderComputeInputInfo* input_info);

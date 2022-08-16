@@ -236,7 +236,7 @@ static void calc_buffer_size(const VideoOutBufferAttribute* attribute, const Vid
 
 	if (attribute2 != nullptr)
 	{
-		EXIT_NOT_IMPLEMENTED(attribute2->option != 0);
+		EXIT_NOT_IMPLEMENTED(attribute2->option != 0 && attribute2->option != 8);
 		EXIT_NOT_IMPLEMENTED(attribute2->aspect_ratio != 0);
 		EXIT_NOT_IMPLEMENTED(attribute2->pixel_format != 0x8000000000000000ULL && attribute2->pixel_format != 0x8000000022000000ULL);
 	} else
@@ -1015,7 +1015,7 @@ KYTY_SYSV_ABI int VideoOutRegisterBuffers2(int handle, int set_index, int buffer
 	EXIT_NOT_IMPLEMENTED(attribute->tiling_mode != 0);
 	EXIT_NOT_IMPLEMENTED(attribute->aspect_ratio != 0);
 	EXIT_NOT_IMPLEMENTED(attribute->pitch_in_pixel != 0);
-	EXIT_NOT_IMPLEMENTED(attribute->option != 0);
+	EXIT_NOT_IMPLEMENTED(attribute->option != 0 && attribute->option != 8);
 	EXIT_NOT_IMPLEMENTED(attribute->dcc_cb_register_clear_color != 0);
 	EXIT_NOT_IMPLEMENTED(attribute->dcc_control != 0);
 
