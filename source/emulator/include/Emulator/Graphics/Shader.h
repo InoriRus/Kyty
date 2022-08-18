@@ -101,7 +101,9 @@ enum class ShaderInstructionType : uint32_t
 	SMovB32,
 	SMovB64,
 	SMovkI32,
+	SMulHiU32,
 	SMulI32,
+	SMulkI32,
 	SNandB64,
 	SNorB64,
 	SOrB32,
@@ -181,6 +183,7 @@ enum class ShaderInstructionType : uint32_t
 	VFloorF32,
 	VFmaF32,
 	VFractF32,
+	VInterpMovF32,
 	VInterpP1F32,
 	VInterpP2F32,
 	VLogF32,
@@ -716,6 +719,11 @@ struct ShaderGdsResource
 	[[nodiscard]] uint16_t Size() const { return field & 0xFFFFu; }
 };
 
+struct ShaderDirectSgprResource
+{
+	uint32_t field = 0;
+};
+
 struct ShaderExtendedResource
 {
 	uint32_t fields[2] = {0};
@@ -823,6 +831,15 @@ struct ShaderGdsResources
 	int               binding_index                = 0;
 };
 
+struct ShaderDirectSgprsResources
+{
+	static constexpr int SGPRS_MAX = 4;
+
+	ShaderDirectSgprResource sgprs[SGPRS_MAX];
+	int                      start_register[SGPRS_MAX] = {0};
+	int                      sgprs_num                 = 0;
+};
+
 struct ShaderExtendedResources
 {
 	bool                   used           = false;
@@ -833,14 +850,15 @@ struct ShaderExtendedResources
 
 struct ShaderBindResources
 {
-	uint32_t                push_constant_offset = 0;
-	uint32_t                push_constant_size   = 0;
-	uint32_t                descriptor_set_slot  = 0;
-	ShaderStorageResources  storage_buffers;
-	ShaderTextureResources  textures2D;
-	ShaderSamplerResources  samplers;
-	ShaderGdsResources      gds_pointers;
-	ShaderExtendedResources extended;
+	uint32_t                   push_constant_offset = 0;
+	uint32_t                   push_constant_size   = 0;
+	uint32_t                   descriptor_set_slot  = 0;
+	ShaderStorageResources     storage_buffers;
+	ShaderTextureResources     textures2D;
+	ShaderSamplerResources     samplers;
+	ShaderGdsResources         gds_pointers;
+	ShaderDirectSgprsResources direct_sgprs;
+	ShaderExtendedResources    extended;
 };
 
 struct ShaderVertexInputInfo

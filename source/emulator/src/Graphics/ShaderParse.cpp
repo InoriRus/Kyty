@@ -160,31 +160,30 @@ KYTY_SHADER_PARSER(shader_parse_sopk)
 	inst.pc  = pc;
 	inst.dst = operand_parse(sdst);
 
+	inst.format            = ShaderInstructionFormat::SVdstSVsrc0;
+	inst.src[0].type       = ShaderOperandType::IntegerInlineConstant;
+	inst.src[0].constant.i = imm;
+	inst.src_num           = 1;
+
 	switch (opcode)
 	{
-		case 0x00:
-			inst.type              = ShaderInstructionType::SMovkI32;
-			inst.format            = ShaderInstructionFormat::SVdstSVsrc0;
-			inst.src[0].type       = ShaderOperandType::IntegerInlineConstant;
-			inst.src[0].constant.i = imm;
-			inst.src_num           = 1;
-			break;
+		case 0x00: inst.type = ShaderInstructionType::SMovkI32; break;
 
-		case 0x2: KYTY_NI("s_cmovk_i32"); break;
-		case 0x3: KYTY_NI("s_cmpk_eq_i32"); break;
-		case 0x4: KYTY_NI("s_cmpk_lg_i32"); break;
-		case 0x5: KYTY_NI("s_cmpk_gt_i32"); break;
-		case 0x6: KYTY_NI("s_cmpk_ge_i32"); break;
-		case 0x7: KYTY_NI("s_cmpk_lt_i32"); break;
-		case 0x8: KYTY_NI("s_cmpk_le_i32"); break;
-		case 0x9: KYTY_NI("s_cmpk_eq_u32"); break;
-		case 0xA: KYTY_NI("s_cmpk_lg_u32"); break;
-		case 0xB: KYTY_NI("s_cmpk_gt_u32"); break;
-		case 0xC: KYTY_NI("s_cmpk_ge_u32"); break;
-		case 0xD: KYTY_NI("s_cmpk_lt_u32"); break;
-		case 0xE: KYTY_NI("s_cmpk_le_u32"); break;
-		case 0xF: KYTY_NI("s_addk_i32"); break;
-		case 0x10: KYTY_NI("s_mulk_i32"); break;
+		case 0x02: KYTY_NI("s_cmovk_i32"); break;
+		case 0x03: KYTY_NI("s_cmpk_eq_i32"); break;
+		case 0x04: KYTY_NI("s_cmpk_lg_i32"); break;
+		case 0x05: KYTY_NI("s_cmpk_gt_i32"); break;
+		case 0x06: KYTY_NI("s_cmpk_ge_i32"); break;
+		case 0x07: KYTY_NI("s_cmpk_lt_i32"); break;
+		case 0x08: KYTY_NI("s_cmpk_le_i32"); break;
+		case 0x09: KYTY_NI("s_cmpk_eq_u32"); break;
+		case 0x0A: KYTY_NI("s_cmpk_lg_u32"); break;
+		case 0x0B: KYTY_NI("s_cmpk_gt_u32"); break;
+		case 0x0C: KYTY_NI("s_cmpk_ge_u32"); break;
+		case 0x0D: KYTY_NI("s_cmpk_lt_u32"); break;
+		case 0x0E: KYTY_NI("s_cmpk_le_u32"); break;
+		case 0x0F: KYTY_NI("s_addk_i32"); break;
+		case 0x10: inst.type = ShaderInstructionType::SMulkI32; break;
 		case 0x11: KYTY_NI("s_cbranch_i_fork"); break;
 		case 0x12: KYTY_NI("s_getreg_b32"); break;
 		case 0x13: KYTY_NI("s_setreg_b32"); break;
@@ -579,6 +578,7 @@ KYTY_SHADER_PARSER(shader_parse_sop2)
 		case 0x32: KYTY_NI("s_pack_ll_b32_b16"); break;
 		case 0x33: KYTY_NI("s_pack_lh_b32_b16"); break;
 		case 0x34: KYTY_NI("s_pack_hh_b32_b16"); break;
+		case 0x35: inst.type = ShaderInstructionType::SMulHiU32; break;
 
 		default: KYTY_UNKNOWN_OP();
 	}
@@ -601,13 +601,38 @@ KYTY_SHADER_PARSER(shader_parse_vopc)
 	uint32_t src0   = (buffer[0] >> 0u) & 0x1ffu;
 	uint32_t vsrc1  = (buffer[0] >> 9u) & 0xffu;
 
+	bool sdwa = (src0 == 249);
+
+	uint32_t size = (sdwa ? 2 : 1);
+
+	src0               = (sdwa ? (buffer[1] >> 0u) & 0xffu : src0);
+	uint32_t sdst      = (sdwa ? (buffer[1] >> 8u) & 0x7fu : 0);
+	uint32_t sd        = (sdwa ? (buffer[1] >> 15u) & 0x1u : 0);
+	uint32_t src0_sel  = (sdwa ? (buffer[1] >> 16u) & 0x7u : 6);
+	uint32_t src0_sext = (sdwa ? (buffer[1] >> 19u) & 0x1u : 0);
+	uint32_t src0_neg  = (sdwa ? (buffer[1] >> 20u) & 0x1u : 0);
+	uint32_t src0_abs  = (sdwa ? (buffer[1] >> 21u) & 0x1u : 0);
+	uint32_t s0        = (sdwa ? (buffer[1] >> 23u) & 0x1u : 1);
+	uint32_t src1_sel  = (sdwa ? (buffer[1] >> 24u) & 0x7u : 6);
+	uint32_t src1_sext = (sdwa ? (buffer[1] >> 27u) & 0x1u : 0);
+	uint32_t src1_neg  = (sdwa ? (buffer[1] >> 28u) & 0x1u : 0);
+	uint32_t src1_abs  = (sdwa ? (buffer[1] >> 29u) & 0x1u : 0);
+	uint32_t s1        = (sdwa ? (buffer[1] >> 31u) & 0x1u : 0);
+
+	EXIT_NOT_IMPLEMENTED(src0_sel != 6);
+	EXIT_NOT_IMPLEMENTED(src0_sext != 0);
+	EXIT_NOT_IMPLEMENTED(src0_neg != 0);
+	EXIT_NOT_IMPLEMENTED(src0_abs != 0);
+	EXIT_NOT_IMPLEMENTED(src1_sel != 6);
+	EXIT_NOT_IMPLEMENTED(src1_sext != 0);
+	EXIT_NOT_IMPLEMENTED(src1_neg != 0);
+	EXIT_NOT_IMPLEMENTED(src1_abs != 0);
+
 	ShaderInstruction inst;
 	inst.pc      = pc;
-	inst.src[0]  = operand_parse(src0);
-	inst.src[1]  = operand_parse(vsrc1 + 256);
+	inst.src[0]  = operand_parse(src0 + (s0 == 0 ? 256 : 0));
+	inst.src[1]  = operand_parse(vsrc1 + (s1 == 0 ? 256 : 0));
 	inst.src_num = 2;
-
-	uint32_t size = 1;
 
 	if (inst.src[0].type == ShaderOperandType::LiteralConstant)
 	{
@@ -615,8 +640,14 @@ KYTY_SHADER_PARSER(shader_parse_vopc)
 		size++;
 	}
 
-	inst.format   = ShaderInstructionFormat::SmaskVsrc0Vsrc1;
-	inst.dst.type = ShaderOperandType::VccLo;
+	inst.format = ShaderInstructionFormat::SmaskVsrc0Vsrc1;
+	if (sd == 0)
+	{
+		inst.dst.type = ShaderOperandType::VccLo;
+	} else
+	{
+		inst.dst = operand_parse(sdst);
+	}
 	inst.dst.size = 2;
 
 	switch (opcode)
@@ -1034,20 +1065,62 @@ KYTY_SHADER_PARSER(shader_parse_vop2)
 	uint32_t src0  = (buffer[0] >> 0u) & 0x1ffu;
 	uint32_t vsrc1 = (buffer[0] >> 9u) & 0xffu;
 
+	bool sdwa = (src0 == 249);
+
+	uint32_t size = (sdwa ? 2 : 1);
+
+	src0               = (sdwa ? (buffer[1] >> 0u) & 0xffu : src0);
+	uint32_t dst_sel   = (sdwa ? (buffer[1] >> 8u) & 0x7u : 6);
+	uint32_t dst_u     = (sdwa ? (buffer[1] >> 11u) & 0x3u : 2);
+	uint32_t clmp      = (sdwa ? (buffer[1] >> 13u) & 0x1u : 0);
+	uint32_t omod      = (sdwa ? (buffer[1] >> 14u) & 0x3u : 0);
+	uint32_t src0_sel  = (sdwa ? (buffer[1] >> 16u) & 0x7u : 6);
+	uint32_t src0_sext = (sdwa ? (buffer[1] >> 19u) & 0x1u : 0);
+	uint32_t src0_neg  = (sdwa ? (buffer[1] >> 20u) & 0x1u : 0);
+	uint32_t src0_abs  = (sdwa ? (buffer[1] >> 21u) & 0x1u : 0);
+	uint32_t s0        = (sdwa ? (buffer[1] >> 23u) & 0x1u : 1);
+	uint32_t src1_sel  = (sdwa ? (buffer[1] >> 24u) & 0x7u : 6);
+	uint32_t src1_sext = (sdwa ? (buffer[1] >> 27u) & 0x1u : 0);
+	uint32_t src1_neg  = (sdwa ? (buffer[1] >> 28u) & 0x1u : 0);
+	uint32_t src1_abs  = (sdwa ? (buffer[1] >> 29u) & 0x1u : 0);
+	uint32_t s1        = (sdwa ? (buffer[1] >> 31u) & 0x1u : 0);
+
+	EXIT_NOT_IMPLEMENTED(dst_sel != 6);
+	EXIT_NOT_IMPLEMENTED(sdwa && dst_sel == 6 && dst_u != 0);
+	EXIT_NOT_IMPLEMENTED(omod != 0);
+	EXIT_NOT_IMPLEMENTED(src0_sel != 6);
+	EXIT_NOT_IMPLEMENTED(src0_sext != 0);
+	EXIT_NOT_IMPLEMENTED(src0_neg != 0);
+	EXIT_NOT_IMPLEMENTED(src1_sel != 6);
+	EXIT_NOT_IMPLEMENTED(src1_sext != 0);
+	EXIT_NOT_IMPLEMENTED(src1_neg != 0);
+
 	ShaderInstruction inst;
 	inst.pc      = pc;
-	inst.src[0]  = operand_parse(src0);
-	inst.src[1]  = operand_parse(vsrc1 + 256);
+	inst.src[0]  = operand_parse(src0 + (s0 == 0 ? 256 : 0));
+	inst.src[1]  = operand_parse(vsrc1 + (s1 == 0 ? 256 : 0));
 	inst.dst     = operand_parse(vdst + 256);
 	inst.src_num = 2;
 
-	uint32_t size = 1;
+	switch (omod)
+	{
+		case 0: inst.dst.multiplier = 1.0f; break;
+		case 1: inst.dst.multiplier = 2.0f; break;
+		case 2: inst.dst.multiplier = 4.0f; break;
+		case 3: inst.dst.multiplier = 0.5f; break;
+		default: break;
+	}
 
 	if (inst.src[0].type == ShaderOperandType::LiteralConstant)
 	{
 		inst.src[0].constant.u = buffer[size];
 		size++;
 	}
+
+	inst.src[0].absolute = (src0_abs != 0);
+	inst.src[1].absolute = (src1_abs != 0);
+
+	inst.dst.clamp = (clmp != 0);
 
 	inst.format = ShaderInstructionFormat::SVdstSVsrc0SVsrc1;
 
@@ -3252,17 +3325,18 @@ KYTY_SHADER_PARSER(shader_parse_vintrp)
 	inst.src[2].constant.u = chan;
 	inst.src_num           = 3;
 
+	inst.format = ShaderInstructionFormat::VdstVsrcAttrChan;
+
 	switch (opcode)
 	{
-		case 0x00:
-			inst.type   = ShaderInstructionType::VInterpP1F32;
-			inst.format = ShaderInstructionFormat::VdstVsrcAttrChan;
+		case 0x00: inst.type = ShaderInstructionType::VInterpP1F32; break;
+		case 0x01: inst.type = ShaderInstructionType::VInterpP2F32; break;
+		case 0x02:
+			inst.type              = ShaderInstructionType::VInterpMovF32;
+			inst.src[0].type       = ShaderOperandType::IntegerInlineConstant;
+			inst.src[0].constant.u = vsrc & 0x3u;
+			inst.src[0].size       = 0;
 			break;
-		case 0x01:
-			inst.type   = ShaderInstructionType::VInterpP2F32;
-			inst.format = ShaderInstructionFormat::VdstVsrcAttrChan;
-			break;
-		case 0x02: KYTY_NI("v_interp_mov_f32"); break;
 		default: KYTY_UNKNOWN_OP();
 	}
 

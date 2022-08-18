@@ -1949,12 +1949,12 @@ static void CreateLayout(VkDescriptorSetLayout* set_layouts, uint32_t* set_layou
 	EXIT_IF(push_constant_info == nullptr);
 	EXIT_IF(push_constant_info_num == nullptr);
 
-	bool need_bind = (bind.storage_buffers.buffers_num > 0 || bind.textures2D.textures_num > 0 || bind.samplers.samplers_num > 0 ||
-	                  bind.gds_pointers.pointers_num > 0);
+	bool need_descriptor = (bind.storage_buffers.buffers_num > 0 || bind.textures2D.textures_num > 0 || bind.samplers.samplers_num > 0 ||
+	                        bind.gds_pointers.pointers_num > 0);
 
-	EXIT_IF(need_bind && bind.push_constant_size == 0);
+	EXIT_IF(need_descriptor && bind.push_constant_size == 0);
 
-	if (need_bind)
+	if (bind.push_constant_size != 0)
 	{
 		auto index = *push_constant_info_num;
 
@@ -1964,7 +1964,7 @@ static void CreateLayout(VkDescriptorSetLayout* set_layouts, uint32_t* set_layou
 		(*push_constant_info_num)++;
 	}
 
-	if (need_bind)
+	if (need_descriptor)
 	{
 		EXIT_IF(bind.descriptor_set_slot != *set_layouts_num);
 
@@ -4488,6 +4488,26 @@ static void PrepareGdsPointers(const ShaderGdsResources& gds_pointers, uint32_t*
 	}
 }
 
+static void PrepareDirectSgprs(const ShaderDirectSgprsResources& direct_sgprs, uint32_t** sgprs)
+{
+	KYTY_PROFILER_FUNCTION();
+
+	EXIT_IF(sgprs == nullptr);
+	EXIT_IF(*sgprs == nullptr);
+
+	for (int i = 0; i < direct_sgprs.sgprs_num; i++)
+	{
+		auto r = direct_sgprs.sgprs[i];
+
+		(*sgprs)[i] = r.field;
+	}
+
+	if (direct_sgprs.sgprs_num > 0)
+	{
+		(*sgprs) += static_cast<ptrdiff_t>(4 * ((direct_sgprs.sgprs_num - 1) / 4 + 1));
+	}
+}
+
 static void BindDescriptors(uint64_t submit_id, CommandBuffer* buffer, VkPipelineBindPoint pipeline_bind_point, VkPipelineLayout layout,
                             const ShaderBindResources& bind, VkShaderStageFlags vk_stage, DescriptorCache::Stage stage)
 {
@@ -4503,6 +4523,8 @@ static void BindDescriptors(uint64_t submit_id, CommandBuffer* buffer, VkPipelin
 		                     bind.textures2D.textures_num);
 		EXIT_NOT_IMPLEMENTED(bind.samplers.samplers_num > DescriptorCache::SAMPLERS_MAX);
 
+		bool need_descriptor = false;
+
 		VulkanBuffer* storage_buffers[DescriptorCache::BUFFERS_MAX];
 		VulkanImage*  textures2d_sampled[DescriptorCache::TEXTURES_SAMPLED_MAX];
 		int           textures2d_sampled_view[DescriptorCache::TEXTURES_SAMPLED_MAX];
@@ -4517,28 +4539,31 @@ static void BindDescriptors(uint64_t submit_id, CommandBuffer* buffer, VkPipelin
 		if (bind.storage_buffers.buffers_num > 0)
 		{
 			PrepareStorageBuffers(submit_id, buffer, bind.storage_buffers, storage_buffers, &sgprs_ptr);
+			need_descriptor = true;
 		}
 		if (bind.textures2D.textures_num > 0)
 		{
 			PrepareTextures(submit_id, buffer, bind.textures2D, textures2d_sampled, textures2d_storage, textures2d_sampled_view,
 			                &sgprs_ptr);
+			need_descriptor = true;
 		}
 		if (bind.samplers.samplers_num > 0)
 		{
 			PrepareSamplers(bind.samplers, samplers, &sgprs_ptr);
+			need_descriptor = true;
 		}
 		if (bind.gds_pointers.pointers_num > 0)
 		{
 			PrepareGdsPointers(bind.gds_pointers, &sgprs_ptr);
-			gds_buffer = g_render_ctx->GetGdsBuffer()->GetBuffer(g_render_ctx->GetGraphicCtx());
+			gds_buffer      = g_render_ctx->GetGdsBuffer()->GetBuffer(g_render_ctx->GetGraphicCtx());
+			need_descriptor = true;
+		}
+		if (bind.direct_sgprs.sgprs_num > 0)
+		{
+			PrepareDirectSgprs(bind.direct_sgprs, &sgprs_ptr);
 		}
 
 		EXIT_IF(bind.push_constant_size != (sgprs_ptr - sgprs) * 4);
-
-		auto* descriptor_set = g_render_ctx->GetDescriptorCache()->GetDescriptor(
-		    stage, storage_buffers, textures2d_sampled, textures2d_sampled_view, textures2d_storage, samplers, &gds_buffer, bind);
-
-		EXIT_IF(descriptor_set == nullptr);
 
 		auto* vk_buffer = buffer->GetPool()->buffers[buffer->GetIndex()];
 
@@ -4556,7 +4581,15 @@ static void BindDescriptors(uint64_t submit_id, CommandBuffer* buffer, VkPipelin
 			}
 		}
 
-		vkCmdBindDescriptorSets(vk_buffer, pipeline_bind_point, layout, bind.descriptor_set_slot, 1, &descriptor_set->set, 0, nullptr);
+		if (need_descriptor)
+		{
+			auto* descriptor_set = g_render_ctx->GetDescriptorCache()->GetDescriptor(
+			    stage, storage_buffers, textures2d_sampled, textures2d_sampled_view, textures2d_storage, samplers, &gds_buffer, bind);
+
+			EXIT_IF(descriptor_set == nullptr);
+
+			vkCmdBindDescriptorSets(vk_buffer, pipeline_bind_point, layout, bind.descriptor_set_slot, 1, &descriptor_set->set, 0, nullptr);
+		}
 		vkCmdPushConstants(vk_buffer, layout, vk_stage, bind.push_constant_offset, bind.push_constant_size, sgprs);
 	}
 }

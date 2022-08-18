@@ -1176,7 +1176,8 @@ void CommandProcessor::WriteAtEndOfPipe64(uint32_t cache_policy, uint32_t event_
 	{
 		GraphicsRenderWriteAtEndOfPipe32(m_sumbit_id, m_buffer[m_current_buffer], static_cast<uint32_t*>(dst_gpu_addr), value);
 	} else if (((eop_event_type == 0x04 && event_index == 0x05) || (eop_event_type == 0x28 && event_index == 0x05) ||
-	            (eop_event_type == 0x2f && event_index == 0x06) || (eop_event_type == 0x14 && event_index == 0x00)) &&
+	            (eop_event_type == 0x2f && event_index == 0x06) || (eop_event_type == 0x14 && event_index == 0x00) ||
+	            (eop_event_type == 0x28 && event_index == 0x00)) &&
 	           cache_action == 0x38 && source64 && !with_interrupt)
 	{
 		GraphicsRenderWriteAtEndOfPipeWithWriteBack64(m_sumbit_id, m_buffer[m_current_buffer], static_cast<uint64_t*>(dst_gpu_addr), value);
@@ -2249,6 +2250,8 @@ KYTY_HW_SH_PARSER(hw_sh_set_cs_user_sgpr)
 
 	auto reg_num = (cmd_id >> 16u) & 0x3fffu;
 
+	EXIT_NOT_IMPLEMENTED(reg_num >= HW::UserSgprInfo::SGPRS_MAX);
+
 	for (uint32_t i = 0; i < reg_num; i++)
 	{
 		cp->GetShCtx()->SetCsUserSgpr(slot + i, buffer[i], cp->GetUserDataMarker());
@@ -2350,6 +2353,8 @@ KYTY_HW_SH_PARSER(hw_sh_set_ps_user_sgpr)
 
 	auto reg_num = (cmd_id >> 16u) & 0x3fffu;
 
+	EXIT_NOT_IMPLEMENTED(reg_num >= HW::UserSgprInfo::SGPRS_MAX);
+
 	for (uint32_t i = 0; i < reg_num; i++)
 	{
 		cp->GetShCtx()->SetPsUserSgpr(slot + i, buffer[i], cp->GetUserDataMarker());
@@ -2432,6 +2437,8 @@ KYTY_HW_SH_PARSER(hw_sh_set_vs_user_sgpr)
 
 	auto reg_num = (cmd_id >> 16u) & 0x3fffu;
 
+	EXIT_NOT_IMPLEMENTED(reg_num >= HW::UserSgprInfo::SGPRS_MAX);
+
 	for (uint32_t i = 0; i < reg_num; i++)
 	{
 		cp->GetShCtx()->SetVsUserSgpr(slot + i, buffer[i], cp->GetUserDataMarker());
@@ -2448,6 +2455,8 @@ KYTY_HW_SH_PARSER(hw_sh_set_gs_user_sgpr)
 	uint32_t slot = (cmd_offset - Pm4::SPI_SHADER_USER_DATA_GS_0) / 1;
 
 	auto reg_num = (cmd_id >> 16u) & 0x3fffu;
+
+	EXIT_NOT_IMPLEMENTED(reg_num >= HW::UserSgprInfo::SGPRS_MAX);
 
 	for (uint32_t i = 0; i < reg_num; i++)
 	{

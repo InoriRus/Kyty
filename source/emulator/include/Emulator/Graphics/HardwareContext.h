@@ -585,9 +585,11 @@ enum class UserSgprType
 
 struct UserSgprInfo
 {
-	uint32_t     value[16] = {0};
-	UserSgprType type[16]  = {};
-	uint32_t     count     = 0;
+	static constexpr int SGPRS_MAX = 16;
+
+	uint32_t     value[SGPRS_MAX] = {0};
+	UserSgprType type[SGPRS_MAX]  = {};
+	uint32_t     count            = 0;
 };
 
 struct VertexShaderInfo
