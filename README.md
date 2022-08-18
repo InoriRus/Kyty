@@ -11,9 +11,7 @@ The project is in its early stage.
 Licensed under the MIT license.
 
 ---
-Graphics for PS5 is under development.
-
-It is possible to run some simple games for PS4
+It is possible to run some simple games for PS4 and homebrews for PS5
 
 There maybe graphics glitches, crashes, freezes and low FPS. It's OK for now.
 
@@ -28,7 +26,10 @@ System parameters (language, date format, etc.) are also hardcoded.
 
 ---
 ### Screenshots
+#### PS4
 <img src="https://user-images.githubusercontent.com/7149418/169674296-4185e2da-99f9-4073-8ca9-19dc124c7459.png" width="400"> <img src="https://user-images.githubusercontent.com/7149418/169674298-df817d95-7288-46fe-a040-3c0a40c29a6b.png" width="400"> <img src="https://user-images.githubusercontent.com/7149418/169674301-37a3f947-76cd-4a9b-8c81-adec3d5d9c59.png" width="400"> <img src="https://user-images.githubusercontent.com/7149418/169674303-13edae7d-24d3-4ec6-ba94-586e13c69df5.png" width="400">
+#### PS5
+<img src="https://user-images.githubusercontent.com/7149418/185373811-3c12178d-d924-4da1-be7a-06ff6cb733b7.png" width="800">
 
 ---
 ### Building
@@ -67,3 +68,9 @@ If you would like to support the project:
 - Bitcoin: bc1qd66pjk3xj3hzvm379uxy470n533nnt2deenpea
 
 <img src="https://user-images.githubusercontent.com/7149418/181066559-7f35befb-ad23-480c-9a75-3b663b1b9957.png" width="200">
+
+## Hire me
+
+**I'm available for hiring.** If you need C++ developer, please take a look at my [profile](https://github.com/InoriRus) and contact me by email
+
+**Я в поисках работы.** Если вам нужен разработчик C++, пишите мне на почту.
