@@ -2,10 +2,6 @@ cmake_minimum_required(VERSION 3.12)
 
 project(Kyty)
 
-if (NOT (WIN32 AND (MINGW OR MSVC)))
-	message(FATAL_ERROR "only mingw and msvc supported")
-endif()
-
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -43,8 +39,7 @@ else()
 	set(KYTY_BUILD KYTY_BUILD_RELEASE)
 endif()
 
-set(KYTY_PLATFORM KYTY_PLATFORM_WINDOWS)
-
+# Platform-specific configurations.
 if(MINGW)
 	if(CMAKE_CXX_COMPILER_ID MATCHES "(C|c?)lang")
 		set(CLANG 1)
@@ -57,7 +52,10 @@ if(MINGW)
 		set(KYTY_COMPILER MINGW)
 		set(KYTY_LINKER LD)
 	endif()	
-else()
+
+	set(KYTY_PLATFORM KYTY_PLATFORM_WINDOWS)
+elseif(WIN32)
+	# Assume it is MSVC if we are on Windows with non-MinGW.
 	if(CMAKE_CXX_COMPILER_ID MATCHES "(C|c?)lang")
 		set(CLANG 1)
 		set(KYTY_COMPILER CLANG)
@@ -66,6 +64,14 @@ else()
 		set(KYTY_COMPILER MSVC)
 		set(KYTY_LINKER LINK)
 	endif()
+
+	set(KYTY_PLATFORM KYTY_PLATFORM_WINDOWS)
+elseif(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+	set(KYTY_COMPILER GCC)
+	set(KYTY_LINKER LD)
+	set(KYTY_PLATFORM KYTY_PLATFORM_LINUX)
+else()
+	message(FATAL_ERROR "The target platform is not supported")
 endif()
 
 set(KYTY_PROJECT_NAME "Emulator" CACHE STRING "Project name")
