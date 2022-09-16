@@ -1,10 +1,11 @@
 set(SDL_STATIC ON CACHE BOOL "" FORCE)
 set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+set(SDL_TEST OFF CACHE BOOL "" FORCE)
 
 add_subdirectory(sdl2 build_sdl2)
 
 if (CLANG AND NOT ANDROID)
-  target_compile_options(SDL2-static PRIVATE -Wno-pragma-pack -Wno-unused-command-line-argument -Wno-incompatible-function-pointer-types)
+  target_compile_options(SDL2-static PRIVATE -Wno-pragma-pack -Wno-unused-command-line-argument -Wno-incompatible-function-pointer-types -Wno-unused-const-variable)
 endif()
 
 if (MSVC AND NOT CLANG)
