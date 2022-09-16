@@ -108,6 +108,7 @@ class LockGuard
 public:
 	using mutex_type = Mutex;
 
+	// NOLINTNEXTLINE(google-runtime-references)
 	explicit LockGuard(mutex_type& m): m_mutex(m) { m_mutex.Lock(); }
 
 	~LockGuard() { m_mutex.Unlock(); }

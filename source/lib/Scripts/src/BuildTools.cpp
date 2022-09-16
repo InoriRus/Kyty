@@ -89,9 +89,9 @@ void move_help()
 
 KYTY_SCRIPT_FUNC(sync_func)
 {
-	String src;
-	String dst;
-	int    del = 1;
+	String  src;
+	String  dst;
+	int64_t del = 1;
 
 	if (Scripts::ArgGetVarCount() == 2)
 	{
@@ -281,9 +281,9 @@ KYTY_SCRIPT_FUNC(db_key_func)
 		EXIT("invalid args\n");
 	}
 
-	String database = Scripts::ArgGetVar(0).ToString();
-	String password = Scripts::ArgGetVar(1).ToString();
-	int    legacy   = Scripts::ArgGetVar(2).ToInteger();
+	String  database = Scripts::ArgGetVar(0).ToString();
+	String  password = Scripts::ArgGetVar(1).ToString();
+	int64_t legacy   = Scripts::ArgGetVar(2).ToInteger();
 
 	Core::Database::Connection db;
 	db.Open(database, Core::Database::Connection::Mode::ReadOnly);
@@ -293,7 +293,7 @@ KYTY_SCRIPT_FUNC(db_key_func)
 		EXIT("Can't open file: %s\n", database.C_Str());
 	}
 
-	db.SetPassword(password, legacy);
+	db.SetPassword(password, static_cast<int>(legacy));
 	auto key = db.GetKey();
 
 	FOR (i, key)

@@ -25,6 +25,7 @@ KYTY_SUBSYSTEM_INIT(Core)
 	core_file_init();
 	core_debug_init(parent->GetArgv()[0]);
 	Language::Init();
+
 	Database::Init();
 }
 

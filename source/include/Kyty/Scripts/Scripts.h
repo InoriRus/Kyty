@@ -12,7 +12,7 @@
 
 #define KYTY_LUA_5_2 1
 #define KYTY_LUA_5_3 2
-#define KYTY_LUA_VER KYTY_LUA_5_2
+#define KYTY_LUA_VER KYTY_LUA_5_3
 
 namespace Kyty::Scripts {
 
@@ -79,8 +79,8 @@ public:
 
 	ScriptPair(const ScriptPair& src);
 
-	ScriptPair& operator=(const ScriptPair&) = delete;
-	ScriptPair(ScriptPair&&) noexcept        = delete;
+	ScriptPair& operator=(const ScriptPair&)     = delete;
+	ScriptPair(ScriptPair&&) noexcept            = delete;
 	ScriptPair& operator=(ScriptPair&&) noexcept = delete;
 
 	[[nodiscard]] const ScriptVar& GetKey() const { return *m_key; }
@@ -102,16 +102,22 @@ public:
 	void DbgPrint(int depth) const;
 
 #if KYTY_LUA_VER == KYTY_LUA_5_3
-	ScriptVar At(int64_t m_key) const;
+	[[nodiscard]] ScriptVar At(int64_t m_key) const;
 #endif
 	[[nodiscard]] ScriptVar At(const String& key) const;
 	[[nodiscard]] ScriptVar At(double key) const;
 
-	[[nodiscard]] uint32_t  Count() const { return m_pairs.Size(); }
+	[[nodiscard]] uint32_t Count() const
+	{
+		return m_pairs.Size();
+	}
 	[[nodiscard]] ScriptVar GetKey(uint32_t index) const;
 	[[nodiscard]] ScriptVar GetValue(uint32_t index) const;
 
-	[[nodiscard]] const List& GetList() const { return m_pairs; }
+	[[nodiscard]] const List& GetList() const
+	{
+		return m_pairs;
+	}
 
 private:
 	List m_pairs;
@@ -152,7 +158,7 @@ public:
 	[[nodiscard]] bool IsCFunction() const;
 	[[nodiscard]] bool IsDouble() const;
 #if KYTY_LUA_VER == KYTY_LUA_5_3
-	bool IsInteger() const;
+	[[nodiscard]] bool IsInteger() const;
 #else
 	[[nodiscard]] bool    IsInteger() const;
 #endif
@@ -160,7 +166,7 @@ public:
 	[[nodiscard]] bool IsUserdata() const;
 
 #if KYTY_LUA_VER == KYTY_LUA_5_3
-	int64_t ToInteger() const;
+	[[nodiscard]] int64_t ToInteger() const;
 #else
 	[[nodiscard]] int32_t ToInteger() const;
 #endif

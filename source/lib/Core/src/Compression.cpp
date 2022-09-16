@@ -14,27 +14,29 @@ extern "C" {
 
 // IWYU pragma: no_include "7zTypes.h"
 
-#if KYTY_COMPILER == KYTY_COMPILER_MSVC
-#define MINIZ_NO_STDIO
-#define MINIZ_NO_MALLOC
-#define MZ_ASSERT(x) ASSERT(x)
+#include "miniz.h"
+
+//#if KYTY_COMPILER == KYTY_COMPILER_MSVC
+//#define MINIZ_NO_STDIO
+//#define MINIZ_NO_MALLOC
+//#define MZ_ASSERT(x) ASSERT(x)
+////#pragma GCC diagnostic push
+////#pragma GCC diagnostic ignored "-Wunused-value"
+//#include "miniz.c.h"
+////#pragma GCC diagnostic pop
+//#else
+//#define MINIZ_NO_STDIO
+//#define MINIZ_NO_MALLOC
+//#define MZ_ASSERT(x) ASSERT(x)
 //#pragma GCC diagnostic push
 //#pragma GCC diagnostic ignored "-Wunused-value"
-#include "miniz.c.h"
+//#if KYTY_COMPILER == KYTY_COMPILER_MINGW
+//#pragma GCC diagnostic ignored "-Wmisleading-indentation"
+//#endif
+////#pragma GCC diagnostic ignored "-Wenum-compare"
+//#include "miniz.c.h"
 //#pragma GCC diagnostic pop
-#else
-#define MINIZ_NO_STDIO
-#define MINIZ_NO_MALLOC
-#define MZ_ASSERT(x) ASSERT(x)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-value"
-#if KYTY_COMPILER == KYTY_COMPILER_MINGW
-#pragma GCC diagnostic ignored "-Wmisleading-indentation"
-#endif
-//#pragma GCC diagnostic ignored "-Wenum-compare"
-#include "miniz.c.h"
-#pragma GCC diagnostic pop
-#endif
+//#endif
 
 #include "zstd.h"
 

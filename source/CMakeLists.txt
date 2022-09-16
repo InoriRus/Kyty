@@ -82,7 +82,7 @@ if (KYTY_LINKER STREQUAL LD)
 	set(KYTY_LD_OPTIONS "-Wl,--image-base=0x100000000000")
 endif()
 
-project(Kyty${KYTY_PROJECT_NAME}${CMAKE_BUILD_TYPE}${KYTY_COMPILER} VERSION 0.2.0)
+project(Kyty${KYTY_PROJECT_NAME}${CMAKE_BUILD_TYPE}${KYTY_COMPILER} VERSION 0.2.1)
 
 include(src_script.cmake)
 
@@ -117,19 +117,19 @@ add_custom_target( KytyGitVersion
 
 if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 12.0.0)
 	list(APPEND KYTY_IWYU 
-		emulator_obj
-		core_obj
+		emulator
+		core
 		math_obj
-		scripts_obj
+		scripts
 		sys_obj
 		#launcher
 		unit_test
 	)
 	list(APPEND KYTY_CLANG_TYDY 
-		emulator_obj
-		#core_obj
+		emulator
+		#core
 		#math_obj
-		#scripts_obj
+		#scripts
 		#sys_obj
 		launcher
 		#unit_test
@@ -166,7 +166,7 @@ target_link_libraries(fc_script scripts)
 target_link_libraries(fc_script lua)
 target_link_libraries(fc_script opengl32)
 target_link_libraries(fc_script iphlpapi)
-target_link_libraries(fc_script sdl2)
+target_link_libraries(fc_script SDL2-static)
 target_link_libraries(fc_script setupapi)
 target_link_libraries(fc_script emulator)
 target_link_libraries(fc_script rijndael)

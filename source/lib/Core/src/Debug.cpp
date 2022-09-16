@@ -102,7 +102,7 @@ void DebugMap::LoadMap()
 #ifdef DEBUG_MAP_ENABLED
 	printf("exe_name = %s\n", g_exe_name->utf8_str().GetData());
 
-#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS || KYTY_PLATFORM == KYTY_PLATFORM_LINUX
 	String linker = Debug::GetLinker();
 	String map_file =
 	    g_exe_name->FilenameWithoutExtension() + U"_" + Debug::GetCompiler() + U"_" + linker + U"_" + Debug::GetBitness() + U".map";
@@ -167,7 +167,7 @@ void DebugMap::LoadCsv()
 
 	printf("exe_name = %s\n", g_exe_name->utf8_str().GetData());
 
-#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS || KYTY_PLATFORM == KYTY_PLATFORM_LINUX
 	String linker = Debug::GetLinker();
 	String map_file =
 	    g_exe_name->FilenameWithoutExtension() + U"_" + Debug::GetCompiler() + U"_" + linker + U"_" + Debug::GetBitness() + U".csv";
@@ -843,9 +843,9 @@ const DebugFunctionInfo* DebugMapPrivate::FindFunc(DebugMap* map, uintptr_t addr
 }
 
 #if KYTY_PLATFORM != KYTY_PLATFORM_WINDOWS
-static char* strtok_s(char* _Str, const char* _Delim, char** /*_Context*/)
+static char* strtok_s(char* s_str, const char* s_delim, char** /*_Context*/)
 {
-	return strtok(_Str, _Delim);
+	return strtok(s_str, s_delim);
 }
 #endif
 

@@ -3,6 +3,10 @@
 
 #include "kyty_config.h" // IWYU pragma: export
 
+#define KYTY_FUNC_(prefix, name)      prefix##name
+#define KYTY_PROJECT_MAIN_FUNC_(name) KYTY_FUNC_(ProjectMain, name)
+#define KYTY_PROJECT_MAIN_FUNC        KYTY_PROJECT_MAIN_FUNC_(KYTY_PROJECT_ID)
+
 #if KYTY_COMPILER != KYTY_COMPILER_MSVC
 #if __cplusplus < 201703L
 #undef __cplusplus

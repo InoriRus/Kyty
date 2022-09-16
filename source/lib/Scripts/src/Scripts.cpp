@@ -35,9 +35,10 @@ static const luaL_Reg g_loadedlibs[] = {{"_G", luaopen_base},
                                         {LUA_IOLIBNAME, luaopen_io},
                                         {LUA_OSLIBNAME, luaopen_os},
                                         {LUA_STRLIBNAME, luaopen_string},
-                                        {LUA_BITLIBNAME, luaopen_bit32},
+                                        //{LUA_BITLIBNAME, luaopen_bit32},
                                         {LUA_MATHLIBNAME, luaopen_math},
                                         {LUA_DBLIBNAME, luaopen_debug},
+                                        {LUA_UTF8LIBNAME, luaopen_utf8},
                                         {nullptr, nullptr}};
 
 static void lua_my_openlibs(lua_State* l)
@@ -358,7 +359,7 @@ void ScriptVar::DbgPrint(int depth) const
 	} else
 	{
 #if KYTY_LUA_VER == KYTY_LUA_5_3
-		printf("d: %g, i: %" PRIi64 " s: %s\n", val_double, val_integer, val_string.C_Str());
+		printf("d: %g, i: %" PRIi64 " s: %s\n", m_p->val_double, m_p->val_integer, m_p->val_string.C_Str());
 #else
 		printf("d: %g, s: %s\n", m_p->val_double, m_p->val_string.C_Str());
 #endif
@@ -443,7 +444,7 @@ ScriptVar ScriptVar::ReadVar(int index, bool with_metatable_index)
 	r.m_p->val_double = lua_tonumber(g_lua_state, -1);
 	r.m_p->val_bool   = (lua_toboolean(g_lua_state, -1) != 0);
 #if KYTY_LUA_VER == KYTY_LUA_5_3
-	Read.m_p->val_integer = lua_tointeger(g_lua_state, -1);
+	r.m_p->val_integer = lua_tointeger(g_lua_state, -1);
 #endif
 	r.m_p->val_string   = String::FromUtf8(lua_tostring(g_lua_state, -1));
 	r.m_p->val_userdata = lua_touserdata(g_lua_state, -1);
@@ -452,10 +453,10 @@ ScriptVar ScriptVar::ReadVar(int index, bool with_metatable_index)
 	r.m_p->is_double     = (lua_isnumber(g_lua_state, -1) != 0);
 	r.m_p->is_function   = lua_isfunction(g_lua_state, -1);
 #if KYTY_LUA_VER == KYTY_LUA_5_3
-	Read.is_integer = lua_isinteger(g_lua_state, -1);
-	if (!Read.is_integer)
+	r.m_p->is_integer = lua_isinteger(g_lua_state, -1) != 0;
+	if (!r.m_p->is_integer)
 	{
-		Read.is_integer = lua_tointeger(g_lua_state, -1) != 0 || lua_tostring(g_lua_state, -1) == String("0");
+		r.m_p->is_integer = lua_tointeger(g_lua_state, -1) != 0 || lua_tostring(g_lua_state, -1) == String(U"0");
 	}
 #endif
 	r.m_p->is_nil      = lua_isnil(g_lua_state, -1);
@@ -524,6 +525,7 @@ ScriptVar ScriptVar::ReadVar(int index, bool with_metatable_index)
 		}
 	}
 
+	// NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
 	return r;
 }
 
@@ -570,7 +572,7 @@ bool ScriptVar::IsUserdata() const
 #if KYTY_LUA_VER == KYTY_LUA_5_3
 int64_t ScriptVar::ToInteger() const
 {
-	return val_integer;
+	return m_p->val_integer;
 }
 #else
 int32_t ScriptVar::ToInteger() const
@@ -756,15 +758,16 @@ ScriptVar ScriptTable::At(int64_t m_key) const
 {
 	lua_init();
 
-	FOR (i, keys)
+	// FOR (i, keys)
+	for (const auto& p: m_pairs)
 	{
-		const ScriptVar& v = keys.At(i);
+		const ScriptVar& v = p.GetKey();
 		if (v.IsInteger() && v.ToInteger() == m_key)
 		{
-			return values.At(i);
+			return p.GetValue();
 		}
 	}
-	return ScriptVar();
+	return {};
 }
 #endif
 

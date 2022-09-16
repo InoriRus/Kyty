@@ -434,7 +434,7 @@ static bool MSpaceInternalInit(MSpaceContext& ctx, const char* name, void* base,
 	}
 
 	ctx.base     = static_cast<MSpaceBlock*>(base);
-	ctx.capacity = (capacity / sizeof(MSpaceBlock)) - 2;
+	ctx.capacity = static_cast<uint32_t>((capacity / sizeof(MSpaceBlock)) - 2);
 
 	ctx.size_of_key_chunk                  = ctx.capacity;
 	ctx.index_of_key_chunk                 = 1;
@@ -523,7 +523,7 @@ void* MSpaceMalloc(mspace_t msp, size_t size)
 
 	auto* ctx = static_cast<MSpaceContext*>(msp);
 
-	return MSpaceInternalMalloc_align(*ctx, size, 32);
+	return MSpaceInternalMalloc_align(*ctx, static_cast<uint32_t>(size), 32);
 }
 
 bool MSpaceFree(mspace_t msp, void* ptr)
@@ -554,7 +554,7 @@ void* MSpaceRealloc(mspace_t msp, void* ptr, size_t size)
 
 	auto* ctx = static_cast<MSpaceContext*>(msp);
 
-	return MSpaceInternalRealloc_align(*ctx, ptr, size, 32);
+	return MSpaceInternalRealloc_align(*ctx, ptr, static_cast<uint32_t>(size), 32);
 }
 
 } // namespace Kyty::Core

@@ -82,6 +82,8 @@ public:
 
 		const char* name = s->Id();
 
+		EXIT_IF(FindByName(name) != nullptr);
+
 		auto* nl = new SubsListStruct;
 
 		nl->s         = s;
