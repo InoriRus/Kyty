@@ -284,11 +284,11 @@ void MainDialog::RunInterpreter(QProcess* process, Kyty::Configuration* info, bo
 	if (con_emu)
 	{
 		process->setProgram(CONEMU_EXE);
-		process->setArguments({"-run", /*CMD_EXE, "/K", */ interpreter, lua_file_name});
+		process->setArguments({"-run", /*CMD_EXE, "/K", */ \"\"interpreter\"\", \"\"lua_file_name\"\"});
 	} else
 	{
 		process->setProgram(CMD_EXE);
-		process->setArguments({"/K", interpreter, lua_file_name});
+		process->setArguments({"/K", \"\"interpreter\"\", lua_file_name});
 	}
 	process->setWorkingDirectory(dir.path());
 	process->setCreateProcessArgumentsModifier(
