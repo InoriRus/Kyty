@@ -1,4 +1,4 @@
-[![Build status](https://ci.appveyor.com/api/projects/status/0du32fg9flol63to?svg=true)](https://ci.appveyor.com/project/InoriRus/kyty) [![CI](https://github.com/InoriRus/Kyty/actions/workflows/ci.yml/badge.svg)](https://github.com/InoriRus/Kyty/actions/workflows/ci.yml)
+[![Build status](https://ci.appveyor.com/api/projects/status/0du32fg9flol63to?svg=true)](https://ci.appveyor.com/project/InoriRus/kyty) [![CI](https://github.com/InoriRus/Kyty/actions/workflows/ci.yml/badge.svg)](https://github.com/InoriRus/Kyty/actions/workflows/ci.yml) 
 
 # Kyty
 ## PS4 & PS5 emulator
@@ -11,9 +11,11 @@ The project is in its early stage.
 Licensed under the MIT license.
 
 ---
-It is possible to run some simple games for PS4 and homebrews for PS5
+It is possible to run some simple games for PS4 and homebrews for PS5.
 
-There maybe graphics glitches, crashes, freezes and low FPS. It's OK for now.
+Check out the [Community Compatibility List](https://docs.google.com/spreadsheets/d/1NSf_N57Qffy5CAr2QYpWi0jOMOHJjhXB9JsYNqPqGHk/edit), any contributions are appreciated!
+
+There maybe graphical glitches, crashes, freezes and low FPS. It's OK for now.
 
 Features that are not implemented:
 - Audio input/output
