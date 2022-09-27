@@ -22,9 +22,10 @@ jobs:
     - name: Install WinLibs
       run: choco install winlibs -y --no-progress
     - name: Install Qt
-      uses: jurplel/install-qt-action@v2
+      uses: jurplel/install-qt-action@v3
       with:
         arch: win64_mingw81
+        cache: true
     - name: Run CMake
       run: |
         set PATH=C:\ProgramData\chocolatey\lib\winlibs\tools\mingw64\bin;%PATH%
