@@ -5,7 +5,9 @@ on:
     branches: [ "main" ]
     
 env:
-  version: v0.${{ github.run_number }}.0
+  major: 0
+  minor: 2
+  version: v${{ env.major }}.${{ env.minor }}.${{ github.run_number }}
 
 concurrency: ci-${{ github.ref }}
 jobs:
