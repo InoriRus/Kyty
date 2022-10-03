@@ -5,7 +5,10 @@ set(SDL_TEST OFF CACHE BOOL "" FORCE)
 add_subdirectory(sdl2 build_sdl2)
 
 if (CLANG AND NOT ANDROID)
-	target_compile_options(SDL2-static PRIVATE -Wno-pragma-pack -Wno-unused-command-line-argument -Wno-unused-function -Wno-incompatible-function-pointer-types -Wno-unused-but-set-variable -Wno-unused-const-variable)
+	target_compile_options(SDL2-static PRIVATE -Wno-pragma-pack -Wno-unused-command-line-argument -Wno-unused-function -Wno-incompatible-function-pointer-types -Wno-unused-const-variable)
+	if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 13.0.0)
+		target_compile_options(SDL2-static PRIVATE -Wno-unused-but-set-variable)
+	endif()
 endif()
 
 if (MSVC AND NOT CLANG)
