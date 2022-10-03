@@ -6,6 +6,7 @@
 #include "Kyty/Core/Subsystems.h"
 #include "Kyty/Core/Threads.h"
 #include "Kyty/Core/Vector.h"
+#include "Kyty/Core/VirtualMemory.h"
 #include "Kyty/Scripts/Scripts.h"
 #include "Kyty/UnitTest.h"
 
@@ -23,7 +24,6 @@
 #include "Emulator/Loader/RuntimeLinker.h"
 #include "Emulator/Loader/SystemContent.h"
 #include "Emulator/Loader/Timer.h"
-#include "Emulator/Loader/VirtualMemory.h"
 #include "Emulator/Network.h"
 #include "Emulator/Profiler.h"
 
@@ -57,18 +57,9 @@ static void load_symbols_all(Loader::RuntimeLinker* rt)
 
 static void print_system_info()
 {
-	Loader::SystemInfo info = Loader::GetSystemInfo();
+	Core::SystemInfo info = Core::GetSystemInfo();
 
-	printf("PageSize                  = %" PRIu32 "\n", info.PageSize);
-	printf("MinimumApplicationAddress = 0x%016" PRIx64 "\n", info.MinimumApplicationAddress);
-	printf("MaximumApplicationAddress = 0x%016" PRIx64 "\n", info.MaximumApplicationAddress);
-	printf("ActiveProcessorMask       = 0x%08" PRIx32 "\n", info.ActiveProcessorMask);
-	printf("NumberOfProcessors        = %" PRIu32 "\n", info.NumberOfProcessors);
-	printf("ProcessorArchitecture     = %s\n", Core::EnumName(info.ProcessorArchitecture).C_Str());
-	printf("AllocationGranularity     = %" PRIu32 "\n", info.AllocationGranularity);
-	printf("ProcessorLevel            = %" PRIu16 "\n", info.ProcessorLevel);
-	printf("ProcessorRevision         = 0x%04" PRIx16 "\n", info.ProcessorRevision);
-	printf("ProcessorName             = %s\n", info.ProcessorName.C_Str());
+	printf("ProcessorName = %s\n", info.ProcessorName.C_Str());
 }
 
 static void kyty_close()

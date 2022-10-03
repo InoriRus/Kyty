@@ -9,6 +9,7 @@
 // IWYU pragma: no_include "SDL_error.h"
 // IWYU pragma: no_include "SDL_platform.h"
 // IWYU pragma: no_include "SDL_stdinc.h"
+// IWYU pragma: no_include "begin_code.h"
 
 #include "SDL.h"
 

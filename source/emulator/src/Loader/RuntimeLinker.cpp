@@ -7,6 +7,7 @@
 #include "Kyty/Core/Singleton.h"
 #include "Kyty/Core/String.h"
 #include "Kyty/Core/Threads.h"
+#include "Kyty/Core/VirtualMemory.h"
 #include "Kyty/Sys/SysDbg.h"
 
 #include "Emulator/Config.h"
@@ -15,7 +16,6 @@
 #include "Emulator/Loader/Elf.h"
 #include "Emulator/Loader/Jit.h"
 #include "Emulator/Loader/SymbolDatabase.h"
-#include "Emulator/Loader/VirtualMemory.h"
 #include "Emulator/Profiler.h"
 
 #ifdef KYTY_EMU_ENABLED
@@ -144,19 +144,19 @@ static void dbg_dump_rela(const String& folder, Elf64_Rela* records, uint64_t si
 	f.Close();
 }
 
-static VirtualMemory::Mode get_mode(Elf64_Word flags)
+static Core::VirtualMemory::Mode get_mode(Elf64_Word flags)
 {
 	switch (flags)
 	{
-		case PF_R: return VirtualMemory::Mode::Read;
-		case PF_W: return VirtualMemory::Mode::Write;
-		case PF_R | PF_W: return VirtualMemory::Mode::ReadWrite;
-		case PF_X: return VirtualMemory::Mode::Execute;
-		case PF_X | PF_R: return VirtualMemory::Mode::ExecuteRead;
-		case PF_X | PF_W: return VirtualMemory::Mode::ExecuteWrite;
-		case PF_X | PF_W | PF_R: return VirtualMemory::Mode::ExecuteReadWrite;
+		case PF_R: return Core::VirtualMemory::Mode::Read;
+		case PF_W: return Core::VirtualMemory::Mode::Write;
+		case PF_R | PF_W: return Core::VirtualMemory::Mode::ReadWrite;
+		case PF_X: return Core::VirtualMemory::Mode::Execute;
+		case PF_X | PF_R: return Core::VirtualMemory::Mode::ExecuteRead;
+		case PF_X | PF_W: return Core::VirtualMemory::Mode::ExecuteWrite;
+		case PF_X | PF_W | PF_R: return Core::VirtualMemory::Mode::ExecuteReadWrite;
 
-		default: return VirtualMemory::Mode::NoAccess;
+		default: return Core::VirtualMemory::Mode::NoAccess;
 	}
 }
 
@@ -200,13 +200,13 @@ void KYTY_SYSV_ABI sys_stack_walk_x86(uint64_t rbp, void** stack, int* depth)
 	              g_desired_base_addr - (SYSTEM_RESERVED + CODE_BASE_OFFSET));
 }
 
-static void kyty_exception_handler(const VirtualMemory::ExceptionHandler::ExceptionInfo* info)
+static void kyty_exception_handler(const Core::VirtualMemory::ExceptionHandler::ExceptionInfo* info)
 {
 	printf("kyty_exception_handler: %016" PRIx64 "\n", info->exception_address);
 
-	if (info->type == VirtualMemory::ExceptionHandler::ExceptionType::AccessViolation)
+	if (info->type == Core::VirtualMemory::ExceptionHandler::ExceptionType::AccessViolation)
 	{
-		if (info->access_violation_type == VirtualMemory::ExceptionHandler::AccessViolationType::Write &&
+		if (info->access_violation_type == Core::VirtualMemory::ExceptionHandler::AccessViolationType::Write &&
 		    Libs::Graphics::GpuMemoryCheckAccessViolation(info->access_violation_vaddr, sizeof(uint64_t)))
 		{
 			return;
@@ -428,7 +428,7 @@ static void relocate(uint32_t index, Elf64_Rela* r, Program* program, bool jmpre
 
 	if (ri.resolved)
 	{
-		patched = VirtualMemory::PatchReplace(ri.vaddr, ri.value);
+		patched = Core::VirtualMemory::PatchReplace(ri.vaddr, ri.value);
 	} else
 	{
 		uint64_t value = 0;
@@ -453,7 +453,7 @@ static void relocate(uint32_t index, Elf64_Rela* r, Program* program, bool jmpre
 
 		if (value != 0)
 		{
-			patched = VirtualMemory::PatchReplace(ri.vaddr, value);
+			patched = Core::VirtualMemory::PatchReplace(ri.vaddr, value);
 		} else
 		{
 			auto dbg_str = String::FromPrintf("[%016" PRIx64 "] <- %s%016" PRIx64 "%s, %s, %s, %s, %s", ri.vaddr,
@@ -788,6 +788,7 @@ void RuntimeLinker::Execute()
 	printf(FG_BRIGHT_YELLOW "--- Execute: " BOLD BG_BLUE "%s" BG_DEFAULT NO_BOLD DEFAULT "\n", "Main");
 	printf(FG_BRIGHT_YELLOW "---" DEFAULT "\n");
 
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
 	// Reserve some stack. There may be jumps over guard page. To prevent segfault we need to expand committed area.
 
 	size_t expanded_size = 0;
@@ -800,6 +801,7 @@ void RuntimeLinker::Execute()
 		*reinterpret_cast<uint32_t*>(s.guard_addr) = 0;
 		expanded_size += s.guard_size;
 	}
+#endif
 
 	if (auto entry = GetEntry(); entry != 0)
 	{
@@ -1135,11 +1137,11 @@ void RuntimeLinker::LoadProgramToMemory(Program* program)
 	program->base_size         = calc_base_size(ehdr, phdr);
 	program->base_size_aligned = (program->base_size & ~(static_cast<uint64_t>(0x1000) - 1)) + 0x1000;
 
-	uint64_t exception_handler_size = VirtualMemory::ExceptionHandler::GetSize();
+	uint64_t exception_handler_size = Core::VirtualMemory::ExceptionHandler::GetSize();
 	uint64_t tls_handler_size       = is_shared ? 0 : Jit::SafeCall::GetSize();
 	uint64_t alloc_size             = program->base_size_aligned + exception_handler_size + tls_handler_size;
 
-	program->base_vaddr = VirtualMemory::Alloc(g_desired_base_addr, alloc_size, VirtualMemory::Mode::ExecuteReadWrite);
+	program->base_vaddr = Core::VirtualMemory::Alloc(g_desired_base_addr, alloc_size, Core::VirtualMemory::Mode::ExecuteReadWrite);
 
 	if (!is_shared)
 	{
@@ -1160,7 +1162,7 @@ void RuntimeLinker::LoadProgramToMemory(Program* program)
 		printf("tls_handler_size       = 0x%016" PRIx64 "\n", tls_handler_size);
 	}
 
-	program->exception_handler = new VirtualMemory::ExceptionHandler;
+	program->exception_handler = new Core::VirtualMemory::ExceptionHandler;
 
 	if (is_shared)
 	{
@@ -1175,7 +1177,7 @@ void RuntimeLinker::LoadProgramToMemory(Program* program)
 
 		// if (Libs::Graphics::GpuMemoryWatcherEnabled())
 		{
-			VirtualMemory::ExceptionHandler::InstallVectored(kyty_exception_handler);
+			Core::VirtualMemory::ExceptionHandler::InstallVectored(kyty_exception_handler);
 		}
 	}
 
@@ -1197,20 +1199,20 @@ void RuntimeLinker::LoadProgramToMemory(Program* program)
 
 			program->elf->LoadSegment(segment_addr, phdr[i].p_offset, segment_file_size);
 
-			bool skip_protect = (phdr[i].p_type == PT_LOAD && is_next_gen && mode == VirtualMemory::Mode::NoAccess);
+			bool skip_protect = (phdr[i].p_type == PT_LOAD && is_next_gen && mode == Core::VirtualMemory::Mode::NoAccess);
 
-			if (VirtualMemory::IsExecute(mode))
+			if (Core::VirtualMemory::IsExecute(mode))
 			{
 				PatchProgram(program, segment_addr, segment_memory_size);
 			}
 
 			if (!skip_protect)
 			{
-				VirtualMemory::Protect(segment_addr, segment_memory_size, mode);
+				Core::VirtualMemory::Protect(segment_addr, segment_memory_size, mode);
 
-				if (VirtualMemory::IsExecute(mode))
+				if (Core::VirtualMemory::IsExecute(mode))
 				{
-					VirtualMemory::FlushInstructionCache(segment_addr, segment_memory_size);
+					Core::VirtualMemory::FlushInstructionCache(segment_addr, segment_memory_size);
 				}
 			}
 		}
@@ -1247,12 +1249,12 @@ void RuntimeLinker::DeleteProgram(Program* p)
 {
 	if (p->base_vaddr != 0 || p->base_size != 0)
 	{
-		VirtualMemory::Free(p->base_vaddr);
+		Core::VirtualMemory::Free(p->base_vaddr);
 	}
 
 	if (p->custom_call_plt_vaddr != 0 || p->custom_call_plt_num != 0)
 	{
-		VirtualMemory::Free(p->custom_call_plt_vaddr);
+		Core::VirtualMemory::Free(p->custom_call_plt_vaddr);
 	}
 
 	delete p->elf;
@@ -1380,17 +1382,17 @@ static void InstallRelocateHandler(Program* program)
 	uint64_t pltgot_size  = static_cast<uint64_t>(3) * 8;
 	void**   pltgot       = reinterpret_cast<void**>(pltgot_vaddr);
 
-	VirtualMemory::Mode old_mode {};
-	VirtualMemory::Protect(pltgot_vaddr, pltgot_size, VirtualMemory::Mode::Write, &old_mode);
+	Core::VirtualMemory::Mode old_mode {};
+	Core::VirtualMemory::Protect(pltgot_vaddr, pltgot_size, Core::VirtualMemory::Mode::Write, &old_mode);
 
 	pltgot[1] = program;
 	pltgot[2] = reinterpret_cast<void*>(RelocateHandler);
 
-	VirtualMemory::Protect(pltgot_vaddr, pltgot_size, old_mode);
+	Core::VirtualMemory::Protect(pltgot_vaddr, pltgot_size, old_mode);
 
-	if (VirtualMemory::IsExecute(old_mode))
+	if (Core::VirtualMemory::IsExecute(old_mode))
 	{
-		VirtualMemory::FlushInstructionCache(pltgot_vaddr, pltgot_size);
+		Core::VirtualMemory::FlushInstructionCache(pltgot_vaddr, pltgot_size);
 	}
 
 	// TODO(): check if this table already generated by compiler (sometimes it is missing)
@@ -1398,12 +1400,12 @@ static void InstallRelocateHandler(Program* program)
 	{
 		program->custom_call_plt_num   = program->dynamic_info->jmprela_table_size / sizeof(Elf64_Rela);
 		auto size                      = Jit::CallPlt::GetSize(program->custom_call_plt_num);
-		program->custom_call_plt_vaddr = VirtualMemory::Alloc(SYSTEM_RESERVED, size, VirtualMemory::Mode::Write);
+		program->custom_call_plt_vaddr = Core::VirtualMemory::Alloc(SYSTEM_RESERVED, size, Core::VirtualMemory::Mode::Write);
 		EXIT_NOT_IMPLEMENTED(program->custom_call_plt_vaddr == 0);
 		auto* code = new (reinterpret_cast<void*>(program->custom_call_plt_vaddr)) Jit::CallPlt(program->custom_call_plt_num);
 		code->SetPltGot(pltgot_vaddr);
-		VirtualMemory::Protect(program->custom_call_plt_vaddr, size, VirtualMemory::Mode::Execute);
-		VirtualMemory::FlushInstructionCache(program->custom_call_plt_vaddr, size);
+		Core::VirtualMemory::Protect(program->custom_call_plt_vaddr, size, Core::VirtualMemory::Mode::Execute);
+		Core::VirtualMemory::FlushInstructionCache(program->custom_call_plt_vaddr, size);
 	}
 }
 
@@ -1415,7 +1417,7 @@ void RuntimeLinker::Relocate(Program* program)
 
 	if (g_invalid_memory == 0)
 	{
-		g_invalid_memory = VirtualMemory::Alloc(INVALID_MEMORY, 4096, VirtualMemory::Mode::NoAccess);
+		g_invalid_memory = Core::VirtualMemory::Alloc(INVALID_MEMORY, 4096, Core::VirtualMemory::Mode::NoAccess);
 		EXIT_NOT_IMPLEMENTED(g_invalid_memory == 0);
 	}
 
@@ -1570,8 +1572,8 @@ void RuntimeLinker::SetupTlsHandler(Program* program)
 	code->SetRegSaveArea(g_tls_reg_save_area);
 	code->SetLockVar(&g_tls_spinlock);
 
-	VirtualMemory::Protect(program->tls.handler_vaddr, Jit::SafeCall::GetSize(), VirtualMemory::Mode::Execute);
-	VirtualMemory::FlushInstructionCache(program->tls.handler_vaddr, Jit::SafeCall::GetSize());
+	Core::VirtualMemory::Protect(program->tls.handler_vaddr, Jit::SafeCall::GetSize(), Core::VirtualMemory::Mode::Execute);
+	Core::VirtualMemory::FlushInstructionCache(program->tls.handler_vaddr, Jit::SafeCall::GetSize());
 }
 
 void RuntimeLinker::DeleteTlss(int thread_id)

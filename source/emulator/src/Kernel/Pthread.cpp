@@ -20,8 +20,16 @@
 
 #ifdef KYTY_EMU_ENABLED
 
+#if KYTY_PLATFORM == KYTY_PLATFORM_LINUX
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
 #include <pthread.h>
+
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
 #include <pthread_time.h>
+#endif
 
 namespace Kyty::Libs {
 
@@ -2700,5 +2708,9 @@ int KYTY_SYSV_ABI pthread_mutexattr_destroy(LibKernel::PthreadMutexattr* attr)
 } // namespace Posix
 
 } // namespace Kyty::Libs
+
+#if KYTY_PLATFORM == KYTY_PLATFORM_LINUX
+#pragma GCC diagnostic pop
+#endif
 
 #endif // KYTY_EMU_ENABLED

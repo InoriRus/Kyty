@@ -29,11 +29,7 @@ bool dbg_is_debugger_present();
 
 } // namespace Kyty::Core
 
-//#if KYTY_COMPILER == KYTY_COMPILER_MINGW
-//#pragma GCC diagnostic ignored "-Warray-bounds"
-//#endif
-
-#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS || KYTY_PLATFORM == KYTY_PLATFORM_LINUX
 #define ASSERT_HALT()                                                                                                                      \
 	(Kyty::Core::dbg_is_debugger_present() ? (::fflush(nullptr), *(reinterpret_cast<volatile int*>(1)) = 0)                                \
 	                                       : (Kyty::Core::dbg_exit(321), 1))

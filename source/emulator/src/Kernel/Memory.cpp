@@ -5,13 +5,13 @@
 #include "Kyty/Core/String.h"
 #include "Kyty/Core/Threads.h"
 #include "Kyty/Core/Vector.h"
+#include "Kyty/Core/VirtualMemory.h"
 
 #include "Emulator/Graphics/GraphicsRun.h"
 #include "Emulator/Graphics/Objects/GpuMemory.h"
 #include "Emulator/Graphics/Window.h"
 #include "Emulator/Libs/Errno.h"
 #include "Emulator/Libs/Libs.h"
-#include "Emulator/Loader/VirtualMemory.h"
 
 #include <algorithm>
 
@@ -19,7 +19,7 @@
 
 namespace Kyty::Libs::LibKernel::Memory {
 
-namespace VirtualMemory = Loader::VirtualMemory;
+namespace VirtualMemory = Core::VirtualMemory;
 
 LIB_NAME("libkernel", "libkernel");
 

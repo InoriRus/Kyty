@@ -8,6 +8,7 @@
 #include "Kyty/Core/Threads.h"
 #include "Kyty/Core/Timer.h"
 #include "Kyty/Core/Vector.h"
+#include "Kyty/Core/VirtualMemory.h"
 
 #include "Emulator/Config.h"
 #include "Emulator/Controller.h"
@@ -17,7 +18,6 @@
 #include "Emulator/Graphics/Utils.h"
 #include "Emulator/Graphics/VideoOut.h"
 #include "Emulator/Loader/SystemContent.h"
-#include "Emulator/Loader/VirtualMemory.h"
 #include "Emulator/Profiler.h"
 
 #include "SDL.h"
@@ -444,7 +444,7 @@ void game_event_keyboard(GameApi* game, const EventKeyboard* key)
 	       (key->repeat ? "repeat" : ""), key->scan_code, key->key_code, key->mod);
 #endif
 
-#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS || KYTY_PLATFORM == KYTY_PLATFORM_LINUX
 	if (key->down && key->key_code == SDLK_ESCAPE)
 	{
 		game->m_game_need_exit = true;
@@ -2204,7 +2204,7 @@ static void VulkanCreate(WindowContext* ctx)
 	printf("Select device: %s\n", device_properties.deviceName);
 
 	memcpy(ctx->device_name, device_properties.deviceName, sizeof(ctx->device_name));
-	memcpy(ctx->processor_name, Loader::GetSystemInfo().ProcessorName.C_Str(), sizeof(ctx->processor_name));
+	memcpy(ctx->processor_name, Core::GetSystemInfo().ProcessorName.C_Str(), sizeof(ctx->processor_name));
 
 	ctx->graphic_ctx.device = VulkanCreateDevice(ctx->graphic_ctx.physical_device, ctx->surface, &r, queues, device_extensions);
 	if (ctx->graphic_ctx.device == nullptr)

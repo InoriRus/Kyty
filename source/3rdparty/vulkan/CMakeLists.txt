@@ -10,6 +10,9 @@ elseif(MSVC AND CLANG)
 	else()
 		set_target_properties(vulkan-1 PROPERTIES IMPORTED_IMPLIB "${CMAKE_CURRENT_SOURCE_DIR}/lib/vulkan-1.lib")
 	endif()	
+elseif(LINUX)
+	find_library(Vulkan_Lib vulkan)
+    set_target_properties(vulkan-1 PROPERTIES IMPORTED_LOCATION ${Vulkan_Lib})
 endif()
 
 set(SPIRV_SOURCES
@@ -335,12 +338,15 @@ set(SPIRV_TOOLS_OPT_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/source/opt/wrap_opkill.cpp
 )
 
-if (MSVC)
-	set_source_files_properties(${SPIRV_SOURCES} PROPERTIES COMPILE_FLAGS "/Os -D_CRT_SECURE_NO_WARNINGS -DSPIRV_WINDOWS")
-	set_source_files_properties(${SPIRV_TOOLS_OPT_SOURCES} PROPERTIES COMPILE_FLAGS "/Os -D_CRT_SECURE_NO_WARNINGS -DSPIRV_WINDOWS")
+if (LINUX)
+    set_source_files_properties(${SPIRV_SOURCES} PROPERTIES COMPILE_FLAGS "-Os -DSPIRV_LINUX")
+    set_source_files_properties(${SPIRV_TOOLS_OPT_SOURCES} PROPERTIES COMPILE_FLAGS "-Os -DSPIRV_LINUX")
+elseif (MSVC)
+    set_source_files_properties(${SPIRV_SOURCES} PROPERTIES COMPILE_FLAGS "/Os -D_CRT_SECURE_NO_WARNINGS -DSPIRV_WINDOWS")
+    set_source_files_properties(${SPIRV_TOOLS_OPT_SOURCES} PROPERTIES COMPILE_FLAGS "/Os -D_CRT_SECURE_NO_WARNINGS -DSPIRV_WINDOWS")
 else()
-	set_source_files_properties(${SPIRV_SOURCES} PROPERTIES COMPILE_FLAGS "-Os -DSPIRV_WINDOWS")
-	set_source_files_properties(${SPIRV_TOOLS_OPT_SOURCES} PROPERTIES COMPILE_FLAGS "-Os -DSPIRV_WINDOWS")
+    set_source_files_properties(${SPIRV_SOURCES} PROPERTIES COMPILE_FLAGS "-Os -DSPIRV_WINDOWS")
+    set_source_files_properties(${SPIRV_TOOLS_OPT_SOURCES} PROPERTIES COMPILE_FLAGS "-Os -DSPIRV_WINDOWS")
 endif()
 
 

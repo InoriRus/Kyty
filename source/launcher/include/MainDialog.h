@@ -30,7 +30,7 @@ public:
 	explicit MainDialog(QWidget* parent = nullptr);
 	~MainDialog() override = default;
 
-	void RunInterpreter(QProcess* process, Kyty::Configuration* info, bool con_emu);
+	void RunInterpreter(QProcess* process, Kyty::Configuration* info, [[maybe_unused]] bool con_emu);
 
 	static void WriteSettings(QSettings* s);
 	static void ReadSettings(QSettings* s);

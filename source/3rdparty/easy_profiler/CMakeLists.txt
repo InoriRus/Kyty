@@ -1,5 +1,5 @@
 file(GLOB easy_profiler_src    	
-	src/base_block_descriptor.cpp
+    src/base_block_descriptor.cpp
     src/block.cpp
     src/block_descriptor.cpp
     src/easy_socket.cpp
@@ -20,9 +20,13 @@ if (MINGW)
 	else()
 		set_source_files_properties(${easy_profiler_src} PROPERTIES COMPILE_FLAGS "-DWINVER=0x0601 -D_WIN32_WINNT=0x0601 -DBUILD_WITH_EASY_PROFILER -DEASY_PROFILER_STATIC -DEASY_DEFAULT_PORT=28077 -DEASY_PROFILER_VERSION_MAJOR=2 -DEASY_PROFILER_VERSION_MINOR=1 -DEASY_PROFILER_VERSION_PATCH=0 -DSTRSAFE_NO_DEPRECATE -Wno-reorder-ctor -Wno-reorder -Wno-unknown-pragmas -Wno-format -Wno-class-memaccess")
 	endif()
-endif()
-
-if (MSVC)
+elseif (LINUX)
+	if (CLANG)
+		set_source_files_properties(${easy_profiler_src} PROPERTIES COMPILE_FLAGS "-DBUILD_WITH_EASY_PROFILER -DEASY_PROFILER_STATIC -DEASY_DEFAULT_PORT=28077 -DEASY_PROFILER_VERSION_MAJOR=2 -DEASY_PROFILER_VERSION_MINOR=1 -DEASY_PROFILER_VERSION_PATCH=0 -DSTRSAFE_NO_DEPRECATE -Wno-unused-variable -Wno-writable-strings -Wno-braced-scalar-init -Wno-defaulted-function-deleted -Wno-unknown-pragmas -Wno-reorder-ctor")
+	else()
+		set_source_files_properties(${easy_profiler_src} PROPERTIES COMPILE_FLAGS "-DBUILD_WITH_EASY_PROFILER -DEASY_PROFILER_STATIC -DEASY_DEFAULT_PORT=28077 -DEASY_PROFILER_VERSION_MAJOR=2 -DEASY_PROFILER_VERSION_MINOR=1 -DEASY_PROFILER_VERSION_PATCH=0 -DSTRSAFE_NO_DEPRECATE -Wno-reorder-ctor -Wno-reorder -Wno-unknown-pragmas -Wno-format -Wno-class-memaccess")
+	endif()
+elseif (MSVC)
 	if (CLANG)
 		set_source_files_properties(${easy_profiler_src} PROPERTIES COMPILE_FLAGS "-DBUILD_WITH_EASY_PROFILER -DEASY_PROFILER_STATIC -DEASY_DEFAULT_PORT=28077 -DEASY_PROFILER_VERSION_MAJOR=2 -DEASY_PROFILER_VERSION_MINOR=1 -DEASY_PROFILER_VERSION_PATCH=0 -DSTRSAFE_NO_DEPRECATE -Wno-reorder-ctor -Wno-defaulted-function-deleted -Wno-braced-scalar-init -Wno-writable-strings -D_WINSOCK_DEPRECATED_NO_WARNINGS -D_CRT_SECURE_NO_WARNINGS -Wno-format")
 	else()

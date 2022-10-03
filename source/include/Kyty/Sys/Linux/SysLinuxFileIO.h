@@ -8,25 +8,28 @@
 #else
 
 #include "Kyty/Core/String.h"
-#include "Kyty/Sys/SysLinuxTimer.h"
+#include "Kyty/Sys/Linux/SysLinuxTimer.h"
 
 namespace Kyty {
 
+// NOLINTNEXTLINE(readability-identifier-naming)
 enum sys_file_type_t
 {
-	SYS_FILE_ERROR,
-	SYS_FILE_MEMORY_STAT,
-	SYS_FILE_FILE,
-	SYS_FILE_MEMORY_DYN
+	SYS_FILE_ERROR,       // NOLINT(readability-identifier-naming)
+	SYS_FILE_MEMORY_STAT, // NOLINT(readability-identifier-naming)
+	SYS_FILE_FILE,        // NOLINT(readability-identifier-naming)
+	SYS_FILE_MEMORY_DYN   // NOLINT(readability-identifier-naming)
 };
 
+// NOLINTNEXTLINE(readability-identifier-naming)
 enum sys_file_cache_type_t
 {
-	SYS_FILE_CACHE_AUTO            = 0,
-	SYS_FILE_CACHE_RANDOM_ACCESS   = 1,
-	SYS_FILE_CACHE_SEQUENTIAL_SCAN = 2
+	SYS_FILE_CACHE_AUTO            = 0, // NOLINT(readability-identifier-naming)
+	SYS_FILE_CACHE_RANDOM_ACCESS   = 1, // NOLINT(readability-identifier-naming)
+	SYS_FILE_CACHE_SEQUENTIAL_SCAN = 2  // NOLINT(readability-identifier-naming)
 };
 
+// NOLINTNEXTLINE(readability-identifier-naming)
 struct sys_file_mem_buf_t
 {
 	uint8_t* base;
@@ -34,6 +37,7 @@ struct sys_file_mem_buf_t
 	uint32_t size;
 };
 
+// NOLINTNEXTLINE(readability-identifier-naming)
 struct sys_file_t
 {
 	sys_file_type_t type;
@@ -44,6 +48,7 @@ struct sys_file_t
 	};
 };
 
+// NOLINTNEXTLINE(readability-identifier-naming)
 struct sys_file_find_t
 {
 	String            path_with_name;
@@ -52,14 +57,15 @@ struct sys_file_find_t
 	uint64_t          size;
 };
 
+// NOLINTNEXTLINE(readability-identifier-naming)
 struct sys_dir_entry_t
 {
 	String name;
 	bool   is_file;
 };
 
-void              sys_file_read(void* data, uint32_t size, sys_file_t& f, uint32_t* bytes_read = 0);
-void              sys_file_write(const void* data, uint32_t size, sys_file_t& f, uint32_t* bytes_written = 0);
+void              sys_file_read(void* data, uint32_t size, sys_file_t& f, uint32_t* bytes_read = nullptr);
+void              sys_file_write(const void* data, uint32_t size, sys_file_t& f, uint32_t* bytes_written = nullptr);
 void              sys_file_read_r(void* data, uint32_t size, sys_file_t& f);
 void              sys_file_write_r(const void* data, uint32_t size, sys_file_t& f);
 sys_file_t*       sys_file_create(const String& file_name);

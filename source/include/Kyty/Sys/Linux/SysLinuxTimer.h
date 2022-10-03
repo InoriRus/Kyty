@@ -31,9 +31,11 @@ struct SysFileTimeStruct
 
 inline void sys_file_to_system_time_utc(const SysFileTimeStruct& f, SysTimeStruct& t)
 {
-	struct tm i;
+	struct tm i
+	{
+	};
 
-	if (f.is_invalid || !gmtime_r(&f.time, &i))
+	if (f.is_invalid || gmtime_r(&f.time, &i) == nullptr)
 	{
 		t.is_invalid = true;
 		return;
@@ -51,7 +53,7 @@ inline void sys_file_to_system_time_utc(const SysFileTimeStruct& f, SysTimeStruc
 
 inline void sys_time_t_to_system(time_t t, SysTimeStruct& s)
 {
-	SysFileTimeStruct ft;
+	SysFileTimeStruct ft {};
 	ft.time       = t;
 	ft.is_invalid = false;
 	sys_file_to_system_time_utc(ft, s);
@@ -66,7 +68,9 @@ inline time_t sys_timegm(struct tm* tm)
 
 inline void sys_system_to_file_time_utc(const SysTimeStruct& f, SysFileTimeStruct& t)
 {
-	struct tm i;
+	struct tm i
+	{
+	};
 
 	i.tm_year = f.Year - 1900;
 	i.tm_mon  = f.Month - 1;
@@ -75,22 +79,18 @@ inline void sys_system_to_file_time_utc(const SysTimeStruct& f, SysFileTimeStruc
 	i.tm_min  = f.Minute;
 	i.tm_sec  = f.Second;
 
-	if (f.is_invalid || (t.time = sys_timegm(&i)) == (time_t)-1)
-	{
-		t.is_invalid = true;
-	} else
-	{
-		t.is_invalid = false;
-	}
+	t.is_invalid = (f.is_invalid || (t.time = sys_timegm(&i)) == static_cast<time_t>(-1));
 }
 
 // Retrieves the current local date and time
 inline void sys_get_system_time(SysTimeStruct& t)
 {
-	time_t    st;
-	struct tm i;
+	time_t    st {};
+	struct tm i
+	{
+	};
 
-	if (time(&st) == (time_t)-1 || !localtime_r(&st, &i))
+	if (time(&st) == static_cast<time_t>(-1) || localtime_r(&st, &i) == nullptr)
 	{
 		t.is_invalid = true;
 		return;
@@ -109,10 +109,12 @@ inline void sys_get_system_time(SysTimeStruct& t)
 // Retrieves the current system date and time in Coordinated Universal Time (UTC).
 inline void sys_get_system_time_utc(SysTimeStruct& t)
 {
-	time_t    st;
-	struct tm i;
+	time_t    st {};
+	struct tm i
+	{
+	};
 
-	if (time(&st) == (time_t)-1 || !gmtime_r(&st, &i))
+	if (time(&st) == static_cast<time_t>(-1) || gmtime_r(&st, &i) == nullptr)
 	{
 		t.is_invalid = true;
 		return;
@@ -135,7 +137,9 @@ inline void sys_query_performance_frequency(uint64_t* freq)
 
 inline void sys_query_performance_counter(uint64_t* counter)
 {
-	struct timespec now;
+	struct timespec now
+	{
+	};
 	clock_gettime(CLOCK_MONOTONIC, &now);
 	*counter = now.tv_sec * 1000000000LL + now.tv_nsec;
 }

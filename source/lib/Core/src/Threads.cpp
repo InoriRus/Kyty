@@ -8,19 +8,38 @@
 #include "Kyty/Core/Vector.h"
 
 #include <atomic>
-#include <chrono>
+#include <chrono>             // IWYU pragma: keep
 #include <condition_variable> // IWYU pragma: keep
 #include <mutex>
-#include <sstream>
-#include <string>
-#include <thread>
 
 #if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS && KYTY_COMPILER == KYTY_COMPILER_CLANG
 #define KYTY_WIN_CS
 #endif
 
+#if KYTY_PLATFORM != KYTY_PLATFORM_WINDOWS && KYTY_PLATFORM != KYTY_PLATFORM_LINUX
+#define KYTY_SDL_THREADS
+#define KYTY_SDL_CS
+#endif
+
 //#define KYTY_DEBUG_LOCKS
 //#define KYTY_DEBUG_LOCKS_TIMED
+
+#ifdef KYTY_SDL_THREADS
+#include "SDL_thread.h"
+#include "SDL_timer.h"
+#else
+#include <sstream>
+#include <string>
+#include <thread>
+#endif
+
+#ifdef KYTY_SDL_CS
+#include "SDL_mutex.h"
+#endif
+
+#if defined(KYTY_WIN_CS) && defined(KYTY_SDL_CS)
+#error "defined(KYTY_WIN_CS) && defined(KYTY_SDL_CS)"
+#endif
 
 #if !(defined(KYTY_DEBUG_LOCKS) || defined(KYTY_DEBUG_LOCKS_TIMED)) && defined(KYTY_WIN_CS)
 #include <windows.h> // IWYU pragma: keep
@@ -30,6 +49,10 @@ constexpr DWORD KYTY_CS_SPIN_COUNT = 4000;
 // IWYU pragma: no_include <minwindef.h>
 // IWYU pragma: no_include <synchapi.h>
 // IWYU pragma: no_include <minwinbase.h>
+// IWYU pragma: no_include <__mutex_base>
+// IWYU pragma: no_include <__threading_support>
+// IWYU pragma: no_include <errhandlingapi.h>
+// IWYU pragma: no_include <winerror.h>
 
 using InitializeConditionVariable_func_t = /*WINBASEAPI*/ VOID WINAPI (*)(PCONDITION_VARIABLE);
 using WakeConditionVariable_func_t       = /*WINBASEAPI*/ VOID       WINAPI (*)(PCONDITION_VARIABLE);
@@ -38,7 +61,7 @@ using SleepConditionVariableCS_func_t    = /*WINBASEAPI*/ BOOL    WINAPI (*)(PCO
 
 static InitializeConditionVariable_func_t ResolveInitializeConditionVariable()
 {
-	if (HMODULE h = GetModuleHandle("KernelBase"); h != nullptr)
+	if (HMODULE h = GetModuleHandle("KernelBase"); h != nullptr) // @suppress("Invalid arguments")
 	{
 		return reinterpret_cast<InitializeConditionVariable_func_t>(GetProcAddress(h, "InitializeConditionVariable"));
 	}
@@ -46,7 +69,7 @@ static InitializeConditionVariable_func_t ResolveInitializeConditionVariable()
 }
 static WakeConditionVariable_func_t ResolveWakeConditionVariable()
 {
-	if (HMODULE h = GetModuleHandle("KernelBase"); h != nullptr)
+	if (HMODULE h = GetModuleHandle("KernelBase"); h != nullptr) // @suppress("Invalid arguments")
 	{
 		return reinterpret_cast<WakeConditionVariable_func_t>(GetProcAddress(h, "WakeConditionVariable"));
 	}
@@ -54,7 +77,7 @@ static WakeConditionVariable_func_t ResolveWakeConditionVariable()
 }
 static WakeAllConditionVariable_func_t ResolveWakeAllConditionVariable()
 {
-	if (HMODULE h = GetModuleHandle("KernelBase"); h != nullptr)
+	if (HMODULE h = GetModuleHandle("KernelBase"); h != nullptr) // @suppress("Invalid arguments")
 	{
 		return reinterpret_cast<WakeAllConditionVariable_func_t>(GetProcAddress(h, "WakeAllConditionVariable"));
 	}
@@ -62,7 +85,7 @@ static WakeAllConditionVariable_func_t ResolveWakeAllConditionVariable()
 }
 static SleepConditionVariableCS_func_t ResolveSleepConditionVariableCS()
 {
-	if (HMODULE h = GetModuleHandle("KernelBase"); h != nullptr)
+	if (HMODULE h = GetModuleHandle("KernelBase"); h != nullptr) // @suppress("Invalid arguments")
 	{
 		return reinterpret_cast<SleepConditionVariableCS_func_t>(GetProcAddress(h, "SleepConditionVariableCS"));
 	}
@@ -73,7 +96,11 @@ static SleepConditionVariableCS_func_t ResolveSleepConditionVariableCS()
 
 namespace Kyty::Core {
 
+#ifdef KYTY_SDL_THREADS
+using thread_id_t = uint64_t;
+#else
 using thread_id_t = std::thread::id;
+#endif
 
 #if defined(KYTY_DEBUG_LOCKS) || defined(KYTY_DEBUG_LOCKS_TIMED)
 constexpr auto DBG_TRY_SECONDS = std::chrono::seconds(15);
@@ -94,7 +121,15 @@ struct MutexPrivate
 		DeleteCriticalSection(&m_cs);
 	}
 	KYTY_CLASS_NO_COPY(MutexPrivate);
-	CRITICAL_SECTION            m_cs {};
+	CRITICAL_SECTION m_cs {};
+#elif defined(KYTY_SDL_CS)
+	MutexPrivate(): sdl(SDL_CreateMutex()) {}
+	~MutexPrivate()
+	{
+		SDL_DestroyMutex(sdl);
+	}
+	KYTY_CLASS_NO_COPY(MutexPrivate);
+	SDL_mutex* sdl;
 #else
 	std::recursive_mutex m_mutex;
 #endif
@@ -113,6 +148,14 @@ struct CondVarPrivate
 	~CondVarPrivate() = default;
 	KYTY_CLASS_NO_COPY(CondVarPrivate);
 	CONDITION_VARIABLE m_cv {};
+#elif !(defined(KYTY_DEBUG_LOCKS) || defined(KYTY_DEBUG_LOCKS_TIMED)) && defined(KYTY_SDL_CS)
+	CondVarPrivate(): sdl(SDL_CreateCond()) {}
+	~CondVarPrivate()
+	{
+		SDL_DestroyCond(sdl);
+	}
+	KYTY_CLASS_NO_COPY(CondVarPrivate);
+	SDL_cond* sdl;
 #else
 	std::condition_variable_any m_cv;
 #endif
@@ -173,7 +216,17 @@ static std::atomic<WaitForGraph*> g_wait_for_graph = nullptr;
 
 struct ThreadPrivate
 {
-	ThreadPrivate(thread_func_t f, void* a): func(f), arg(a), m_thread(&Run, this) {}
+	ThreadPrivate(thread_func_t f, void* a)
+	    : func(f), arg(a),
+#ifdef KYTY_SDL_THREADS
+	      sdl(SDL_CreateThread(SdlThreadRun, "sdl_thread", this))
+	{
+	}
+#else
+	      m_thread(&Run, this)
+	{
+	}
+#endif
 
 	static void Run(ThreadPrivate* t)
 	{
@@ -191,13 +244,23 @@ struct ThreadPrivate
 		}
 	}
 
+	static int SdlThreadRun(void* data)
+	{
+		Run(static_cast<ThreadPrivate*>(data));
+		return 0;
+	}
+
 	thread_func_t    func;
 	void*            arg;
 	std::atomic_bool finished    = false;
 	std::atomic_bool auto_delete = false;
 	std::atomic_bool started     = false;
 	int              unique_id   = 0;
-	std::thread      m_thread;
+#ifdef KYTY_SDL_THREADS
+	SDL_Thread* sdl;
+#else
+	std::thread m_thread;
+#endif
 };
 
 static thread_id_t      g_main_thread;
@@ -206,7 +269,11 @@ static std::atomic<int> g_thread_counter = 0;
 
 KYTY_SUBSYSTEM_INIT(Threads)
 {
-	g_main_thread     = std::this_thread::get_id();
+#ifdef KYTY_SDL_THREADS
+	g_main_thread = SDL_ThreadID();
+#else
+	g_main_thread = std::this_thread::get_id();
+#endif
 	g_main_thread_int = Thread::GetThreadIdUnique();
 	g_wait_for_graph  = new WaitForGraph;
 }
@@ -468,7 +535,13 @@ void Thread::Join()
 {
 	EXIT_IF(m_thread->finished || m_thread->auto_delete);
 
+#ifdef KYTY_SDL_THREADS
+	int status = -1;
+	SDL_WaitThread(m_thread->sdl, &status);
+	EXIT_IF(status != 0);
+#else
 	m_thread->m_thread.join();
+#endif
 
 	m_thread->finished = true;
 }
@@ -478,34 +551,58 @@ void Thread::Detach()
 	EXIT_IF(m_thread->finished || m_thread->auto_delete);
 
 	m_thread->auto_delete = true;
+#ifdef KYTY_SDL_THREADS
+	SDL_DetachThread(m_thread->sdl);
+#else
 	m_thread->m_thread.detach();
+#endif
 }
 
 void Thread::Sleep(uint32_t millis)
 {
+#ifdef KYTY_SDL_THREADS
+	SDL_Delay(millis);
+#else
 	std::this_thread::sleep_for(std::chrono::milliseconds(millis));
+#endif
 }
 
 void Thread::SleepMicro(uint32_t micros)
 {
+#ifdef KYTY_SDL_THREADS
+	SDL_Delay(micros < 1000 && micros != 0 ? 1 : micros / 1000);
+#else
 	std::this_thread::sleep_for(std::chrono::microseconds(micros));
+#endif
 }
 
 void Thread::SleepNano(uint64_t nanos)
 {
+#ifdef KYTY_SDL_THREADS
+	SDL_Delay(nanos < 1000000 && nanos != 0 ? 1 : nanos / 1000000);
+#else
 	std::this_thread::sleep_for(std::chrono::nanoseconds(nanos));
+#endif
 }
 
 bool Thread::IsMainThread()
 {
+#ifdef KYTY_SDL_THREADS
+	return g_main_thread == static_cast<thread_id_t>(SDL_ThreadID());
+#else
 	return g_main_thread == std::this_thread::get_id();
+#endif
 }
 
 String Thread::GetId() const
 {
+#ifdef KYTY_SDL_THREADS
+	return String::FromPrintf("%" PRIu64, static_cast<uint64_t>(SDL_GetThreadID(m_thread->sdl)));
+#else
 	std::stringstream ss;
 	ss << m_thread->m_thread.get_id();
 	return String::FromUtf8(ss.str().c_str());
+#endif
 }
 
 int Thread::GetUniqueId() const
@@ -515,9 +612,13 @@ int Thread::GetUniqueId() const
 
 String Thread::GetThreadId()
 {
+#ifdef KYTY_SDL_THREADS
+	return String::FromPrintf("%" PRIu64, static_cast<uint64_t>(SDL_ThreadID()));
+#else
 	std::stringstream ss;
 	ss << std::this_thread::get_id();
 	return String::FromUtf8(ss.str().c_str());
+#endif
 }
 
 Mutex::Mutex(): m_mutex(new MutexPrivate) {}
@@ -560,7 +661,7 @@ void Mutex::Lock()
 	}
 #else
 #ifdef KYTY_DEBUG_LOCKS_TIMED
-	bool                        locked = false;
+	bool locked = false;
 	do
 	{
 		locked = m_mutex->m_mutex.try_lock_for(DBG_TRY_SECONDS);
@@ -573,6 +674,8 @@ void Mutex::Lock()
 #else
 #ifdef KYTY_WIN_CS
 	EnterCriticalSection(&m_mutex->m_cs);
+#elif defined(KYTY_SDL_CS)
+	SDL_LockMutex(m_mutex->sdl);
 #else
 	m_mutex->m_mutex.lock();
 #endif
@@ -591,6 +694,8 @@ void Mutex::Unlock()
 #else
 #if !defined(KYTY_DEBUG_LOCKS_TIMED) && defined(KYTY_WIN_CS)
 	LeaveCriticalSection(&m_mutex->m_cs);
+#elif !defined(KYTY_DEBUG_LOCKS_TIMED) && defined(KYTY_SDL_CS)
+	SDL_UnlockMutex(m_mutex->sdl);
 #else
 	m_mutex->m_mutex.unlock();
 #endif
@@ -612,6 +717,8 @@ bool Mutex::TryLock()
 #else
 #if !defined(KYTY_DEBUG_LOCKS_TIMED) && defined(KYTY_WIN_CS)
 	return (TryEnterCriticalSection(&m_mutex->m_cs) != 0);
+#elif !defined(KYTY_DEBUG_LOCKS_TIMED) && defined(KYTY_SDL_CS)
+	return (SDL_TryLockMutex(m_mutex->sdl) == 0);
 #else
 	return m_mutex->m_mutex.try_lock();
 #endif
@@ -630,7 +737,7 @@ void CondVar::Wait(Mutex* mutex)
 #if defined(KYTY_DEBUG_LOCKS) || defined(KYTY_DEBUG_LOCKS_TIMED)
 	std::unique_lock<std::recursive_timed_mutex> cpp_lock(mutex->m_mutex->m_mutex, std::adopt_lock_t());
 #else
-#ifdef KYTY_WIN_CS
+#if defined(KYTY_WIN_CS) || defined(KYTY_SDL_CS)
 #else
 	std::unique_lock<std::recursive_mutex> cpp_lock(mutex->m_mutex->m_mutex, std::adopt_lock_t());
 #endif
@@ -652,22 +759,25 @@ void CondVar::Wait(Mutex* mutex)
 	static auto func = ResolveSleepConditionVariableCS();
 	EXIT_NOT_IMPLEMENTED(func == nullptr);
 	func(&m_cond_var->m_cv, &mutex->m_mutex->m_cs, INFINITE);
+#elif !defined(KYTY_DEBUG_LOCKS_TIMED) && defined(KYTY_SDL_CS)
+	SDL_CondWait(m_cond_var->sdl, mutex->m_mutex->sdl);
 #else
 	m_cond_var->m_cv.wait(cpp_lock);
 #endif
 #endif
-#if !(defined(KYTY_DEBUG_LOCKS) || defined(KYTY_DEBUG_LOCKS_TIMED)) && defined(KYTY_WIN_CS)
+#if !(defined(KYTY_DEBUG_LOCKS) || defined(KYTY_DEBUG_LOCKS_TIMED)) && (defined(KYTY_WIN_CS) || defined(KYTY_SDL_CS))
 #else
 	cpp_lock.release();
 #endif
 }
 
-void CondVar::WaitFor(Mutex* mutex, uint32_t micros)
+bool CondVar::WaitFor(Mutex* mutex, uint32_t micros)
 {
+	bool ok = false;
 #if defined(KYTY_DEBUG_LOCKS) || defined(KYTY_DEBUG_LOCKS_TIMED)
 	std::unique_lock<std::recursive_timed_mutex> cpp_lock(mutex->m_mutex->m_mutex, std::adopt_lock_t());
 #else
-#ifdef KYTY_WIN_CS
+#if defined(KYTY_WIN_CS) || defined(KYTY_SDL_CS)
 #else
 	std::unique_lock<std::recursive_mutex> cpp_lock(mutex->m_mutex->m_mutex, std::adopt_lock_t());
 #endif
@@ -675,11 +785,14 @@ void CondVar::WaitFor(Mutex* mutex, uint32_t micros)
 #if !(defined(KYTY_DEBUG_LOCKS) || defined(KYTY_DEBUG_LOCKS_TIMED)) && defined(KYTY_WIN_CS)
 	static auto func = ResolveSleepConditionVariableCS();
 	EXIT_NOT_IMPLEMENTED(func == nullptr);
-	func(&m_cond_var->m_cv, &mutex->m_mutex->m_cs, (micros < 1000 ? 1 : micros / 1000));
+	ok = !(func(&m_cond_var->m_cv, &mutex->m_mutex->m_cs, (micros < 1000 ? 1 : micros / 1000)) == 0 && GetLastError() == ERROR_TIMEOUT);
+#elif !(defined(KYTY_DEBUG_LOCKS) || defined(KYTY_DEBUG_LOCKS_TIMED)) && defined(KYTY_SDL_CS)
+	ok = !(SDL_CondWaitTimeout(m_cond_var->sdl, mutex->m_mutex->sdl, (micros < 1000 ? 1 : micros / 1000)) == SDL_MUTEX_TIMEDOUT);
 #else
-	m_cond_var->m_cv.wait_for(cpp_lock, std::chrono::microseconds(micros));
+	ok = (m_cond_var->m_cv.wait_for(cpp_lock, std::chrono::microseconds(micros)) == std::cv_status::no_timeout);
 	cpp_lock.release();
 #endif
+	return ok;
 }
 
 void CondVar::Signal()
@@ -688,6 +801,8 @@ void CondVar::Signal()
 	static auto func = ResolveWakeConditionVariable();
 	EXIT_NOT_IMPLEMENTED(func == nullptr);
 	func(&m_cond_var->m_cv);
+#elif !(defined(KYTY_DEBUG_LOCKS) || defined(KYTY_DEBUG_LOCKS_TIMED)) && defined(KYTY_SDL_CS)
+	SDL_CondSignal(m_cond_var->sdl);
 #else
 	m_cond_var->m_cv.notify_one();
 #endif
@@ -699,6 +814,8 @@ void CondVar::SignalAll()
 	static auto func = ResolveWakeAllConditionVariable();
 	EXIT_NOT_IMPLEMENTED(func == nullptr);
 	func(&m_cond_var->m_cv);
+#elif !(defined(KYTY_DEBUG_LOCKS) || defined(KYTY_DEBUG_LOCKS_TIMED)) && defined(KYTY_SDL_CS)
+	SDL_CondBroadcast(m_cond_var->sdl);
 #else
 	m_cond_var->m_cv.notify_all();
 #endif

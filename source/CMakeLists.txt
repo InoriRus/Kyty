@@ -2,8 +2,12 @@ cmake_minimum_required(VERSION 3.12)
 
 project(Kyty)
 
-if (NOT (WIN32 AND (MINGW OR MSVC)))
-	message(FATAL_ERROR "only mingw and msvc supported")
+if(CMAKE_SYSTEM_NAME MATCHES ".*Linux")
+	set(LINUX TRUE)
+endif()
+
+if (NOT ((WIN32 AND (MINGW OR MSVC)) OR LINUX))
+    message(FATAL_ERROR "only mingw and msvc supported (or linux)")
 endif()
 
 set(CMAKE_CXX_STANDARD 17)
@@ -43,9 +47,22 @@ else()
 	set(KYTY_BUILD KYTY_BUILD_RELEASE)
 endif()
 
-set(KYTY_PLATFORM KYTY_PLATFORM_WINDOWS)
+if(LINUX)
+	set(KYTY_PLATFORM KYTY_PLATFORM_LINUX)	
+else()
+	set(KYTY_PLATFORM KYTY_PLATFORM_WINDOWS)
+endif()
 
-if(MINGW)
+if(LINUX)
+	if(CMAKE_CXX_COMPILER_ID MATCHES "(C|c?)lang")
+		set(CLANG 1)
+		set(KYTY_COMPILER CLANG)
+		set(KYTY_LINKER LLD)
+	else()
+		set(KYTY_COMPILER GCC)
+		set(KYTY_LINKER LD)
+	endif()
+elseif(MINGW)
 	if(CMAKE_CXX_COMPILER_ID MATCHES "(C|c?)lang")
 		set(CLANG 1)
 		set(KYTY_COMPILER CLANG)
@@ -78,11 +95,11 @@ if (CLANG AND (KYTY_LINKER STREQUAL LLD))
 	set(KYTY_LD_OPTIONS "-fuse-ld=lld")
 endif()
 
-if (KYTY_LINKER STREQUAL LD)
+if (KYTY_LINKER STREQUAL LD AND NOT LINUX)
 	set(KYTY_LD_OPTIONS "-Wl,--image-base=0x100000000000")
 endif()
 
-project(Kyty${KYTY_PROJECT_NAME}${CMAKE_BUILD_TYPE}${KYTY_COMPILER} VERSION 0.2.1)
+project(Kyty${KYTY_PROJECT_NAME}${CMAKE_BUILD_TYPE}${KYTY_COMPILER} VERSION 0.2.2)
 
 include(src_script.cmake)
 
@@ -121,7 +138,7 @@ if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 12.0.0)
 		core
 		math_obj
 		scripts
-		sys_obj
+		sys
 		#launcher
 		unit_test
 	)
@@ -130,7 +147,7 @@ if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 12.0.0)
 		#core
 		#math_obj
 		#scripts
-		#sys_obj
+		#sys
 		launcher
 		#unit_test
 	)
@@ -164,18 +181,20 @@ target_link_libraries(fc_script sys)
 target_link_libraries(fc_script math)
 target_link_libraries(fc_script scripts)
 target_link_libraries(fc_script lua)
+if (MSVC OR MINGW)
 target_link_libraries(fc_script opengl32)
 target_link_libraries(fc_script iphlpapi)
-target_link_libraries(fc_script SDL2-static)
 target_link_libraries(fc_script setupapi)
+target_link_libraries(fc_script ws2_32)
+target_link_libraries(fc_script psapi)
+endif()
+target_link_libraries(fc_script SDL2-static)
 target_link_libraries(fc_script emulator)
 target_link_libraries(fc_script rijndael)
 target_link_libraries(fc_script lzma)
 target_link_libraries(fc_script sqlite)
 target_link_libraries(fc_script zstd)
 target_link_libraries(fc_script easy_profiler)
-target_link_libraries(fc_script ws2_32)
-target_link_libraries(fc_script psapi)
 target_link_libraries(fc_script cpuinfo)
 if (CLANG AND NOT MSVC)
 target_link_libraries(fc_script pthread)
@@ -186,21 +205,16 @@ endif()
 
 set(KYTY_SCRIPT_BIN "../../__bin/fc_script")
 
-if(MSVC)
+if(LINUX)
+	set_target_properties(fc_script PROPERTIES LINK_FLAGS "${KYTY_LD_OPTIONS} -Wl,-Map=fc_script_${FYTY_COMPILER_ID}_${KYTY_LINKER_ID}_${KYTY_BITNESS}.map")
+	#add_custom_command(TARGET fc_script POST_BUILD COMMAND ${KYTY_SCRIPT_BIN} ${PROJECT_SOURCE_DIR}/map_to_csv.lua fc_script ${FYTY_COMPILER_ID} ${KYTY_BITNESS} ${KYTY_LINKER_ID})
+elseif(MSVC)
 	set_target_properties(fc_script PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "$(SolutionDir)$(Configuration)/")
-	set_target_properties(fc_script
-		PROPERTIES
-		LINK_FLAGS "/DYNAMICBASE:NO /MAP:fc_script_msvc_${KYTY_BITNESS}.map"
-	)
-	add_custom_command(TARGET fc_script POST_BUILD
-		COMMAND ${CMAKE_COMMAND} -E copy_if_different fc_script_msvc_${KYTY_BITNESS}.map $<TARGET_FILE_DIR:fc_script>/fc_script_${KYTY_COMPILER_ID}_${KYTY_LINKER_ID}_${KYTY_BITNESS}.map)
-	add_custom_command(TARGET fc_script POST_BUILD
-		COMMAND ${KYTY_SCRIPT_BIN} ${PROJECT_SOURCE_DIR}/map_to_csv.lua $<TARGET_FILE_DIR:fc_script>/fc_script ${KYTY_COMPILER_ID} ${KYTY_BITNESS} ${KYTY_LINKER_ID})
-	add_custom_command(TARGET fc_script POST_BUILD
-		COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PROJECT_SOURCE_DIR}/3rdparty/winpthread/bin/libwinpthread-1.dll" $<TARGET_FILE_DIR:fc_script>/libwinpthread-1.dll)
-endif()
-
-if(MINGW)
+	set_target_properties(fc_script	PROPERTIES LINK_FLAGS "/DYNAMICBASE:NO /MAP:fc_script_msvc_${KYTY_BITNESS}.map")
+	add_custom_command(TARGET fc_script POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different fc_script_msvc_${KYTY_BITNESS}.map $<TARGET_FILE_DIR:fc_script>/fc_script_${KYTY_COMPILER_ID}_${KYTY_LINKER_ID}_${KYTY_BITNESS}.map)
+	add_custom_command(TARGET fc_script POST_BUILD COMMAND ${KYTY_SCRIPT_BIN} ${PROJECT_SOURCE_DIR}/map_to_csv.lua $<TARGET_FILE_DIR:fc_script>/fc_script ${KYTY_COMPILER_ID} ${KYTY_BITNESS} ${KYTY_LINKER_ID})
+	add_custom_command(TARGET fc_script POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PROJECT_SOURCE_DIR}/3rdparty/winpthread/bin/libwinpthread-1.dll" $<TARGET_FILE_DIR:fc_script>/libwinpthread-1.dll)
+elseif(MINGW)
 	set_target_properties(fc_script PROPERTIES LINK_FLAGS "${KYTY_LD_OPTIONS} -Wl,-Map=fc_script_${KYTY_COMPILER_ID}_${KYTY_LINKER_ID}_${KYTY_BITNESS}.map")
 	add_custom_command(TARGET fc_script POST_BUILD COMMAND ${KYTY_SCRIPT_BIN} ${PROJECT_SOURCE_DIR}/map_to_csv.lua fc_script ${KYTY_COMPILER_ID} ${KYTY_BITNESS} ${KYTY_LINKER_ID})
 endif()

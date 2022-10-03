@@ -28,8 +28,10 @@ add_executable(launcher WIN32
 
 
 target_link_libraries(launcher Qt5::Widgets)
+if(MSVC OR MINGW)
 target_link_libraries(launcher psapi)
 target_link_libraries(launcher setupapi)
+endif()
 if (CLANG AND NOT MSVC)
 target_link_libraries(launcher pthread)
 endif()
@@ -45,9 +47,11 @@ endif()
 
 add_dependencies(launcher KytyGitVersion)  
 
-find_program(QT_WINDEPLOYQT NAMES windeployqt PATHS "${Qt5_DIR}/../../../bin")
-if(NOT QT_WINDEPLOYQT)
-	message(FATAL_ERROR "Could not find windeployqt")
+if(NOT LINUX)
+    find_program(QT_WINDEPLOYQT NAMES windeployqt PATHS "${Qt5_DIR}/../../../bin")
+    if(NOT QT_WINDEPLOYQT)
+    	message(FATAL_ERROR "Could not find windeployqt")
+    endif()
 endif()
 
 set(launcher_name "launcher")
@@ -56,17 +60,19 @@ set_target_properties(launcher PROPERTIES OUTPUT_NAME ${launcher_name})
 
 install(TARGETS launcher DESTINATION .)
 
-install(CODE "
-		execute_process(
-			COMMAND ${QT_WINDEPLOYQT} \"\${CMAKE_INSTALL_PREFIX}/${launcher_name}.exe\"
+if(NOT LINUX)
+    install(CODE "
+    		execute_process(
+    			COMMAND ${QT_WINDEPLOYQT} \"\${CMAKE_INSTALL_PREFIX}/${launcher_name}.exe\"
                 --no-svg
                 --no-angle
                 --no-opengl
                 --no-opengl-sw
                 --no-system-d3d-compiler
-				--no-translations
-		)
-")
+    				--no-translations
+    		)
+    ")
+endif()
 
 
 qt5_create_translation(QM_FILES ${launcher_src} ${launcher_forms} ${launcher_ts} OPTIONS -I ${CMAKE_SOURCE_DIR}/launcher/include)
@@ -79,10 +85,13 @@ get_property(inc_headers TARGET launcher PROPERTY INCLUDE_DIRECTORIES)
 list(APPEND inc_headers
 	${CMAKE_SOURCE_DIR}/launcher
 	${CMAKE_BINARY_DIR}/launcher/launcher_autogen/include
-	${Qt5_DIR}/../../../include
-	${Qt5_DIR}/../../../include/QtWidgets
-	${Qt5_DIR}/../../../include/QtCore
-	${Qt5_DIR}/../../../include/QtGui
+	${Qt5Widgets_INCLUDE_DIRS}
+	${Qt5Core_INCLUDE_DIRS}
+	${Qt5Gui_INCLUDE_DIRS}
+	#${Qt5_DIR}/../../../include
+	#${Qt5_DIR}/../../../include/QtWidgets
+	#${Qt5_DIR}/../../../include/QtCore
+	#${Qt5_DIR}/../../../include/QtGui
 )
 
 include_what_you_use_with_mappings(launcher "${inc_headers}" "${iwyu_maps}")

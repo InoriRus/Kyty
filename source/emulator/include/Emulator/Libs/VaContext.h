@@ -136,14 +136,14 @@ inline long double VaArg_long_double(VaList* l)
 	return VaArg_overflow_arg_area<long double, 16, 16>(l);
 }
 
-inline wint_t VaArg_wint_t(VaList* l)
+/*inline wint_t VaArg_wint_t(VaList* l)
 {
 	if (l->gp_offset <= 40)
 	{
 		return VaArg_reg_save_area_gp<wint_t, 8>(l);
 	}
 	return VaArg_overflow_arg_area<wint_t, 1, 8>(l);
-}
+}*/
 
 inline VaCharX16 VaArg_char_x16(VaList* l)
 {

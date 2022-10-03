@@ -1,8 +1,6 @@
-#include "Kyty/Sys/SysWindowsDbg.h"
+#include "Kyty/Sys/Windows/SysWindowsDbg.h"
 
 #include "Kyty/Core/Common.h"
-#include "Kyty/Core/DbgAssert.h"
-#include "Kyty/Sys/SysDbg.h"
 
 // IWYU pragma: no_include <basetsd.h>
 // IWYU pragma: no_include <memoryapi.h>
@@ -15,6 +13,9 @@
 #if KYTY_PLATFORM != KYTY_PLATFORM_WINDOWS
 //#error "KYTY_PLATFORM != KYTY_PLATFORM_WINDOWS"
 #else
+
+#include "Kyty/Core/DbgAssert.h"
+#include "Kyty/Sys/SysDbg.h"
 
 #include <windows.h> // IWYU pragma: keep
 #if KYTY_COMPILER == KYTY_COMPILER_MSVC

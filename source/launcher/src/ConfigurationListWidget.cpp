@@ -64,7 +64,11 @@ void ConfigurationListWidget::WriteSettings()
 		s = new QSettings(CONF_FILE_NAME, QSettings::IniFormat);
 	} else
 	{
+#ifdef __linux__
+		s = new QSettings(QSettings::IniFormat, QSettings::UserScope, CONF_ORG_NAME, CONF_APP_NAME);
+#else
 		s = new QSettings(QSettings::IniFormat, QSettings::SystemScope, CONF_ORG_NAME, CONF_APP_NAME);
+#endif
 	}
 
 	if (s != nullptr)
@@ -95,7 +99,11 @@ void ConfigurationListWidget::ReadSettings()
 		s = new QSettings(CONF_FILE_NAME, QSettings::IniFormat);
 	} else
 	{
+#ifdef __linux__
+		s = new QSettings(QSettings::IniFormat, QSettings::UserScope, CONF_ORG_NAME, CONF_APP_NAME);
+#else
 		s = new QSettings(QSettings::IniFormat, QSettings::SystemScope, CONF_ORG_NAME, CONF_APP_NAME);
+#endif
 	}
 
 	if (s != nullptr)

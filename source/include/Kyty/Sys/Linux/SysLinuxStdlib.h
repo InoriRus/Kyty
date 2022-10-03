@@ -21,12 +21,12 @@ inline double sys_strtod(const char* nptr, char** endptr)
 
 inline int32_t sys_strtoi32(const char* nptr, char** endptr, int base)
 {
-	long r = strtol(nptr, endptr, base);
-	if (r >= static_cast<long>(INT32_MAX))
+	int64_t r = strtol(nptr, endptr, base);
+	if (r >= static_cast<int64_t>(INT32_MAX))
 	{
 		return INT32_MAX;
 	}
-	if (r <= static_cast<long>(INT32_MIN))
+	if (r <= static_cast<int64_t>(INT32_MIN))
 	{
 		return INT32_MIN;
 	}

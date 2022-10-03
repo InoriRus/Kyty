@@ -19,6 +19,36 @@ constexpr int PRINT_STACK_FROM = 4;
 constexpr int PRINT_STACK_FROM = 2;
 #endif
 
+#if KYTY_PLATFORM == KYTY_PLATFORM_LINUX
+int IsDebuggerPresent()
+{
+	bool  dbg = false;
+	FILE* f   = fopen("/proc/self/status", "r");
+
+	if (f != nullptr)
+	{
+		char str[1024];
+
+		while (feof(f) == 0)
+		{
+			str[1023] = '\0';
+			int pid   = 0;
+
+			[[maybe_unused]] auto* result = fgets(str, 1023, f);
+			if (sscanf(str, "TracerPid: %d", &pid) == 1) // NOLINT
+			{
+				dbg = (pid != 0);
+				break;
+			}
+		}
+
+		[[maybe_unused]] auto result = fclose(f);
+	}
+
+	return (dbg ? 1 : 0);
+}
+#endif
+
 void dbg_print_stack()
 {
 	DebugStack s;
@@ -80,7 +110,7 @@ void dbg_exit(int status)
 
 bool dbg_is_debugger_present()
 {
-#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS || KYTY_PLATFORM == KYTY_PLATFORM_LINUX
 	return !(IsDebuggerPresent() == 0);
 #endif
 	return false;

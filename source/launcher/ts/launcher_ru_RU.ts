@@ -258,42 +258,42 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ConfigurationListWidget.cpp" line="128"/>
+        <location filename="../src/ConfigurationListWidget.cpp" line="136"/>
         <source>New configuration</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ConfigurationListWidget.cpp" line="142"/>
+        <location filename="../src/ConfigurationListWidget.cpp" line="150"/>
         <source>Edit configuration</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ConfigurationListWidget.cpp" line="153"/>
+        <location filename="../src/ConfigurationListWidget.cpp" line="161"/>
         <source>Delete configuration</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ConfigurationListWidget.cpp" line="153"/>
+        <location filename="../src/ConfigurationListWidget.cpp" line="161"/>
         <source>Do you want to delete configuration?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ConfigurationListWidget.cpp" line="189"/>
+        <location filename="../src/ConfigurationListWidget.cpp" line="197"/>
         <source>Run</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ConfigurationListWidget.cpp" line="191"/>
+        <location filename="../src/ConfigurationListWidget.cpp" line="199"/>
         <source>New...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ConfigurationListWidget.cpp" line="192"/>
+        <location filename="../src/ConfigurationListWidget.cpp" line="200"/>
         <source>Edit...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ConfigurationListWidget.cpp" line="193"/>
+        <location filename="../src/ConfigurationListWidget.cpp" line="201"/>
         <source>Delete</source>
         <translation type="unfinished"></translation>
     </message>
@@ -328,12 +328,24 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/MainDialog.cpp" line="279"/>
+        <location filename="../src/MainDialog.cpp" line="231"/>
+        <source>gnome-terminal</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/MainDialog.cpp" line="232"/>
+        <source>xterm</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/MainDialog.cpp" line="327"/>
+        <location filename="../src/MainDialog.cpp" line="336"/>
         <source>Error</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/MainDialog.cpp" line="279"/>
+        <location filename="../src/MainDialog.cpp" line="327"/>
+        <location filename="../src/MainDialog.cpp" line="336"/>
         <source>Can&apos;t create file:
 </source>
         <translation type="unfinished"></translation>
@@ -342,27 +354,27 @@
 <context>
     <name>MainDialogPrivate</name>
     <message>
-        <location filename="../src/MainDialog.cpp" line="140"/>
+        <location filename="../src/MainDialog.cpp" line="159"/>
         <source>Settings file: </source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/MainDialog.cpp" line="166"/>
+        <location filename="../src/MainDialog.cpp" line="185"/>
         <source>Emulator: </source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/MainDialog.cpp" line="178"/>
+        <location filename="../src/MainDialog.cpp" line="197"/>
         <source>Version: </source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/MainDialog.cpp" line="194"/>
+        <location filename="../src/MainDialog.cpp" line="213"/>
         <source>Error</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/MainDialog.cpp" line="194"/>
+        <location filename="../src/MainDialog.cpp" line="213"/>
         <source>Can&apos;t find emulator</source>
         <translation type="unfinished"></translation>
     </message>

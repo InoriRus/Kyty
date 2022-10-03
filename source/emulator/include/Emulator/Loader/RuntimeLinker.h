@@ -12,16 +12,16 @@
 
 #ifdef KYTY_EMU_ENABLED
 
+namespace Kyty::Core::VirtualMemory {
+class ExceptionHandler;
+} // namespace Kyty::Core::VirtualMemory
+
 namespace Kyty::Loader {
 
 class Elf64;
 struct Elf64_Sym;
 struct Elf64_Rela;
 class RuntimeLinker;
-
-namespace VirtualMemory {
-class ExceptionHandler;
-} // namespace VirtualMemory
 
 using module_func_t = int (*)(size_t args, const void* argp);
 
@@ -103,23 +103,23 @@ struct DynamicInfo
 
 struct Program
 {
-	int32_t                          unique_id = -1;
-	RuntimeLinker*                   rt        = nullptr;
-	String                           file_name;
-	Elf64*                           elf               = nullptr;
-	VirtualMemory::ExceptionHandler* exception_handler = nullptr;
-	DynamicInfo*                     dynamic_info      = nullptr;
-	uint64_t                         base_vaddr        = 0;
-	uint64_t                         base_size         = 0;
-	uint64_t                         base_size_aligned = 0;
-	SymbolDatabase*                  export_symbols    = nullptr;
-	SymbolDatabase*                  import_symbols    = nullptr;
-	ThreadLocalStorage               tls;
-	bool                             fail_if_global_not_resolved = true;
-	bool                             dbg_print_reloc             = false;
-	uint64_t                         proc_param_vaddr            = 0;
-	uint64_t                         custom_call_plt_vaddr       = 0;
-	uint32_t                         custom_call_plt_num         = 0;
+	int32_t                                unique_id = -1;
+	RuntimeLinker*                         rt        = nullptr;
+	String                                 file_name;
+	Elf64*                                 elf               = nullptr;
+	Core::VirtualMemory::ExceptionHandler* exception_handler = nullptr;
+	DynamicInfo*                           dynamic_info      = nullptr;
+	uint64_t                               base_vaddr        = 0;
+	uint64_t                               base_size         = 0;
+	uint64_t                               base_size_aligned = 0;
+	SymbolDatabase*                        export_symbols    = nullptr;
+	SymbolDatabase*                        import_symbols    = nullptr;
+	ThreadLocalStorage                     tls;
+	bool                                   fail_if_global_not_resolved = true;
+	bool                                   dbg_print_reloc             = false;
+	uint64_t                               proc_param_vaddr            = 0;
+	uint64_t                               custom_call_plt_vaddr       = 0;
+	uint32_t                               custom_call_plt_num         = 0;
 };
 
 class RuntimeLinker

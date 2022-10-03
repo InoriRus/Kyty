@@ -405,7 +405,7 @@ static size_t _etoa(out_fct_type out, Vector<char>* buffer, size_t idx, size_t m
 	int expval = static_cast<int>(0.1760912590558 + exp2 * 0.301029995663981 + (conv.F - 1.5) * 0.289529654602168);
 	// now we want to compute 10^expval but we want to be sure it won't overflow
 	// exp2            = static_cast<int>(expval * 3.321928094887362 + 0.5);
-	exp2            = lround(expval * 3.321928094887362);
+	exp2            = static_cast<int>(lround(expval * 3.321928094887362));
 	const double z  = expval * 2.302585092994046 - exp2 * 0.6931471805599453;
 	const double z2 = z * z;
 	conv.U          = static_cast<uint64_t>(exp2 + 1023) << 52U;

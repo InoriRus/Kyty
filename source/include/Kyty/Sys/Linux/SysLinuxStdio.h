@@ -8,22 +8,22 @@
 #else
 
 //#include <stdio.h>
+#include <cstdarg>
 
 namespace Kyty {
 
 inline uint32_t sys_vscprintf(const char* format, va_list argptr)
 {
-	int     len;
 	va_list argcopy;
 	va_copy(argcopy, argptr);
-	len = vsnprintf(0, 0, format, argcopy);
+	int len = vsnprintf(nullptr, 0, format, argcopy);
 	va_end(argcopy);
 	return len < 0 ? 0 : len;
 }
 
-inline uint32_t sys_vsnprintf(char* Dest, size_t Count, const char* Format, va_list Args)
+inline uint32_t sys_vsnprintf(char* dest, size_t count, const char* format, va_list args)
 {
-	int len = vsnprintf(Dest, Count + 1, Format, Args);
+	int len = vsnprintf(dest, count + 1, format, args);
 	return len < 0 ? 0 : len;
 }
 

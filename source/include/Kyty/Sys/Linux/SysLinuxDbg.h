@@ -9,6 +9,7 @@
 
 namespace Kyty {
 
+// NOLINTNEXTLINE(readability-identifier-naming)
 struct sys_dbg_stack_info_t
 {
 	uintptr_t code_addr;

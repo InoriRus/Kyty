@@ -1,33 +1,14 @@
-#ifndef EMULATOR_INCLUDE_EMULATOR_LOADER_VIRTUALMEMORY_H_
-#define EMULATOR_INCLUDE_EMULATOR_LOADER_VIRTUALMEMORY_H_
+#ifndef INCLUDE_KYTY_CORE_VIRTUALMEMORY_H_
+#define INCLUDE_KYTY_CORE_VIRTUALMEMORY_H_
 
 #include "Kyty/Core/Common.h"
 #include "Kyty/Core/String.h"
 
-#include "Emulator/Common.h"
-
-#ifdef KYTY_EMU_ENABLED
-
-namespace Kyty::Loader {
-
-enum class ProcessorArchitecture
-{
-	Unknown,
-	Amd64, // x64 (AMD or Intel)
-};
+namespace Kyty::Core {
 
 struct SystemInfo
 {
-	uint32_t              PageSize;
-	uint64_t              MinimumApplicationAddress;
-	uint64_t              MaximumApplicationAddress;
-	uint32_t              ActiveProcessorMask;
-	uint32_t              NumberOfProcessors;
-	ProcessorArchitecture ProcessorArchitecture;
-	uint32_t              AllocationGranularity;
-	uint16_t              ProcessorLevel;
-	uint16_t              ProcessorRevision;
-	String                ProcessorName;
+	String ProcessorName;
 };
 
 SystemInfo GetSystemInfo();
@@ -110,8 +91,6 @@ bool     PatchReplace(uint64_t vaddr, uint64_t value);
 
 } // namespace VirtualMemory
 
-} // namespace Kyty::Loader
+} // namespace Kyty::Core
 
-#endif // KYTY_EMU_ENABLED
-
-#endif /* EMULATOR_INCLUDE_EMULATOR_LOADER_VIRTUALMEMORY_H_ */
+#endif /* INCLUDE_KYTY_CORE_VIRTUALMEMORY_H_ */

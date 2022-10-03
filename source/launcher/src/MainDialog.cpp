@@ -27,7 +27,9 @@
 
 #include "ui_main_dialog.h"
 
+#ifndef __linux__
 #include <windows.h> // IWYU pragma: keep
+#endif
 
 // IWYU pragma: no_include <minwindef.h>
 // IWYU pragma: no_include <processthreadsapi.h>
@@ -35,24 +37,39 @@
 
 class QWidget;
 
-constexpr char SCRIPT_EXE[]    = "fc_script.exe";
-constexpr char CMD_EXE[]       = "cmd.exe";
-constexpr char CONEMU_EXE[]    = "C:/Program Files/ConEmu/ConEmu64.exe";
+#ifdef __linux__
+constexpr char SCRIPT_EXE[] = "fc_script";
+#else
+constexpr char SCRIPT_EXE[]     = "fc_script.exe";
+#endif
+
+#ifndef __linux__
+constexpr char CMD_EXE[]    = "cmd.exe";
+constexpr char CONEMU_EXE[] = "C:/Program Files/ConEmu/ConEmu64.exe";
+#else
+constexpr char GNOME[]          = "gnome-terminal";
+constexpr char XTERM[]          = "xterm";
+constexpr char KYTY_BASH_FILE[] = "kyty_run.sh";
+#endif
 constexpr char KYTY_MOUNT[]    = "kyty_mount";
 constexpr char KYTY_EXECUTE[]  = "kyty_execute";
 constexpr char KYTY_LOAD_ELF[] = "kyty_load_elf";
 // constexpr char  KYTY_LOAD_SYMBOLS[]           = "kyty_load_symbols";
-constexpr char  KYTY_LOAD_SYMBOLS_ALL[]       = "kyty_load_symbols_all";
-constexpr char  KYTY_LOAD_PARAM_SFO[]         = "kyty_load_param_sfo";
-constexpr char  KYTY_INIT[]                   = "kyty_init";
-constexpr char  KYTY_LUA_FILE[]               = "kyty_run.lua";
-constexpr DWORD CMD_X_CHARS                   = 175;
-constexpr DWORD CMD_Y_CHARS                   = 1000;
-constexpr char  SETTINGS_MAIN_DIALOG[]        = "MainDialog";
-constexpr char  SETTINGS_MAIN_LAST_GEOMETRY[] = "geometry";
+constexpr char KYTY_LOAD_SYMBOLS_ALL[] = "kyty_load_symbols_all";
+constexpr char KYTY_LOAD_PARAM_SFO[]   = "kyty_load_param_sfo";
+constexpr char KYTY_INIT[]             = "kyty_init";
+constexpr char KYTY_LUA_FILE[]         = "kyty_run.lua";
+#ifndef __linux__
+constexpr DWORD CMD_X_CHARS = 175;
+constexpr DWORD CMD_Y_CHARS = 1000;
+#endif
+constexpr char SETTINGS_MAIN_DIALOG[]        = "MainDialog";
+constexpr char SETTINGS_MAIN_LAST_GEOMETRY[] = "geometry";
 
 class DetachableProcess: public QProcess
 {
+	Q_OBJECT;
+
 public:
 	explicit DetachableProcess(QObject* parent = nullptr): QProcess(parent) {}
 	void Detach()
@@ -87,10 +104,12 @@ public:
 private:
 	static QByteArray g_last_geometry;
 
-	Ui::MainDialog*    m_ui          = {nullptr};
-	MainDialog*        m_main_dialog = nullptr;
-	QString            m_interpreter;
-	DetachableProcess  m_process;
+	Ui::MainDialog* m_ui          = {nullptr};
+	MainDialog*     m_main_dialog = nullptr;
+	QString         m_interpreter;
+
+	/*DetachableProcess*/ QProcess m_process;
+
 	ConfigurationItem* m_running_item = nullptr;
 };
 
@@ -135,7 +154,7 @@ void MainDialogPrivate::Setup(MainDialog* main_dialog)
 		        Update();
 	        });
 
-	connect(main_dialog, &MainDialog::Quit, [=]() { m_process.Detach(); });
+	// connect(main_dialog, &MainDialog::Quit, [=]() { m_process.Detach(); });
 
 	m_ui->label_settings_file->setText(tr("Settings file: ") + m_ui->widget->GetSettingsFile());
 
@@ -196,13 +215,22 @@ void MainDialogPrivate::FindInterpreter()
 		return;
 	}
 
+#ifndef __linux__
 	QFile console(CONEMU_EXE);
 	bool  con_emu = console.exists();
+#else
+	bool con_emu = true;
+#endif
 
 	m_ui->radioButton_Cmd->setEnabled(true);
 	m_ui->radioButton_Cmd->setChecked(true);
 	m_ui->radioButton_ConEmu->setEnabled(con_emu);
 	m_ui->radioButton_ConEmu->setChecked(false);
+
+#ifdef __linux__
+	m_ui->radioButton_Cmd->setText(QCoreApplication::translate("MainDialog", "gnome-terminal", nullptr));
+	m_ui->radioButton_ConEmu->setText(QCoreApplication::translate("MainDialog", "xterm", nullptr));
+#endif
 
 	Update();
 }
@@ -265,7 +293,28 @@ static bool CreateLuaScript(Kyty::Configuration* info, const QString& file_name)
 	return false;
 }
 
-void MainDialog::RunInterpreter(QProcess* process, Kyty::Configuration* info, bool con_emu)
+#ifdef __linux__
+static bool CreateBashScript(const QString& interpreter, const QString& lua_file_name, const QString& file_name)
+{
+	QFile file(file_name);
+	if (file.open(QIODevice::WriteOnly | QIODevice::Text))
+	{
+		QTextStream s(&file);
+
+		s << "#!/bin/bash\n";
+		s << interpreter << " " << lua_file_name << "\n";
+		s << "echo Press any key...\n";
+		s << "read -n1\n";
+
+		file.close();
+
+		return file.setPermissions(file.permissions() | QFile::ExeUser | QFile::ExeOwner | QFile::ExeGroup);
+	}
+	return false;
+}
+#endif
+
+void MainDialog::RunInterpreter(QProcess* process, Kyty::Configuration* info, [[maybe_unused]] bool con_emu)
 {
 	const auto& interpreter = m_p->GetInterpreter();
 
@@ -273,7 +322,6 @@ void MainDialog::RunInterpreter(QProcess* process, Kyty::Configuration* info, bo
 	auto      dir = f.absoluteDir();
 
 	auto lua_file_name = dir.filePath(KYTY_LUA_FILE);
-
 	if (!CreateLuaScript(info, lua_file_name))
 	{
 		QMessageBox::critical(this, tr("Error"), tr("Can't create file:\n") + lua_file_name);
@@ -281,6 +329,25 @@ void MainDialog::RunInterpreter(QProcess* process, Kyty::Configuration* info, bo
 		return;
 	}
 
+#ifdef __linux__
+	auto bash_file_name = dir.filePath(KYTY_BASH_FILE);
+	if (!CreateBashScript(interpreter, lua_file_name, bash_file_name))
+	{
+		QMessageBox::critical(this, tr("Error"), tr("Can't create file:\n") + bash_file_name);
+		QApplication::quit();
+		return;
+	}
+
+	if (con_emu)
+	{
+		process->setProgram(XTERM);
+		process->setArguments({"-e", "bash", "-c", bash_file_name});
+	} else
+	{
+		process->setProgram(GNOME);
+		process->setArguments({"--", "bash", "-c", bash_file_name});
+	}
+#else
 	if (con_emu)
 	{
 		process->setProgram(CONEMU_EXE);
@@ -290,7 +357,9 @@ void MainDialog::RunInterpreter(QProcess* process, Kyty::Configuration* info, bo
 		process->setProgram(CMD_EXE);
 		process->setArguments({"/K", interpreter, lua_file_name});
 	}
+#endif
 	process->setWorkingDirectory(dir.path());
+#ifndef __linux__
 	process->setCreateProcessArgumentsModifier(
 	    [](QProcess::CreateProcessArguments* args)
 	    {
@@ -303,6 +372,7 @@ void MainDialog::RunInterpreter(QProcess* process, Kyty::Configuration* info, bo
 		    // args->startupInfo->dwFillAttribute =
 		    //     static_cast<DWORD>(BACKGROUND_BLUE) | static_cast<DWORD>(FOREGROUND_RED) | static_cast<DWORD>(FOREGROUND_INTENSITY);
 	    });
+#endif
 	process->start();
 	process->waitForFinished(100);
 }

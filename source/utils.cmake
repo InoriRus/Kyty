@@ -19,7 +19,7 @@ function(add_generator_macros t m v)
 endfunction()	
 
 function(include_what_you_use target dirs)
-  if (CLANG AND ("${target}" IN_LIST KYTY_IWYU))
+  if (NOT LINUX AND CLANG AND ("${target}" IN_LIST KYTY_IWYU))
     find_program (CLANG_IWYU_EXE NAMES "include-what-you-use")
     if (CLANG_IWYU_EXE)
 		set_target_properties(${target} PROPERTIES CXX_INCLUDE_WHAT_YOU_USE "${CLANG_IWYU_EXE};-Xiwyu;--cxx17ns;-Qunused-arguments;-Werror")
@@ -28,7 +28,7 @@ function(include_what_you_use target dirs)
 endfunction()
 
 function(include_what_you_use_with_mappings target dirs mappings)
-  if (CLANG AND ("${target}" IN_LIST KYTY_IWYU))
+  if (NOT LINUX AND CLANG AND ("${target}" IN_LIST KYTY_IWYU))
     find_program (CLANG_IWYU_EXE NAMES "include-what-you-use")
     if (CLANG_IWYU_EXE)
 		foreach(map ${mappings})
@@ -83,12 +83,8 @@ macro(config_compiler_and_linker)
 
 set(KYTY_WARNINGS_ARE_ERRORS ON)
 
+set(KYTY_C_FLAGS "")
 set(KYTY_CPP_FLAGS "")
-set(KYTY_CPP_FLAGS_RELEASE "")
-set(KYTY_CPP_FLAGS_DEBUG "")
-set(KYTY_EXE_LINKER_FLAGS "")
-set(KYTY_EXE_LINKER_FLAGS_RELEASE "")
-set(KYTY_EXE_LINKER_FLAGS_DEBUG "")
 
 SET(CMAKE_NINJA_FORCE_RESPONSE_FILE 1 CACHE INTERNAL "")
 
@@ -112,41 +108,41 @@ if(MSVC)
 		set(KYTY_CPP_FLAGS "${KYTY_CPP_FLAGS} /Zc:__cplusplus /utf-8 /Oy- /wd4244 /wd4305 /wd4800 /wd4345")	
 	endif()
 	
-	set(KYTY_EXE_LINKER_FLAGS_RELEASE "/OPT:NOREF")
+	add_link_options("$<$<CONFIG:RELEASE>:/OPT:NOREF>")
   
 	if(KYTY_WARNINGS_ARE_ERRORS)
-		set(KYTY_CPP_FLAGS "${KYTY_CPP_FLAGS} /WX")
+		#set(KYTY_CPP_FLAGS "${KYTY_CPP_FLAGS} /WX")
+	    add_compile_options(/WX)
 	endif()
-endif()
 
-if(MINGW)
+	set(KYTY_C_FLAGS "${KYTY_CPP_FLAGS}")
+	
+elseif(MINGW OR LINUX)
 
 	if (CLANG)
-	    set(KYTY_CPP_FLAGS "${KYTY_CPP_FLAGS} -fno-rtti -fno-exceptions -fcolor-diagnostics -finput-charset=UTF-8 -fexec-charset=UTF-8 -g -static -fno-strict-aliasing -fno-omit-frame-pointer -Wall -fmessage-length=0")
+	    set(KYTY_CPP_FLAGS "${KYTY_CPP_FLAGS} -fno-rtti -fno-exceptions -fcolor-diagnostics -finput-charset=UTF-8 -fexec-charset=UTF-8 -g -fno-strict-aliasing -fno-omit-frame-pointer -Wall -fmessage-length=0")
+	    if (MINGW)
+	    	set(KYTY_CPP_FLAGS "${KYTY_CPP_FLAGS} -static")
+	    endif()
 	else()
-		set(KYTY_CPP_FLAGS "${KYTY_CPP_FLAGS} -fno-exceptions -fdiagnostics-color=always -finput-charset=UTF-8 -fexec-charset=UTF-8 -static-libgcc -static-libstdc++ -g -fno-strict-aliasing -fno-omit-frame-pointer -Wall -fmessage-length=0")
+		set(KYTY_CPP_FLAGS "${KYTY_CPP_FLAGS} -fno-exceptions -fdiagnostics-color=always -finput-charset=UTF-8 -fexec-charset=UTF-8 -static-libgcc -static-libstdc++ -g -fno-strict-aliasing -fno-omit-frame-pointer -Wall -Wno-unused-value -fmessage-length=0")
 	endif()
 	
-	set(KYTY_CPP_FLAGS_DEBUG "${KYTY_CPP_FLAGS_DEBUG} -O0")
-
     if(KYTY_WARNINGS_ARE_ERRORS)
-        set(KYTY_CPP_FLAGS "${KYTY_CPP_FLAGS} -Werror")
+        #set(KYTY_CPP_FLAGS "${KYTY_CPP_FLAGS} -Werror")
+	add_compile_options(-Werror)
     endif()	
 
-	set(KYTY_EXE_LINKER_FLAGS "${KYTY_EXE_LINKER_FLAGS} -g")
+	add_link_options("-g")
 	
 	unset(CMAKE_CXX_STANDARD_LIBRARIES CACHE)
 	unset(CMAKE_C_STANDARD_LIBRARIES CACHE)
+	
+	set(KYTY_C_FLAGS "${KYTY_CPP_FLAGS}")
+	
 endif()
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${KYTY_CPP_FLAGS}")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${KYTY_C_FLAGS}")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${KYTY_CPP_FLAGS}")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${KYTY_CPP_FLAGS_RELEASE}")
-set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} ${KYTY_CPP_FLAGS_RELEASE}")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${KYTY_CPP_FLAGS_DEBUG}")
-set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${KYTY_CPP_FLAGS_DEBUG}")
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${KYTY_EXE_LINKER_FLAGS}")
-set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} ${KYTY_EXE_LINKER_FLAGS_RELEASE}")
-set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} ${KYTY_EXE_LINKER_FLAGS_DEBUG}")
 
 endmacro()

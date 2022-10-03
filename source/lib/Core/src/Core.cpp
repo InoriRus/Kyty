@@ -16,6 +16,7 @@
 #include "Kyty/Core/SimpleArray.h" // IWYU pragma: associated
 #include "Kyty/Core/Singleton.h"   // IWYU pragma: associated
 #include "Kyty/Core/Vector.h"      // IWYU pragma: associated
+#include "Kyty/Core/VirtualMemory.h"
 
 namespace Kyty::Core {
 
@@ -25,8 +26,8 @@ KYTY_SUBSYSTEM_INIT(Core)
 	core_file_init();
 	core_debug_init(parent->GetArgv()[0]);
 	Language::Init();
-
 	Database::Init();
+	VirtualMemory::Init();
 }
 
 KYTY_SUBSYSTEM_UNEXPECTED_SHUTDOWN(Core) {}

@@ -93,7 +93,7 @@ public:
 	virtual ~CondVar();
 
 	void Wait(Mutex* mutex);
-	void WaitFor(Mutex* mutex, uint32_t micros);
+	bool WaitFor(Mutex* mutex, uint32_t micros);
 	void Signal();
 	void SignalAll();
 

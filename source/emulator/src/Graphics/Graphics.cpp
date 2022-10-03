@@ -3,6 +3,7 @@
 #include "Kyty/Core/DbgAssert.h"
 #include "Kyty/Core/File.h"
 #include "Kyty/Core/String.h"
+#include "Kyty/Core/VirtualMemory.h"
 
 #include "Emulator/Config.h"
 #include "Emulator/Graphics/GraphicsRender.h"
@@ -19,7 +20,6 @@
 #include "Emulator/Kernel/Pthread.h"
 #include "Emulator/Libs/Errno.h"
 #include "Emulator/Libs/Libs.h"
-#include "Emulator/Loader/VirtualMemory.h"
 
 #include <algorithm>
 #include <atomic>
@@ -661,11 +661,11 @@ void* KYTY_SYSV_ABI GraphicsGetTheTessellationFactorRingBufferBaseAddress()
 {
 	PRINT_NAME();
 
-	auto addr = Loader::VirtualMemory::AllocAligned(0, 0x20000, Loader::VirtualMemory::Mode::ReadWrite, 256);
-	Loader::VirtualMemory::Free(addr);
-	bool again = Loader::VirtualMemory::AllocFixed(addr, 0x20000, Loader::VirtualMemory::Mode::ReadWrite);
+	auto addr = Core::VirtualMemory::AllocAligned(0, 0x20000, Core::VirtualMemory::Mode::ReadWrite, 256);
+	Core::VirtualMemory::Free(addr);
+	bool again = Core::VirtualMemory::AllocFixed(addr, 0x20000, Core::VirtualMemory::Mode::ReadWrite);
 	EXIT_NOT_IMPLEMENTED(!again);
-	Loader::VirtualMemory::Free(addr);
+	Core::VirtualMemory::Free(addr);
 
 	printf("\t addr = %016" PRIx64 "\n", addr);
 

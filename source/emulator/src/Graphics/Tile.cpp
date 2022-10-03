@@ -7,7 +7,7 @@
 #include "Emulator/Graphics/AsyncJob.h"
 #include "Emulator/Profiler.h"
 
-#if KYTY_COMPILER != KYTY_COMPILER_CLANG
+#if KYTY_COMPILER != KYTY_COMPILER_CLANG && KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
 #include <intrin.h>
 #endif
 
@@ -20,7 +20,7 @@ namespace Kyty::Libs::Graphics {
 
 static uint32_t IntLog2(uint32_t i)
 {
-#if KYTY_COMPILER == KYTY_COMPILER_CLANG
+#if KYTY_COMPILER == KYTY_COMPILER_CLANG || KYTY_PLATFORM != KYTY_PLATFORM_WINDOWS
 	return 31 - __builtin_clz(i | 1u);
 #else
 	unsigned long temp;

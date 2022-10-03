@@ -3,13 +3,13 @@
 #include "Kyty/Core/String.h"
 #include "Kyty/Core/Threads.h"
 #include "Kyty/Core/Vector.h"
+#include "Kyty/Core/VirtualMemory.h"
 #include "Kyty/Sys/SysDbg.h"
 
 #include "Emulator/Common.h"
 #include "Emulator/Kernel/Memory.h"
 #include "Emulator/Libs/Libs.h"
 #include "Emulator/Loader/SymbolDatabase.h"
-#include "Emulator/Loader/VirtualMemory.h"
 
 #include <algorithm>
 
@@ -68,8 +68,8 @@ static void AllocShadow(uintptr_t min_addr, uintptr_t max_addr)
 
 	auto size = max_shadow - min_shadow + page_size;
 
-	printf("\t shadow = %016" PRIx64 "\n", reinterpret_cast<uint64_t>(min_shadow));
-	printf("\t size   = %016" PRIx64 "\n", reinterpret_cast<uint64_t>(size));
+	printf("\t shadow = %016" PRIx64 "\n", static_cast<uint64_t>(min_shadow));
+	printf("\t size   = %016" PRIx64 "\n", static_cast<uint64_t>(size));
 
 	for (uintptr_t page = min_shadow; page <= max_shadow; page += page_size)
 	{
@@ -78,7 +78,7 @@ static void AllocShadow(uintptr_t min_addr, uintptr_t max_addr)
 			g_ctx->shadows[index].count++;
 		} else
 		{
-			if (!Loader::VirtualMemory::AllocFixed(page, page_size, Loader::VirtualMemory::Mode::ReadWrite))
+			if (!Core::VirtualMemory::AllocFixed(page, page_size, Core::VirtualMemory::Mode::ReadWrite))
 			{
 				EXIT("can't allocate shadow memory\n");
 			}
@@ -104,8 +104,8 @@ static void FreeShadow(uintptr_t min_addr, uintptr_t max_addr)
 
 	auto size = max_shadow - min_shadow + page_size;
 
-	printf("\t shadow = %016" PRIx64 "\n", reinterpret_cast<uint64_t>(min_shadow));
-	printf("\t size   = %016" PRIx64 "\n", reinterpret_cast<uint64_t>(size));
+	printf("\t shadow = %016" PRIx64 "\n", static_cast<uint64_t>(min_shadow));
+	printf("\t size   = %016" PRIx64 "\n", static_cast<uint64_t>(size));
 
 	for (uintptr_t page = min_shadow; page <= max_shadow; page += page_size)
 	{
@@ -115,7 +115,7 @@ static void FreeShadow(uintptr_t min_addr, uintptr_t max_addr)
 
 			if (g_ctx->shadows[index].count <= 0)
 			{
-				if (!Loader::VirtualMemory::Free(page))
+				if (!Core::VirtualMemory::Free(page))
 				{
 					EXIT("can't free shadow memory\n");
 				}
@@ -147,7 +147,11 @@ static void KYTY_SYSV_ABI asan_init()
 	sys_dbg_stack_info_t s {};
 	sys_stack_usage(s);
 
+#if KYTY_PLATFORM == KYTY_PLATFORM_LINUX
+	AllocShadow(s.addr, reinterpret_cast<uintptr_t>(&s));
+#else
 	AllocShadow(s.reserved_addr, reinterpret_cast<uintptr_t>(&s));
+#endif
 
 	LibKernel::Memory::RegisterCallbacks(KernelAlloc, KernelFree);
 }
