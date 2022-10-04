@@ -1,11 +1,14 @@
-name: CI
+name: Main Compilation
+
 on:
   push:
-    branches:
-    - '*'
-  pull_request:
-    branches:
-    - '*'
+    branches: [ "main" ]
+    
+env:
+  major: 0
+  minor: 2
+  version: v${{ env.major }}.${{ env.minor }}.${{ github.run_number }}
+
 concurrency: ci-${{ github.ref }}
 jobs:
   build:
@@ -19,9 +22,10 @@ jobs:
     - name: Install WinLibs
       run: choco install winlibs -y --no-progress
     - name: Install Qt
-      uses: jurplel/install-qt-action@v2
+      uses: jurplel/install-qt-action@v3
       with:
         arch: win64_mingw81
+        cache: true
     - name: Run CMake
       run: |
         set PATH=C:\ProgramData\chocolatey\lib\winlibs\tools\mingw64\bin;%PATH%
@@ -36,12 +40,21 @@ jobs:
       run: |
         $src = Resolve-Path "${env:Qt5_DIR}\bin"
         $dest = "_Build\_Gcc\_bin"
-
         Copy-Item "${src}\libwinpthread-1.dll" -Destination $dest
         Copy-Item "${src}\libstdc++-6.dll" -Destination $dest
         Copy-Item "${src}\libgcc_s_seh-1.dll" -Destination $dest
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v3
+    - name: ZIP Kyty
+      uses: TheDoctor0/zip-release@main
       with:
-        name: Kyty
-        path: _Build/_Gcc/_bin
+        type: 'zip'
+        path: .\_Build\_Gcc\_bin\*
+        filename: Kyty-${{ env.version }}.zip
+      
+    - name: GH Release
+      uses: ncipollo/release-action@v1
+      with:
+        artifacts: "Kyty-${{ env.version }}.zip"
+        generateReleaseNotes: true
+        name: Release ${{ env.version }}
+        tag: ${{ env.version }}
+        token: ${{ secrets.GITHUB_TOKEN }}

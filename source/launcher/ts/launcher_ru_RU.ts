@@ -36,7 +36,7 @@
     </message>
     <message>
         <location filename="../forms/configuration_edit_dialog.ui" line="271"/>
-        <source>Screen resoultion:</source>
+        <source>Screen resolution:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -106,7 +106,7 @@
     </message>
     <message>
         <location filename="../forms/configuration_edit_dialog.ui" line="306"/>
-        <source>Dump shaders to file or console window. If enabled may decrease emulator performance</source>
+        <source>Dump shaders to file or console window. May decrease performance if enabled.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -121,7 +121,7 @@
     </message>
     <message>
         <location filename="../forms/configuration_edit_dialog.ui" line="354"/>
-        <source>Print logs to file or console window. If enabled may decrease emulator performance</source>
+        <source>Print logs to file or console window. May decrease performance if enabled.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -131,7 +131,7 @@
     </message>
     <message>
         <location filename="../forms/configuration_edit_dialog.ui" line="385"/>
-        <source>Enable/disable profiler. If enabled may decrease emulator performance</source>
+        <source>Enable/disable profiler. May decrease performance if enabled.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

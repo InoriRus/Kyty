@@ -268,7 +268,7 @@
           <item row="1" column="0">
            <widget class="QLabel" name="label_16">
             <property name="text">
-             <string>Screen resoultion:</string>
+             <string>Screen resolution:</string>
             </property>
            </widget>
           </item>
@@ -289,7 +289,7 @@
           <item row="2" column="1">
            <widget class="QComboBox" name="comboBox_shader_optimization_type">
             <property name="toolTip">
-             <string>Optimize shaders for code size or performance</string>
+             <string>Optimize shaders for code size or May decrease performance if enabled.</string>
             </property>
            </widget>
           </item>
@@ -303,7 +303,7 @@
           <item row="3" column="1">
            <widget class="QComboBox" name="comboBox_shader_log_direction">
             <property name="toolTip">
-             <string>Dump shaders to file or console window. If enabled may decrease emulator performance</string>
+             <string>Dump shaders to file or console window. May decrease performance if enabled.</string>
             </property>
            </widget>
           </item>
@@ -351,7 +351,7 @@
           <item row="6" column="1">
            <widget class="QComboBox" name="comboBox_printf_direction">
             <property name="toolTip">
-             <string>Print logs to file or console window. If enabled may decrease emulator performance</string>
+             <string>Print logs to file or console window. May decrease performance if enabled.</string>
             </property>
            </widget>
           </item>
@@ -382,7 +382,7 @@
           <item row="8" column="1">
            <widget class="QComboBox" name="comboBox_profiler_direction">
             <property name="toolTip">
-             <string>Enable/disable profiler. If enabled may decrease emulator performance</string>
+             <string>Enable/disable profiler. May decrease performance if enabled.</string>
             </property>
            </widget>
           </item>
