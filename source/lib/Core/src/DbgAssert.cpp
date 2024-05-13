@@ -5,10 +5,11 @@
 #include "Kyty/Core/Subsystems.h"
 
 #include <cstdarg>
-
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
 #if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
 #include <windows.h> // IWYU pragma: keep
 // IWYU pragma: no_include <debugapi.h>
+#endif
 #endif
 
 namespace Kyty::Core {
@@ -18,7 +19,7 @@ constexpr int PRINT_STACK_FROM = 4;
 #else
 constexpr int PRINT_STACK_FROM = 2;
 #endif
-
+#if defined(__linux__)
 #if KYTY_PLATFORM == KYTY_PLATFORM_LINUX
 int IsDebuggerPresent()
 {
@@ -48,7 +49,7 @@ int IsDebuggerPresent()
 	return (dbg ? 1 : 0);
 }
 #endif
-
+#endif
 void dbg_print_stack()
 {
 	DebugStack s;
@@ -110,8 +111,10 @@ void dbg_exit(int status)
 
 bool dbg_is_debugger_present()
 {
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__) || defined(__linux__)
 #if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS || KYTY_PLATFORM == KYTY_PLATFORM_LINUX
 	return !(IsDebuggerPresent() == 0);
+#endif
 #endif
 	return false;
 }

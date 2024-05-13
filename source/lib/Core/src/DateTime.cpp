@@ -1,3 +1,4 @@
+#include <ctime>
 #include "Kyty/Core/DateTime.h"
 
 #include "Kyty/Core/DbgAssert.h"
@@ -414,18 +415,19 @@ Date Date::FromMacros(const String& date)
 
 Date Date::FromSystem()
 {
-	SysTimeStruct t {};
-	sys_get_system_time(t);
+    SysTimeStruct t {};
+    sys_get_system_time(t);
 
-	return Date(t.Year, t.Month, t.Day);
+    return Date(t.Year, t.Month, t.Day);
 }
 
 Date Date::FromSystemUTC()
 {
-	SysTimeStruct t {};
-	sys_get_system_time_utc(t);
-
-	return Date(t.Year, t.Month, t.Day);
+    SysTimeStruct t {};
+    
+    sys_get_system_time_utc(t);
+    
+    return Date(t.Year, t.Month, t.Day);
 }
 
 Time::Time(int hour, int minute, int second, int msec)
@@ -435,18 +437,19 @@ Time::Time(int hour, int minute, int second, int msec)
 
 Time Time::FromSystem()
 {
-	SysTimeStruct t {};
-	sys_get_system_time(t);
+    SysTimeStruct t {};
+    
+    sys_get_system_time(t);
 
-	return Time(t.Hour, t.Minute, t.Second, t.Milliseconds);
+    return Time(t.Hour, t.Minute, t.Second, t.Milliseconds);
 }
 
 Time Time::FromSystemUTC()
 {
-	SysTimeStruct t {};
-	sys_get_system_time_utc(t);
+    SysTimeStruct t {};
+    sys_get_system_time_utc(t);
 
-	return Time(t.Hour, t.Minute, t.Second, t.Milliseconds);
+    return Time(t.Hour, t.Minute, t.Second, t.Milliseconds);
 }
 
 void Time::Set(int hour, int minute, int second, int msec)
@@ -763,28 +766,28 @@ Time Time::operator-=(int secs)
 
 DateTime DateTime::FromSystem()
 {
-	SysTimeStruct t {};
-	sys_get_system_time(t);
+    SysTimeStruct t {};
+    sys_get_system_time(t);
 
-	if (t.is_invalid)
-	{
-		return {};
-	}
+    if (t.is_invalid)
+    {
+        return {};
+    }
 
-	return DateTime(Date(t.Year, t.Month, t.Day), Time(t.Hour, t.Minute, t.Second, t.Milliseconds));
+    return DateTime(Date(t.Year, t.Month, t.Day), Time(t.Hour, t.Minute, t.Second, t.Milliseconds));
 }
 
 DateTime DateTime::FromSystemUTC()
 {
-	SysTimeStruct t {};
-	sys_get_system_time_utc(t);
+    SysTimeStruct t {};
+    sys_get_system_time_utc(t);
 
-	if (t.is_invalid)
-	{
-		return {};
-	}
+    if (t.is_invalid)
+    {
+        return {};
+    }
 
-	return DateTime(Date(t.Year, t.Month, t.Day), Time(t.Hour, t.Minute, t.Second, t.Milliseconds));
+    return DateTime(Date(t.Year, t.Month, t.Day), Time(t.Hour, t.Minute, t.Second, t.Milliseconds));
 }
 
 /**

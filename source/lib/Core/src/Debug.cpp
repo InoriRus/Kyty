@@ -87,8 +87,9 @@ static void exception_filter(void* /*addr*/)
 
 void core_debug_init(const char* app_name)
 {
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
 	sys_set_exception_filter(exception_filter);
-
+#endif
 	g_exe_name = new String(String::FromUtf8(app_name));
 	g_dbg_map  = new DebugMap;
 	// g_dbg_map->LoadMap();
@@ -792,6 +793,7 @@ static const T* find_info(const T* data, uintptr_t addr, uint32_t low, uint32_t 
 
 void DebugMapPrivate::FixBaseAddress()
 {
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
 	uintptr_t code_base = 0;
 	size_t    code_size = 0;
 	sys_get_code_info(&code_base, &code_size);
@@ -811,6 +813,7 @@ void DebugMapPrivate::FixBaseAddress()
 			p.addr += code_base;
 		}
 	}
+#endif
 }
 
 const DebugFunctionInfo* DebugMapPrivate::FindFunc(DebugMap* map, uintptr_t addr)
@@ -864,31 +867,35 @@ void DebugMap::LoadCsv(const String& name)
 	m_p->buf[size] = 0;
 	char* context  = nullptr;
 
-	[[maybe_unused]] char* p = strtok_s(m_p->buf, "\r\n;", &context);
+	[[maybe_unused]] char* p = strtok_r(m_p->buf, "\r\n;", &context);
 	EXIT_IF(String::FromUtf8(p) != U"Addr");
-	p = strtok_s(nullptr, "\r\n;", &context);
+	p = strtok_r(nullptr, "\r\n;", &context);
 	EXIT_IF(String::FromUtf8(p) != U"Size");
-	p = strtok_s(nullptr, "\r\n;", &context);
+	p = strtok_r(nullptr, "\r\n;", &context);
 	EXIT_IF(String::FromUtf8(p) != U"Func");
-	p = strtok_s(nullptr, "\r\n;", &context);
+	p = strtok_r(nullptr, "\r\n;", &context);
 	EXIT_IF(String::FromUtf8(p) != U"Obj");
 
 	for (;;)
 	{
-		char* s1 = strtok_s(nullptr, "\r\n;", &context);
-		char* s2 = strtok_s(nullptr, "\r\n;", &context);
-		char* s3 = strtok_s(nullptr, "\r\n;", &context);
-		char* s4 = strtok_s(nullptr, "\r\n;", &context);
+		char* s1 = strtok_r(nullptr, "\r\n;", &context);
+		char* s2 = strtok_r(nullptr, "\r\n;", &context);
+		char* s3 = strtok_r(nullptr, "\r\n;", &context);
+		char* s4 = strtok_r(nullptr, "\r\n;", &context);
 
 		if ((s1 == nullptr) || (s2 == nullptr) || (s3 == nullptr) || (s4 == nullptr))
 		{
 			break;
 		}
-
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__) || defined(__linux__)
 		DebugFunctionInfo2 inf = {static_cast<uintptr_t>(sys_strtoui64(s1 + 2, nullptr, 16)),
-		                          static_cast<uintptr_t>(sys_strtoui64(s2, nullptr, 10)), s3, s4};
+            static_cast<uintptr_t>(sys_strtoui64(s2, nullptr, 10)), s3, s4};
+        
+        m_p->data2.Add(inf);
+#elif __APPLE__
 
-		m_p->data2.Add(inf);
+#endif
+		
 	}
 }
 
@@ -913,8 +920,10 @@ void DebugStack::Print(int from, bool with_name) const
 
 void DebugStack::Trace(DebugStack* stack)
 {
-	stack->depth = DEBUG_MAX_STACK_DEPTH;
-	sys_stack_walk(stack->stack, &stack->depth);
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__) || defined(__linux__)
+    stack->depth = DEBUG_MAX_STACK_DEPTH;
+    sys_stack_walk(stack->stack, &stack->depth);
+#endif
 }
 
 void DebugStack::PrintAndroid(int from, bool with_name) const

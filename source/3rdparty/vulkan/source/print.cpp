@@ -33,6 +33,7 @@ clr::blue::operator const char*() { return "\x1b[34m"; }
 
 }  // namespace spvtools
 #elif defined(SPIRV_WINDOWS)
+#if defined(WIN32)
 #include <windows.h>
 
 namespace spvtools {
@@ -107,6 +108,7 @@ clr::blue::operator const char*() {
 }
 
 }  // namespace spvtools
+#endif
 #else
 namespace spvtools {
 

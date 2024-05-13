@@ -27,7 +27,7 @@
 
 #include "ui_main_dialog.h"
 
-#ifndef __linux__
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
 #include <windows.h> // IWYU pragma: keep
 #endif
 
@@ -37,7 +37,7 @@
 
 class QWidget;
 
-#ifdef __linux__
+#ifdef __linux__ || __APPLE__
 constexpr char SCRIPT_EXE[] = "fc_script";
 #else
 constexpr char SCRIPT_EXE[]     = "fc_script.exe";
@@ -59,7 +59,7 @@ constexpr char KYTY_LOAD_SYMBOLS_ALL[] = "kyty_load_symbols_all";
 constexpr char KYTY_LOAD_PARAM_SFO[]   = "kyty_load_param_sfo";
 constexpr char KYTY_INIT[]             = "kyty_init";
 constexpr char KYTY_LUA_FILE[]         = "kyty_run.lua";
-#ifndef __linux__
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
 constexpr DWORD CMD_X_CHARS = 175;
 constexpr DWORD CMD_Y_CHARS = 1000;
 #endif
@@ -359,7 +359,7 @@ void MainDialog::RunInterpreter(QProcess* process, Kyty::Configuration* info, [[
 	}
 #endif
 	process->setWorkingDirectory(dir.path());
-#ifndef __linux__
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
 	process->setCreateProcessArgumentsModifier(
 	    [](QProcess::CreateProcessArguments* args)
 	    {

@@ -415,7 +415,7 @@ IOS_AddMFIJoystickDevice(SDL_JoystickDeviceItem *device, GCController *controlle
         device->nhats = 1; /* d-pad */
         device->nbuttons = nbuttons;
 
-    } else if (controller.gamepad) {
+    } else if (controller.extendedGamepad) {
         BOOL is_switch_joyconL = IsControllerSwitchJoyConL(controller);
         BOOL is_switch_joyconR = IsControllerSwitchJoyConR(controller);
         int nbuttons = 0;
@@ -606,8 +606,8 @@ IOS_RemoveJoystickDevice(SDL_JoystickDeviceItem *device)
         if (device->controller) {
             /* The controller was explicitly retained in the struct, so it
              * should be explicitly released before freeing the struct. */
-            GCController *controller = CFBridgingRelease((__bridge CFTypeRef)(device->controller));
-            controller.controllerPausedHandler = nil;
+            //GCController *controller = CFBridgingRelease((__bridge CFTypeRef)(device->controller));
+            //controller.controllerPausedHandler = nil;
             device->controller = nil;
         }
     }
@@ -816,12 +816,12 @@ IOS_JoystickOpen(SDL_Joystick *joystick, int device_index)
         } else {
 #ifdef SDL_JOYSTICK_MFI
             if (device->uses_pause_handler) {
-                GCController *controller = device->controller;
-                controller.controllerPausedHandler = ^(GCController *c) {
-                    if (joystick->hwdata) {
-                        ++joystick->hwdata->num_pause_presses;
-                    }
-                };
+                //GCController *controller = device->controller;
+                //controller.controllerPausedHandler = ^(GCController *c) {
+                //    if (joystick->hwdata) {
+                //        ++joystick->hwdata->num_pause_presses;
+                //    }
+                //};
             }
 
 #ifdef ENABLE_MFI_SENSORS
@@ -1089,8 +1089,8 @@ IOS_MFIJoystickUpdate(SDL_Joystick *joystick)
             }
 #endif /* ENABLE_MFI_SENSORS */
 
-        } else if (controller.gamepad) {
-            GCGamepad *gamepad = controller.gamepad;
+        } else if (controller.extendedGamepad) {
+            GCExtendedGamepad *gamepad = controller.extendedGamepad;
 
             /* Button order matches the XInput Windows mappings. */
             Uint8 buttons[joystick->nbuttons];
@@ -1595,7 +1595,7 @@ IOS_JoystickClose(SDL_Joystick *joystick)
         } else if (device->controller) {
 #ifdef SDL_JOYSTICK_MFI
             GCController *controller = device->controller;
-            controller.controllerPausedHandler = nil;
+            //controller.controllerPausedHandler = nil;
             controller.playerIndex = -1;
 
 #ifdef ENABLE_MFI_SYSTEM_GESTURE_STATE
@@ -1711,8 +1711,8 @@ GetDirectionalPadForController(GCController *controller)
         return controller.extendedGamepad.dpad;
     }
 
-    if (controller.gamepad) {
-        return controller.gamepad.dpad;
+    if (controller.extendedGamepad) {
+        return controller.extendedGamepad.dpad;
     }
 
     if (controller.microGamepad) {

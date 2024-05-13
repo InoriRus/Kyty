@@ -20,25 +20,31 @@ namespace Kyty::Core {
 #define MEM_ALLOC_ALIGNED
 
 #ifdef MEM_ALLOC_ALIGNED
-#if KYTY_PLATFORM == KYTY_PLATFORM_ANDROID
+#if defined(__ANDROID__)
 constexpr int MEM_ALLOC_ALIGN = 8;
 #else
 constexpr int MEM_ALLOC_ALIGN = 16;
 #endif
 #endif
 
-#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS && KYTY_BITNESS == 64
+#if defined(__WIN64__)
 [[maybe_unused]] constexpr int STACK_CHECK_FROM = 5;
-#elif KYTY_PLATFORM == KYTY_PLATFORM_ANDROID
+#elif defined(__ANDROID__)
 [[maybe_unused]] constexpr int STACK_CHECK_FROM = 4;
 #else
 [[maybe_unused]] constexpr int STACK_CHECK_FROM = 2;
 #endif
-
+#if defined(__WIN64__) || defined(__linux__)
 static SysCS*        g_mem_cs          = nullptr;
 static bool          g_mem_initialized = false;
 static sys_heap_id_t g_default_heap    = nullptr;
 static size_t        g_mem_max_size    = 0;
+#else
+static SysCS*        g_mem_cs          = 0;
+static bool          g_mem_initialized = false;
+static sys_heap_id_t g_default_heap    = 0;
+static size_t        g_mem_max_size    = 0;
+#endif
 
 #ifdef MEM_TRACKER
 
@@ -210,7 +216,7 @@ void* mem_alloc(size_t size)
 {
 	if (size == 0)
 	{
-#if KYTY_PLATFORM == KYTY_PLATFORM_LINUX
+#if defined(__linux__) || defined(__APPLE__)
 		size = 1;
 #else
 		EXIT("size == 0\n");

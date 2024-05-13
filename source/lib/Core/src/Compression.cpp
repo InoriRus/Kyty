@@ -1185,18 +1185,55 @@ bool ZipReader::GetFileStat(int file_index, ZipFileStat* o)
 
 	if (mz_zip_reader_file_stat(&m_p->zip, file_index, &s) != 0)
 	{
-		o->m_file_index = s.m_file_index;
+        o->m_file_index = s.m_file_index;
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
+   //define something for Windows (32-bit and 64-bit, this part is common)
+        SysTimeStruct at = {0};
+        sys_time_t_to_system(s.m_time, at);
+        o->m_time = DateTime(Date(at.Year, at.Month, at.Day), Time(at.Hour, at.Minute, at.Second, at.Milliseconds));
 
-		SysTimeStruct at = {0};
-		sys_time_t_to_system(s.m_time, at);
-		o->m_time = DateTime(Date(at.Year, at.Month, at.Day), Time(at.Hour, at.Minute, at.Second, at.Milliseconds));
+        o->m_crc32       = s.m_crc32;
+        o->m_comp_size   = s.m_comp_size;
+        o->m_uncomp_size = s.m_uncomp_size;
+        o->m_filename    = String::FromUtf8(s.m_filename);
+        o->m_comment     = String::FromUtf8(s.m_comment);
+   #ifdef _WIN64
+      //define something for Windows (64-bit only)
+        SysTimeStruct at = {0};
+        sys_time_t_to_system(s.m_time, at);
+        o->m_time = DateTime(Date(at.Year, at.Month, at.Day), Time(at.Hour, at.Minute, at.Second, at.Milliseconds));
 
-		o->m_crc32       = s.m_crc32;
-		o->m_comp_size   = s.m_comp_size;
-		o->m_uncomp_size = s.m_uncomp_size;
-		o->m_filename    = String::FromUtf8(s.m_filename);
-		o->m_comment     = String::FromUtf8(s.m_comment);
+        o->m_crc32       = s.m_crc32;
+        o->m_comp_size   = s.m_comp_size;
+        o->m_uncomp_size = s.m_uncomp_size;
+        o->m_filename    = String::FromUtf8(s.m_filename);
+        o->m_comment     = String::FromUtf8(s.m_comment);
+   #else
+      //define something for Windows (32-bit only)
+   #endif
+#elif __APPLE__
+    // apple
+#elif __ANDROID__
+    // Below __linux__ check should be enough to handle Android,
+    // but something may be unique to Android.
+#elif __linux__
+    // linux
+        SysTimeStruct at = {0};
+        sys_time_t_to_system(s.m_time, at);
+        o->m_time = DateTime(Date(at.Year, at.Month, at.Day), Time(at.Hour, at.Minute, at.Second, at.Milliseconds));
 
+        o->m_crc32       = s.m_crc32;
+        o->m_comp_size   = s.m_comp_size;
+        o->m_uncomp_size = s.m_uncomp_size;
+        o->m_filename    = String::FromUtf8(s.m_filename);
+        o->m_comment     = String::FromUtf8(s.m_comment);
+#elif __unix__ // all unices not caught above
+    // Unix
+#elif defined(_POSIX_VERSION)
+    // POSIX
+#else
+#   error "Unknown compiler"
+#endif
 		return true;
 	}
 

@@ -27,7 +27,7 @@
 
 #include <pthread.h>
 
-#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+#if defined(__WIN64__)
 #include <pthread_time.h>
 #endif
 
@@ -380,7 +380,7 @@ static void pthread_attr_dbg_print(const PthreadAttr* src)
 	printf("\tsched_priority = %d\n", param.sched_priority);
 	printf("\tpolicy         = %d\n", policy);
 	printf("\tstack_addr     = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(stack_addr));
-	printf("\tstack_size    = %" PRIu64 "\n", reinterpret_cast<uint64_t>(stack_size));
+	//printf("\tstack_size    = %" PRIu64 "\n", reinterpret_cast<uint64_t>(stack_size));
 }
 
 static void usec_to_timespec(struct timespec* ts, KernelUseconds usec)
@@ -1434,7 +1434,7 @@ int KYTY_SYSV_ABI PthreadRwlockTimedrdlock(PthreadRwlock* rwlock, KernelUseconds
 	timespec t {};
 	usec_to_timespec(&t, usec);
 
-	int result = pthread_rwlock_timedrdlock(&(*rwlock)->p, &t);
+    int result = pthread_rwlock_timedrdlock(&(*rwlock)->p,&t);
 
 	// printf("\trwlock timedrdlock: %s, %d\n", (*rwlock)->name.C_Str(), result);
 
@@ -1462,7 +1462,8 @@ int KYTY_SYSV_ABI PthreadRwlockTimedwrlock(PthreadRwlock* rwlock, KernelUseconds
 	timespec t {};
 	usec_to_timespec(&t, usec);
 
-	int result = pthread_rwlock_timedwrlock(&(*rwlock)->p, &t);
+
+    int result = pthread_rwlock_timedrdlock(&(*rwlock)->p,&t);
 
 	// printf("\trwlock timedwrlock: %s, %d\n", (*rwlock)->name.C_Str(), result);
 
@@ -1480,12 +1481,12 @@ int KYTY_SYSV_ABI PthreadRwlockTryrdlock(PthreadRwlock* rwlock)
 {
 	PRINT_NAME();
 
-	if (rwlock == nullptr)
+	if (rwlock == 0)
 	{
 		return KERNEL_ERROR_EINVAL;
 	}
 
-	EXIT_NOT_IMPLEMENTED(*rwlock == nullptr);
+	EXIT_NOT_IMPLEMENTED(*rwlock == 0);
 
 	int result = pthread_rwlock_tryrdlock(&(*rwlock)->p);
 

@@ -249,7 +249,7 @@ HIDAPI_InitializeDiscovery()
 #endif /* defined(__WIN32__) || defined(__WINGDK__) */
 
 #if defined(__MACOSX__)
-    SDL_HIDAPI_discovery.m_notificationPort = IONotificationPortCreate(kIOMasterPortDefault);
+    SDL_HIDAPI_discovery.m_notificationPort = IONotificationPortCreate(kIOMainPortDefault);
     if (SDL_HIDAPI_discovery.m_notificationPort) {
         {
             io_iterator_t portIterator = 0;

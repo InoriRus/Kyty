@@ -859,7 +859,7 @@ ScriptVar ScriptTable::GetValue(uint32_t index) const
 void ScriptFuncResult::SetError(const String& msg)
 {
 	m_ok = false;
-#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
 	strncpy_s(m_msg, SCRIPT_FUNC_ERR_SIZE + 1, msg.C_Str(), SCRIPT_FUNC_ERR_SIZE);
 #else
 	strncpy(m_msg, msg.C_Str(), SCRIPT_FUNC_ERR_SIZE);

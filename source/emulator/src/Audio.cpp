@@ -1649,7 +1649,7 @@ int KYTY_SYSV_ABI Ngs2SystemCreateWithAllocator(const Ngs2SystemOption* option, 
 	printf("\t sample_rate       = %u\n", option->sample_rate);
 	printf("\t alloc_handler     = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(allocator->alloc_handler));
 	printf("\t free_handler      = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(allocator->free_handler));
-	printf("\t user_data         = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(allocator->user_data));
+	//printf("\t user_data         = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(allocator->user_data));
 
 	Ngs2ContextBufferInfo buf {};
 	buf.host_buffer      = nullptr;
@@ -1697,7 +1697,7 @@ int KYTY_SYSV_ABI Ngs2RackCreate(uintptr_t system_handle, uint32_t rack_id, cons
 	printf("\t max_matrices           = %u\n", option->max_matrices);
 	printf("\t max_ports              = %u\n", option->max_ports);
 	printf("\t host_buffer            = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(buffer_info->host_buffer));
-	printf("\t host_buffer_size      = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(buffer_info->host_buffer_size));
+	//printf("\t host_buffer_size      = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(buffer_info->host_buffer_size));
 
 	auto* ngs    = reinterpret_cast<Ngs2Internal*>(system_handle);
 	auto* rack   = static_cast<Ngs2RackInternal*>(buffer_info->host_buffer);
@@ -1779,7 +1779,7 @@ int KYTY_SYSV_ABI Ngs2RackCreateWithAllocator(uintptr_t system_handle, uint32_t 
 	printf("\t max_ports              = %u\n", option->max_ports);
 	printf("\t alloc_handler          = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(allocator->alloc_handler));
 	printf("\t free_handler           = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(allocator->free_handler));
-	printf("\t user_data              = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(allocator->user_data));
+	//printf("\t user_data              = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(allocator->user_data));
 
 	Ngs2ContextBufferInfo buf {};
 	buf.host_buffer      = nullptr;

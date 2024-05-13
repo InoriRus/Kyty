@@ -6,9 +6,6 @@ if(CMAKE_SYSTEM_NAME MATCHES ".*Linux")
 	set(LINUX TRUE)
 endif()
 
-if (NOT ((WIN32 AND (MINGW OR MSVC)) OR LINUX))
-    message(FATAL_ERROR "only mingw and msvc supported (or linux)")
-endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

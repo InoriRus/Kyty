@@ -47,13 +47,6 @@ endif()
 
 add_dependencies(launcher KytyGitVersion)  
 
-if(NOT LINUX)
-    find_program(QT_WINDEPLOYQT NAMES windeployqt PATHS "${Qt5_DIR}/../../../bin")
-    if(NOT QT_WINDEPLOYQT)
-    	message(FATAL_ERROR "Could not find windeployqt")
-    endif()
-endif()
-
 set(launcher_name "launcher")
 
 set_target_properties(launcher PROPERTIES OUTPUT_NAME ${launcher_name})

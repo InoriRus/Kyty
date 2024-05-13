@@ -12,11 +12,11 @@
 #include <condition_variable> // IWYU pragma: keep
 #include <mutex>
 
-#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS && KYTY_COMPILER == KYTY_COMPILER_CLANG
+#if defined(__WIN64__)
 #define KYTY_WIN_CS
 #endif
 
-#if KYTY_PLATFORM != KYTY_PLATFORM_WINDOWS && KYTY_PLATFORM != KYTY_PLATFORM_LINUX
+#if defined(__APPLE__)
 #define KYTY_SDL_THREADS
 #define KYTY_SDL_CS
 #endif
@@ -42,6 +42,7 @@
 #endif
 
 #if !(defined(KYTY_DEBUG_LOCKS) || defined(KYTY_DEBUG_LOCKS_TIMED)) && defined(KYTY_WIN_CS)
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
 #include <windows.h> // IWYU pragma: keep
 // IWYU pragma: no_include <winbase.h>
 constexpr DWORD KYTY_CS_SPIN_COUNT = 4000;
@@ -92,6 +93,7 @@ static SleepConditionVariableCS_func_t ResolveSleepConditionVariableCS()
 	return nullptr;
 }
 
+#endif
 #endif
 
 namespace Kyty::Core {

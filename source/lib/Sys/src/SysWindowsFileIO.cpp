@@ -2,9 +2,7 @@
 
 #include "Kyty/Core/Common.h"
 
-#if KYTY_PLATFORM != KYTY_PLATFORM_WINDOWS
-//#error "KYTY_PLATFORM != KYTY_PLATFORM_WINDOWS"
-#else
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
 
 #include "Kyty/Core/MemoryAlloc.h"
 #include "Kyty/Core/String.h"

@@ -847,7 +847,7 @@ int KYTY_SYSV_ABI KernelMprotect(const void* addr, size_t len, int prot)
 	auto vaddr = reinterpret_cast<uint64_t>(addr);
 
 	printf("\t addr = 0x%016" PRIx64 "\n", vaddr);
-	printf("\t len  = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(len));
+	//printf("\t len  = 0x%016" PRIx64 "\n", reinterpret_cast<uint64_t>(len));
 
 	VirtualMemory::Mode     mode     = VirtualMemory::Mode::NoAccess;
 	Graphics::GpuMemoryMode gpu_mode = Graphics::GpuMemoryMode::NoAccess;

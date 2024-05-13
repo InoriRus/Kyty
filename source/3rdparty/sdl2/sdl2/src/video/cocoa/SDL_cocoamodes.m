@@ -123,25 +123,19 @@ static Uint32
 GetDisplayModePixelFormat(CGDisplayModeRef vidmode)
 {
     /* This API is deprecated in 10.11 with no good replacement (as of 10.15). */
-    CFStringRef fmt = CGDisplayModeCopyPixelEncoding(vidmode);
-    Uint32 pixelformat = SDL_PIXELFORMAT_UNKNOWN;
-
-    if (CFStringCompare(fmt, CFSTR(IO32BitDirectPixels),
-                        kCFCompareCaseInsensitive) == kCFCompareEqualTo) {
-        pixelformat = SDL_PIXELFORMAT_ARGB8888;
-    } else if (CFStringCompare(fmt, CFSTR(IO16BitDirectPixels),
-                        kCFCompareCaseInsensitive) == kCFCompareEqualTo) {
-        pixelformat = SDL_PIXELFORMAT_ARGB1555;
-    } else if (CFStringCompare(fmt, CFSTR(kIO30BitDirectPixels),
-                        kCFCompareCaseInsensitive) == kCFCompareEqualTo) {
-        pixelformat = SDL_PIXELFORMAT_ARGB2101010;
-    } else {
-        /* ignore 8-bit and such for now. */
+    //CGDisplayModeRef vidmode = CGDisplayCopyDisplayMode(eDisplay);
+    CFDictionaryRef dict = (CFDictionaryRef)*((int64_t *)vidmode + 2);
+    CFTypeRef num;
+    Uint32 bpp = 0;
+    if (CFGetTypeID(dict) == CFDictionaryGetTypeID()
+        && CFDictionaryGetValueIfPresent(dict, kCGDisplayBitsPerPixel, (const void**)&num))
+    {
+        CFNumberGetValue(num, kCFNumberSInt32Type, (void*)&bpp);
     }
 
-    CFRelease(fmt);
+    CFRelease(num);
 
-    return pixelformat;
+    return bpp;
 }
 
 static SDL_bool

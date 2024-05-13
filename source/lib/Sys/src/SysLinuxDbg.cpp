@@ -1,8 +1,6 @@
 #include "Kyty/Core/Common.h"
 
-#if KYTY_PLATFORM != KYTY_PLATFORM_LINUX
-//#error "KYTY_PLATFORM != KYTY_PLATFORM_LINUX"
-#else
+#if defined(__linux__)
 
 #include "Kyty/Sys/SysDbg.h"
 

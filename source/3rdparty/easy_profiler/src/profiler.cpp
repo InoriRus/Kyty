@@ -62,22 +62,15 @@
 # endif
 #endif
 
-#if !defined(EASY_PROFILER_VERSION_MAJOR) || !defined(EASY_PROFILER_VERSION_MINOR) || !defined(EASY_PROFILER_VERSION_PATCH)
-# ifdef _WIN32
-#  error EASY_PROFILER_VERSION_MAJOR and EASY_PROFILER_VERSION_MINOR and EASY_PROFILER_VERSION_PATCH macros must be defined
-# else
-#  error "EASY_PROFILER_VERSION_MAJOR and EASY_PROFILER_VERSION_MINOR and EASY_PROFILER_VERSION_PATCH macros must be defined"
-# endif
-#endif
 
-#define EASY_PROFILER_PRODUCT_VERSION "v" EASY_STRINGIFICATION(EASY_PROFILER_VERSION_MAJOR) "." \
-                                          EASY_STRINGIFICATION(EASY_PROFILER_VERSION_MINOR) "." \
-                                          EASY_STRINGIFICATION(EASY_PROFILER_VERSION_PATCH)
+#define EASY_PROFILER_PRODUCT_VERSION "v" EASY_STRINGIFICATION(EASY_PROFILER_VERSION) "." \
+                                          EASY_STRINGIFICATION(EASY_PROFILER_VERSION) "." \
+                                          EASY_STRINGIFICATION(EASY_PROFILER_VERSION)
 
 extern const uint32_t EASY_PROFILER_SIGNATURE = ('E' << 24) | ('a' << 16) | ('s' << 8) | 'y';
-extern const uint32_t EASY_PROFILER_VERSION = (static_cast<uint32_t>(EASY_PROFILER_VERSION_MAJOR) << 24) |
-                                              (static_cast<uint32_t>(EASY_PROFILER_VERSION_MINOR) << 16) |
-                                               static_cast<uint32_t>(EASY_PROFILER_VERSION_PATCH);
+extern const uint32_t EASY_PROFILER_VERSION = (static_cast<uint32_t>(EASY_PROFILER_VERSION) << 24) |
+                                              (static_cast<uint32_t>(EASY_PROFILER_VERSION) << 16) |
+                                               static_cast<uint32_t>(EASY_PROFILER_VERSION);
 
 #undef EASY_VERSION_INT
 
@@ -85,29 +78,6 @@ extern const uint32_t EASY_PROFILER_VERSION = (static_cast<uint32_t>(EASY_PROFIL
 
 extern "C" {
 
-PROFILER_API uint8_t versionMajor()
-{
-    static_assert(0 <= EASY_PROFILER_VERSION_MAJOR && EASY_PROFILER_VERSION_MAJOR <= 255,
-                  "EASY_PROFILER_VERSION_MAJOR must be defined in range [0, 255]");
-
-    return EASY_PROFILER_VERSION_MAJOR;
-}
-
-PROFILER_API uint8_t versionMinor()
-{
-    static_assert(0 <= EASY_PROFILER_VERSION_MINOR && EASY_PROFILER_VERSION_MINOR <= 255,
-                  "EASY_PROFILER_VERSION_MINOR must be defined in range [0, 255]");
-
-    return EASY_PROFILER_VERSION_MINOR;
-}
-
-PROFILER_API uint16_t versionPatch()
-{
-    static_assert(0 <= EASY_PROFILER_VERSION_PATCH && EASY_PROFILER_VERSION_PATCH <= 65535,
-                  "EASY_PROFILER_VERSION_PATCH must be defined in range [0, 65535]");
-
-    return EASY_PROFILER_VERSION_PATCH;
-}
 
 PROFILER_API uint32_t version()
 {
