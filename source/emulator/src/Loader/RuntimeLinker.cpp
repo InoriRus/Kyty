@@ -434,7 +434,7 @@ static void relocate(uint32_t index, Elf64_Rela* r, Program* program, bool jmpre
 		uint64_t value = 0;
 		bool     weak  = (ri.bind == BindType::Weak || !program->fail_if_global_not_resolved);
 
-		if (!weak && Config::GetMissingSymbolPolicy() == Config::MissingSymbolPolicy::Report)
+		if (!weak && Config::GetMissingSymbolPolicy() != Config::MissingSymbolPolicy::Exit)
 		{
 			program->rt->AddMissingSymbol(program, ri.name, ri.dbg_name, Core::EnumName(ri.bind), ri.type);
 			weak = true;
@@ -519,6 +519,58 @@ static KYTY_SYSV_ABI void RelocateHandler(RelocateHandlerStack s)
 
 	EXIT("=== Unpatched function!!! ===\n[%d]\t%s\n", Core::Thread::GetThreadIdUnique(),
 	     (Log::IsColoredPrintf() ? name : Log::RemoveColors(name)).C_Str());
+}
+
+static KYTY_SYSV_ABI void StubbedFunctionHandler(Program* program, uint64_t rel_index)
+{
+	String name = U"<unknown function>";
+
+	if (program != nullptr && program->dynamic_info != nullptr && program->dynamic_info->jmprela_table != nullptr)
+	{
+		auto ri = GetRelocationInfo(program->dynamic_info->jmprela_table + rel_index, program);
+
+		name = ri.name;
+	}
+
+	{
+		static Core::Mutex     mutex;
+		static Vector<String>* logged = nullptr;
+
+		Core::LockGuard lock(mutex);
+
+		if (logged == nullptr)
+		{
+			logged = new Vector<String>;
+		}
+
+		if (!logged->Contains(name))
+		{
+			logged->Add(name);
+
+			auto dbg_str = String::FromPrintf("Stubbed function called (returns 0): " FG_BRIGHT_RED "%s" DEFAULT " [%d]", name.C_Str(),
+			                                  Core::Thread::GetThreadIdUnique());
+
+			printf("%s\n", (Log::IsColoredPrintf() ? dbg_str : Log::RemoveColors(dbg_str)).C_Str());
+		}
+	}
+}
+
+static uint64_t create_stub_handler()
+{
+	static uint64_t vaddr = 0;
+
+	if (vaddr == 0)
+	{
+		auto size = Jit::StubReturnZero::GetSize();
+		vaddr     = Core::VirtualMemory::Alloc(SYSTEM_RESERVED, size, Core::VirtualMemory::Mode::Write);
+		EXIT_NOT_IMPLEMENTED(vaddr == 0);
+		auto* code = new (reinterpret_cast<void*>(vaddr)) Jit::StubReturnZero;
+		code->SetFunc(StubbedFunctionHandler);
+		Core::VirtualMemory::Protect(vaddr, size, Core::VirtualMemory::Mode::Execute);
+		Core::VirtualMemory::FlushInstructionCache(vaddr, size);
+	}
+
+	return vaddr;
 }
 
 static KYTY_MS_ABI uint8_t* TlsMainGetAddr()
@@ -717,7 +769,15 @@ void RuntimeLinker::PrintMissingSymbols() const
 		printf("%s\n", (Log::IsColoredPrintf() ? dbg_str : Log::RemoveColors(dbg_str)).C_Str());
 	}
 
-	printf("--- Missing symbols: %d total. Calling any of these will stop the emulator ---\n", static_cast<int>(m_missing_symbols.Size()));
+	if (Config::GetMissingSymbolPolicy() == Config::MissingSymbolPolicy::Stub)
+	{
+		printf("--- Missing symbols: %d total. Missing functions will return 0 when called ---\n",
+		       static_cast<int>(m_missing_symbols.Size()));
+	} else
+	{
+		printf("--- Missing symbols: %d total. Calling any of these will stop the emulator ---\n",
+		       static_cast<int>(m_missing_symbols.Size()));
+	}
 }
 
 void RuntimeLinker::UnloadProgram(Program* program)
@@ -1445,7 +1505,8 @@ static void InstallRelocateHandler(Program* program)
 	Core::VirtualMemory::Protect(pltgot_vaddr, pltgot_size, Core::VirtualMemory::Mode::Write, &old_mode);
 
 	pltgot[1] = program;
-	pltgot[2] = reinterpret_cast<void*>(RelocateHandler);
+	pltgot[2] = (Config::GetMissingSymbolPolicy() == Config::MissingSymbolPolicy::Stub ? reinterpret_cast<void*>(create_stub_handler())
+	                                                                                   : reinterpret_cast<void*>(RelocateHandler));
 
 	Core::VirtualMemory::Protect(pltgot_vaddr, pltgot_size, old_mode);
 

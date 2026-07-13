@@ -42,7 +42,8 @@ enum class ProfilerDirection
 enum class MissingSymbolPolicy
 {
 	Exit,
-	Report
+	Report,
+	Stub
 };
 
 void Load(const Scripts::ScriptVar& cfg);
