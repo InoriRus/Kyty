@@ -29,6 +29,7 @@ struct Config
 	bool                   spirv_debug_printf_enabled  = false;
 	bool                   pipeline_dump_enabled       = false;
 	String                 pipeline_dump_folder        = U"_Pipelines";
+	MissingSymbolPolicy    missing_symbol_policy       = MissingSymbolPolicy::Exit;
 };
 
 static Config* g_config = nullptr;
@@ -102,6 +103,7 @@ void Load(const Scripts::ScriptVar& cfg)
 	LoadBool(g_config->spirv_debug_printf_enabled, cfg, U"SpirvDebugPrintfEnabled");
 	LoadBool(g_config->pipeline_dump_enabled, cfg, U"PipelineDumpEnabled");
 	LoadStr(g_config->pipeline_dump_folder, cfg, U"PipelineDumpFolder");
+	LoadEnum(g_config->missing_symbol_policy, cfg, U"MissingSymbolPolicy");
 }
 
 uint32_t GetScreenWidth()
@@ -192,6 +194,11 @@ bool PipelineDumpEnabled()
 String GetPipelineDumpFolder()
 {
 	return g_config->pipeline_dump_folder;
+}
+
+MissingSymbolPolicy GetMissingSymbolPolicy()
+{
+	return g_config->missing_symbol_policy;
 }
 
 void SetNextGen(bool mode)

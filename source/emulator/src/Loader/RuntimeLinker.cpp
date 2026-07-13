@@ -433,6 +433,13 @@ static void relocate(uint32_t index, Elf64_Rela* r, Program* program, bool jmpre
 	{
 		uint64_t value = 0;
 		bool     weak  = (ri.bind == BindType::Weak || !program->fail_if_global_not_resolved);
+
+		if (!weak && Config::GetMissingSymbolPolicy() == Config::MissingSymbolPolicy::Report)
+		{
+			program->rt->AddMissingSymbol(program, ri.name, ri.dbg_name, Core::EnumName(ri.bind), ri.type);
+			weak = true;
+		}
+
 		if (ri.type == SymbolType::Object && weak)
 		{
 			value = g_invalid_memory;
@@ -658,7 +665,59 @@ void RuntimeLinker::RelocateAll()
 		Relocate(p);
 	}
 
+	PrintMissingSymbols();
+
 	m_relocated = true;
+}
+
+void RuntimeLinker::AddMissingSymbol(Program* program, const String& name, const String& dbg_name, const String& bind, SymbolType type)
+{
+	EXIT_IF(program == nullptr);
+
+	for (const auto& s: m_missing_symbols)
+	{
+		if (s.name == name && s.program_name == program->file_name)
+		{
+			return;
+		}
+	}
+
+	MissingSymbol s {};
+	s.program_name = program->file_name;
+	s.name         = name;
+	s.dbg_name     = dbg_name;
+	s.bind         = bind;
+	s.type         = type;
+
+	m_missing_symbols.Add(s);
+}
+
+void RuntimeLinker::PrintMissingSymbols() const
+{
+	if (m_missing_symbols.IsEmpty())
+	{
+		return;
+	}
+
+	printf("--- Missing symbols (MissingSymbolPolicy = Report) ---\n");
+
+	String prev_program;
+
+	for (const auto& s: m_missing_symbols)
+	{
+		if (s.program_name != prev_program)
+		{
+			printf("%s:\n", s.program_name.C_Str());
+			prev_program = s.program_name;
+		}
+
+		auto dbg_str = String::FromPrintf("\t%-8s %-8s %s%s%s %s", Core::EnumName(s.type).C_Str(), s.bind.C_Str(), FG_BRIGHT_RED,
+		                                  s.name.C_Str(), DEFAULT, s.dbg_name.C_Str());
+
+		printf("%s\n", (Log::IsColoredPrintf() ? dbg_str : Log::RemoveColors(dbg_str)).C_Str());
+	}
+
+	printf("--- Missing symbols: %d total. Calling any of these will stop the emulator ---\n", static_cast<int>(m_missing_symbols.Size()));
 }
 
 void RuntimeLinker::UnloadProgram(Program* program)
