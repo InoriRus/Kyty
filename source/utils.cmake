@@ -39,8 +39,10 @@ function(include_what_you_use_with_mappings target dirs mappings)
   endif()
 endfunction()
 
+option(KYTY_CLANG_TIDY "Run clang-tidy during the build" ON)
+
 function(clang_tidy_check target config headers dirs)
-  if (CLANG AND ("${target}" IN_LIST KYTY_CLANG_TYDY) AND NOT MSVC)
+  if (KYTY_CLANG_TIDY AND CLANG AND ("${target}" IN_LIST KYTY_CLANG_TYDY) AND NOT MSVC)
     find_program (CLANG_TIDY_EXE NAMES "clang-tidy")
     if (CLANG_TIDY_EXE)
 		foreach(dir ${dirs})
