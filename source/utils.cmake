@@ -81,7 +81,7 @@ endfunction()
 
 macro(config_compiler_and_linker)
 
-set(KYTY_WARNINGS_ARE_ERRORS ON)
+option(KYTY_WARNINGS_ARE_ERRORS "Treat compiler warnings as errors" ON)
 
 set(KYTY_C_FLAGS "")
 set(KYTY_CPP_FLAGS "")
