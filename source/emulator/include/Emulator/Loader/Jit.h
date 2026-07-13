@@ -69,6 +69,33 @@ struct JmpRax
 	uint8_t code[16] = {0x48, 0xB8, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, 0xFF, 0xE0};
 };
 
+// Entered by jmp from CallPlt with the stack laid out as:
+// [rsp] = Program* (pltgot[1]), [rsp+8] = rela index, [rsp+16] = caller's return address.
+// Calls handler(program, index), then returns 0 to the caller in rax/xmm0.
+struct StubReturnZero
+{
+	template <class Handler>
+	void SetFunc(Handler func)
+	{
+		*reinterpret_cast<Handler*>(&code[8]) = func;
+	}
+
+	static uint64_t GetSize() { return 32; }
+
+	// 0:  5f                      pop    rdi         /* Program* */
+	// 1:  5e                      pop    rsi         /* rela index */
+	// 2:  48 83 ec 08             sub    rsp,0x8     /* Align stack */
+	// 6:  49 bb 88 77 66 55 44    movabs r11,0x1122334455667788
+	// d:  33 22 11
+	// 10: 41 ff d3                call   r11
+	// 13: 48 83 c4 08             add    rsp,0x8
+	// 17: 31 c0                   xor    eax,eax
+	// 19: 0f 57 c0                xorps  xmm0,xmm0
+	// 1c: c3                      ret
+	uint8_t code[32] = {0x5F, 0x5E, 0x48, 0x83, 0xEC, 0x08, 0x49, 0xBB, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11,
+	                    0x41, 0xFF, 0xD3, 0x48, 0x83, 0xC4, 0x08, 0x31, 0xC0, 0x0F, 0x57, 0xC0, 0xC3, 0x90, 0x90, 0x90};
+};
+
 struct Call9
 {
 	template <class Handler>

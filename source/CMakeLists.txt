@@ -157,10 +157,12 @@ set(KYTY_LIB_HEADERS ${PROJECT_SOURCE_DIR}/include)
   
 config_compiler_and_linker()  
   
+option(KYTY_LAUNCHER "Build Qt launcher" ON)
+
 add_subdirectory(3rdparty)
 add_subdirectory(emulator)
 add_subdirectory(unit_test)
-if(NOT ${KYTY_PROJECT_NAME} MATCHES "Build_Tools")
+if(KYTY_LAUNCHER AND NOT ${KYTY_PROJECT_NAME} MATCHES "Build_Tools")
 	add_subdirectory(launcher)
 endif()
 add_subdirectory(lib)

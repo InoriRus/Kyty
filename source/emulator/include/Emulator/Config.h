@@ -39,6 +39,13 @@ enum class ProfilerDirection
 	FileAndNetwork
 };
 
+enum class MissingSymbolPolicy
+{
+	Exit,
+	Report,
+	Stub
+};
+
 void Load(const Scripts::ScriptVar& cfg);
 
 void SetNextGen(bool mode);
@@ -68,6 +75,8 @@ bool SpirvDebugPrintfEnabled();
 
 bool   PipelineDumpEnabled();
 String GetPipelineDumpFolder();
+
+MissingSymbolPolicy GetMissingSymbolPolicy();
 
 } // namespace Kyty::Config
 

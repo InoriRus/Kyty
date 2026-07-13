@@ -101,6 +101,15 @@ struct DynamicInfo
 	Vector<LibraryId>   import_libs;
 };
 
+struct MissingSymbol
+{
+	String     program_name;
+	String     name;
+	String     dbg_name;
+	String     bind;
+	SymbolType type = SymbolType::Unknown;
+};
+
 struct Program
 {
 	int32_t                                unique_id = -1;
@@ -152,6 +161,9 @@ public:
 
 	void Resolve(const String& name, SymbolType type, Program* program, SymbolRecord* out_info, bool* bind_self);
 
+	// Called during Relocate() with m_mutex already held
+	void AddMissingSymbol(Program* program, const String& name, const String& dbg_name, const String& bind, SymbolType type);
+
 	SymbolDatabase* Symbols() { return m_symbols; }
 
 	static uint64_t ReadFromElf(Program* program, uint64_t vaddr);
@@ -176,10 +188,13 @@ private:
 	static const ModuleId*  FindModule(const Program& program, const String& id);
 	static const LibraryId* FindLibrary(const Program& program, const String& id);
 
-	Vector<Program*> m_programs;
-	SymbolDatabase*  m_symbols   = nullptr;
-	bool             m_relocated = false;
-	Core::Mutex      m_mutex;
+	void PrintMissingSymbols() const;
+
+	Vector<Program*>      m_programs;
+	SymbolDatabase*       m_symbols   = nullptr;
+	bool                  m_relocated = false;
+	Vector<MissingSymbol> m_missing_symbols;
+	Core::Mutex           m_mutex;
 };
 
 } // namespace Kyty::Loader

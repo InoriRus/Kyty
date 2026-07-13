@@ -14,6 +14,7 @@ local cfg = {
 	PrintfOutputFile = '_kyty.txt';
 	ProfilerDirection = 'None'; -- None, File, Network,	FileAndNetwork
 	ProfilerOutputFile = '_profile.prof';
+	MissingSymbolPolicy = 'Exit'; -- Exit, Report, Stub
 }
 
 kyty_init(cfg);
