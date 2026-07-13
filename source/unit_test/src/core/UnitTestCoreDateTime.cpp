@@ -169,9 +169,9 @@ static void test_date()
 	Date s1 = Date::FromSystem();
 	Date s2 = Date::FromSystemUTC();
 
-	EXPECT_TRUE(s1 < Date(2023, 1, 1));
+	EXPECT_TRUE(s1 < Date(2100, 1, 1));
 	EXPECT_TRUE(s1 > Date(2021, 12, 31));
-	EXPECT_TRUE(s2 < Date(2023, 1, 1));
+	EXPECT_TRUE(s2 < Date(2100, 1, 1));
 	EXPECT_TRUE(s2 > Date(2021, 12, 31));
 
 	EXPECT_TRUE(!Date::FromMacros(U"" __DATE__).IsInvalid());
@@ -324,9 +324,9 @@ static void test_datetime()
 	EXPECT_TRUE(sdt2.GetTime() < Time(23, 59, 59));
 	EXPECT_TRUE(sdt2.GetTime() > Time(0, 0, 0));
 
-	EXPECT_TRUE(sdt1.GetDate() < Date(2023, 1, 1));
+	EXPECT_TRUE(sdt1.GetDate() < Date(2100, 1, 1));
 	EXPECT_TRUE(sdt1.GetDate() > Date(2021, 12, 31));
-	EXPECT_TRUE(sdt2.GetDate() < Date(2023, 1, 1));
+	EXPECT_TRUE(sdt2.GetDate() < Date(2100, 1, 1));
 	EXPECT_TRUE(sdt2.GetDate() > Date(2021, 12, 31));
 
 	EXPECT_TRUE(DateTime(Date(2015, 12, 31), Time(14, 59, 25)) == DateTime(Date(2015, 12, 31), Time(14, 59, 25)));
