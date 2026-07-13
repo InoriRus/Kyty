@@ -123,6 +123,10 @@ elseif(MINGW OR LINUX)
 
 	if (CLANG)
 	    set(KYTY_CPP_FLAGS "${KYTY_CPP_FLAGS} -fno-rtti -fno-exceptions -fcolor-diagnostics -finput-charset=UTF-8 -fexec-charset=UTF-8 -g -fno-strict-aliasing -fno-omit-frame-pointer -Wall -fmessage-length=0")
+	    if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 16.0.0)
+	    	# 3rdparty/magic_enum probes enum ranges via out-of-range constexpr casts; clang >= 16 makes that an error by default
+	    	set(KYTY_CPP_FLAGS "${KYTY_CPP_FLAGS} -Wno-enum-constexpr-conversion")
+	    endif()
 	    if (MINGW)
 	    	set(KYTY_CPP_FLAGS "${KYTY_CPP_FLAGS} -static")
 	    endif()
