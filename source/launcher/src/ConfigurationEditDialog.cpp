@@ -297,7 +297,7 @@ void ConfigurationEditDialog::scan_elfs()
 
 	if (dir_exists)
 	{
-		QDirIterator it(dir, QStringList({"*.elf", "*.prx", "*.sprx", "eboot.bin"}), QDir::Files, QDirIterator::Subdirectories);
+		QDirIterator it(dir, QStringList({"*.elf", "*.prx", "*.sprx", "*.bin"}), QDir::Files, QDirIterator::Subdirectories);
 		while (it.hasNext())
 		{
 			auto file = it.next();
