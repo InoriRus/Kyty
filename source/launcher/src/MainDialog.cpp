@@ -44,8 +44,9 @@ constexpr char SCRIPT_EXE[]     = "fc_script.exe";
 #endif
 
 #ifndef __linux__
-constexpr char CMD_EXE[]    = "cmd.exe";
-constexpr char CONEMU_EXE[] = "C:/Program Files/ConEmu/ConEmu64.exe";
+constexpr char CMD_EXE[]       = "cmd.exe";
+constexpr char CONEMU_EXE[]    = "C:/Program Files/ConEmu/ConEmu64.exe";
+constexpr char KYTY_CMD_FILE[] = "kyty_run.bat";
 #else
 constexpr char GNOME[]          = "gnome-terminal";
 constexpr char XTERM[]          = "xterm";
@@ -302,13 +303,36 @@ static bool CreateBashScript(const QString& interpreter, const QString& lua_file
 		QTextStream s(&file);
 
 		s << "#!/bin/bash\n";
-		s << interpreter << " " << lua_file_name << "\n";
+		s << "\"" << interpreter << "\" \"" << lua_file_name << "\"\n";
 		s << "echo Press any key...\n";
 		s << "read -n1\n";
 
 		file.close();
 
 		return file.setPermissions(file.permissions() | QFile::ExeUser | QFile::ExeOwner | QFile::ExeGroup);
+	}
+	return false;
+}
+#else
+// cmd.exe's "/K" only preserves quoting on its command tail when there are exactly two quote
+// characters wrapping a single executable name (see `cmd /?`). Passing the interpreter and lua
+// paths as two separately-quoted arguments fails that condition and cmd falls back to stripping
+// the first/last quote character, breaking paths that contain spaces. Routing through a single
+// quoted .bat file (like the Linux branch routes through a single quoted bash script) keeps us
+// inside the case cmd.exe guarantees it preserves.
+static bool CreateCmdScript(const QString& interpreter, const QString& lua_file_name, const QString& file_name)
+{
+	QFile file(file_name);
+	if (file.open(QIODevice::WriteOnly | QIODevice::Text))
+	{
+		QTextStream s(&file);
+
+		s << "@echo off\n";
+		s << "\"" << QDir::toNativeSeparators(interpreter) << "\" \"" << QDir::toNativeSeparators(lua_file_name) << "\"\n";
+
+		file.close();
+
+		return true;
 	}
 	return false;
 }
@@ -354,8 +378,16 @@ void MainDialog::RunInterpreter(QProcess* process, Kyty::Configuration* info, [[
 		process->setArguments({"-run", /*CMD_EXE, "/K", */ interpreter, lua_file_name});
 	} else
 	{
+		auto cmd_file_name = dir.filePath(KYTY_CMD_FILE);
+		if (!CreateCmdScript(interpreter, lua_file_name, cmd_file_name))
+		{
+			QMessageBox::critical(this, tr("Error"), tr("Can't create file:\n") + cmd_file_name);
+			QApplication::quit();
+			return;
+		}
+
 		process->setProgram(CMD_EXE);
-		process->setArguments({"/K", interpreter, lua_file_name});
+		process->setArguments({"/K", QDir::toNativeSeparators(cmd_file_name)});
 	}
 #endif
 	process->setWorkingDirectory(dir.path());
